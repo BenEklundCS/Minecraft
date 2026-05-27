@@ -1,0 +1,68 @@
+name: Test and Build
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install display and Mesa GL dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb libgl1-mesa-dri libglu1-mesa
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Compile and test
+        run: ./gradlew build
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: build/reports/tests/test/
+
+      - name: Smoke test — verify game starts without crashing
+        run: |
+          # Start a virtual framebuffer (no physical display needed)
+          Xvfb :99 -screen 0 1280x720x24 &
+          XVFB_PID=$!
+          sleep 1
+
+          # Run game for 5 seconds then terminate — a clean timeout means it started fine.
+          # Exit 124 = timed out (good). Any other non-zero = crashed on startup (bad).
+          DISPLAY=:99 timeout --signal=SIGTERM 5 ./gradlew run --args="" 2>&1 | tee game-smoke.log
+          EXIT=${PIPESTATUS[0]}
+
+          kill "$XVFB_PID" 2>/dev/null || true
+
+          if [ "$EXIT" -ne 0 ] && [ "$EXIT" -ne 124 ]; then
+            echo "::error::Game crashed on startup (exit $EXIT). Check game-smoke.log."
+            exit 1
+          fi
+          echo "Smoke test passed (exit $EXIT)"
+
+      - name: Upload smoke test log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-log
+          path: game-smoke.log

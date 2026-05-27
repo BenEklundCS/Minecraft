@@ -1,5 +1,12 @@
+import org.gradle.internal.os.OperatingSystem
+
 plugins {
     id 'java'
+    id 'application'
+}
+
+application {
+    mainClass = 'com.beneklund.minecraft.Main'
 }
 
 group = 'com.beneklund.minecraft'
@@ -15,7 +22,15 @@ repositories {
 }
 
 def lwjglVersion = '3.3.3'
-def lwjglNatives = 'natives-windows'
+def lwjglNatives = OperatingSystem.current().isWindows()
+    ? 'natives-windows'
+    : OperatingSystem.current().isMacOsX()
+        ? (System.getProperty('os.arch').contains('arm') || System.getProperty('os.arch').contains('aarch64')
+            ? 'natives-macos-arm64'
+            : 'natives-macos')
+        : (System.getProperty('os.arch').startsWith('arm') || System.getProperty('os.arch').startsWith('aarch64')
+            ? 'natives-linux-arm64'
+            : 'natives-linux')
 
 dependencies {
     implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")

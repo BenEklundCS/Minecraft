@@ -1,0 +1,139 @@
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  ai-review:
+    if: |
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '/review'))
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check if API key is configured
+        id: check-key
+        env:
+          OLLAMA_KEY: ${{ secrets.OLLAMA_API_KEY }}
+        run: |
+          if [ -n "$OLLAMA_KEY" ]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine PR number
+        id: pr-info
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          else
+            PR_NUMBER="${{ github.event.issue.number }}"
+          fi
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: Fetch PR diff
+        id: diff
+        if: steps.check-key.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/pulls/${{ steps.pr-info.outputs.number }}" \
+            -H "Accept: application/vnd.github.v3.diff" > raw_diff.txt
+
+          # Strip any accidental secrets files from the diff
+          sudo apt-get install -y patchutils -qq
+          filterdiff -x '*/.env*' -x '*/.env' -x '*/secrets*' raw_diff.txt > diff.txt
+
+          echo "size=$(wc -c < diff.txt)" >> $GITHUB_OUTPUT
+
+      - name: Truncate diff if needed
+        if: steps.check-key.outputs.configured == 'true' && steps.diff.outputs.size > 120000
+        run: |
+          head -c 120000 diff.txt > diff-truncated.txt
+          echo "" >> diff-truncated.txt
+          echo "(diff truncated to 120 KB to fit model context window)" >> diff-truncated.txt
+          mv diff-truncated.txt diff.txt
+
+      - name: Request AI review from Ollama Cloud
+        id: ai-review
+        if: steps.check-key.outputs.configured == 'true'
+        run: |
+          jq -Rs '{
+            model: "deepseek-v4-pro",
+            messages: [
+              {
+                role: "system",
+                content: "You are a senior Java engineer reviewing a PR for a Minecraft clone built with Java 21, Gradle, LWJGL 3.3 (OpenGL 3.3 core, GLFW), JOML, and JUnit Jupiter.\n\nARCHITECTURE — strict layer hierarchy (inner → outer, dependency rule enforced):\n\n  1. Domain  (block/, world/, player/, util/)  — pure Java only. Zero GL/GLFW/LWJGL/thread imports. Fully unit-testable without a display.\n  2. Renderer (renderer/)                      — Camera and ShaderProgram are math/domain-facing wrappers. ChunkMesher is a pure Chunk→float[] transformer. No GL handles here.\n  3. Platform (platform/window|input|graphics/) — The ONLY code permitted to call gl*, glfw*, or STB. GlBuffer, GlVertexArray, GlTexture, GlShader live here.\n  4. Infra    (infra/)                          — Owns thread pools (ChunkGen + MeshBuild), ConcurrentLinkedQueues, and file I/O (ChunkStore). ChunkManager lives here.\n  5. Container (container/GameContainer.java)   — Sole composition root. ALL `new` calls for the whole application live here. No singleton, no static getInstance() anywhere else.\n\nKEY INVARIANTS:\n- OpenGL is single-threaded. Any gl* call off the main/render thread is a critical correctness bug.\n- ChunkMeshData (float[] vertices + int[] indices) is the ONLY artifact that crosses worker→main thread via queue. GpuMesh is render-thread-only and never touches worker threads.\n- Chunk state transitions MUST use CAS on AtomicReference<ChunkState>. Direct .set() calls are a race condition.\n- The chunk pipeline: UNLOADED → QUEUED_GEN → GENERATING → QUEUED_MESH → MESHING → READY_TO_UPLOAD → UPLOADED → (DIRTY → QUEUED_MESH) → UNLOADING.\n- InputAction is the sealed interface consumed by the game loop. GLFW keycodes must never appear outside platform/input/.\n- BlockRegistry is always constructor-injected (into ChunkMesher, WorldGenerator, Physics, Renderer). No static field.\n- When a block is placed/broken on a chunk boundary, the adjacent chunk must also be marked DIRTY for seam re-mesh.\n\nFLAG ONLY THESE CATEGORIES:\n\nBLOCKING — stop the merge:\n- Domain layer (block/, world/, player/, util/) importing GL, GLFW, LWJGL, or any platform class.\n- gl* or glfw* calls outside platform/ — especially inside ChunkGen or MeshBuild Runnables.\n- Direct AtomicReference<ChunkState>.set() replacing a CAS — non-atomic state transition.\n- New singleton, static service locator, or `static` mutable field violating the DI contract.\n- Hardcoded credentials, API keys, or file paths that expose secrets.\n\nWARNING — should fix before merge:\n- Missing tests for changes in domain (block/, world/, player/) or renderer/ChunkMesher.\n- Thread-unsafe collection (HashMap, ArrayList) used as shared state between worker threads and main thread.\n- Dependency created inside a class instead of injected through constructor — breaks GameContainer wiring.\n- Block place/break at a chunk boundary does not dirty the neighbor chunk.\n- ChunkMeshData or raw block byte[] accessed on the GL upload path in the wrong direction (worker reading main-thread state).\n- Chunk unload path removes a DIRTY chunk without saving first.\n\nSUGGESTION — nice to have:\n- Minor DI or naming alignment with Architecture.md.\n- Test coverage gaps in util/ or world/gen/.\n- Shader or vertex format inconsistencies (vertex stride, attribute locations).\n\nDO NOT FLAG:\n- LWJGL boilerplate (glfwInit, GL.createCapabilities, glfwPollEvents, etc.).\n- Standard Java concurrency idioms (ConcurrentLinkedQueue, ExecutorService, AtomicReference CAS).\n- JOML math code (Matrix4f, Vector3f, perspective, lookAt).\n- Missing tests for platform/ or container/ (those are integration concerns, not unit tests).\n- OpenSimplex2 noise algorithm internals.\n- Any rendering quirk that is inherently platform-specific.\n\nBe direct and concise. Format each finding as BLOCKING, WARNING, or SUGGESTION followed by the file and line if identifiable. Only surface issues that genuinely threaten correctness or architecture integrity."
+              },
+              {
+                role: "user",
+                content: ("Review this PR diff:\n\n" + .)
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 4000
+          }' diff.txt > request.json
+
+          if [ ! -s request.json ]; then
+            echo "review<<EOF" >> $GITHUB_OUTPUT
+            echo "Failed to build request JSON." >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o response.json --fail-with-body \
+            https://ollama.com/v1/chat/completions \
+            -H "Authorization: Bearer ${{ secrets.OLLAMA_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d @request.json) || true
+
+          echo "HTTP status: $HTTP_CODE"
+          cat response.json
+          echo ""
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "review<<EOF" >> $GITHUB_OUTPUT
+            echo "Error: Ollama Cloud API returned HTTP $HTTP_CODE. Review could not be generated." >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          REVIEW=$(jq -r '.choices[0].message.content // "Error: unable to generate review"' response.json)
+          echo "review<<EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post AI review as PR comment
+        if: steps.check-key.outputs.configured == 'true'
+        uses: actions/github-script@v7
+        env:
+          REVIEW_BODY: ${{ steps.ai-review.outputs.review }}
+        with:
+          script: |
+            const review = process.env.REVIEW_BODY || 'No review generated.';
+            const header = '## AI Review (deepseek-v4-pro)\n\n> Automated review by Ollama Cloud. Reply with `/review` to re-run.\n\n';
+            const footer = '\n\n---\n\n<sub>Note: the full PR diff is sent to ollama.com for analysis. Do not include secrets or sensitive data in files touched by this PR.</sub>';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr-info.outputs.number }},
+              body: header + review + footer,
+            });
+
+      - name: Skip notice (no API key)
+        if: steps.check-key.outputs.configured == 'false'
+        run: echo "OLLAMA_API_KEY secret not set — AI review skipped."
