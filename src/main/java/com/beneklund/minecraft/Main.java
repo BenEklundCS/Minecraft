@@ -56,6 +56,9 @@ class HelloWorld {
         glfwSetKeyCallback(window, (window, key, scancode, action, mods) -> {
             if ( key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE )
                 glfwSetWindowShouldClose(window, true); // We will detect this in the rendering loop
+            if ( key == GLFW_KEY_X) {
+                glfwSetWindowShouldClose(window, true); // We will detect this in the rendering loop
+            }
         });
 
         // Get the thread stack and push a new frame

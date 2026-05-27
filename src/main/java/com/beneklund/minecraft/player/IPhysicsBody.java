@@ -1,3 +1,3 @@
 package com.beneklund.minecraft.player;
 
-public class Raycast {}
+public interface IPhysicsBody {}
