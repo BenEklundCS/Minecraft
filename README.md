@@ -5,36 +5,7 @@
 [![OpenGL](https://img.shields.io/badge/OpenGL_3.3-5586A4?style=for-the-badge&logo=opengl&logoColor=white)](https://www.opengl.org/)
 
 ## Overview
-A **Minecraft clone** built from scratch in **Java 21** using **LWJGL** (OpenGL 3.3 core, GLFW) and **JOML** for 3D math. The project follows **Hexagonal Architecture** — the domain layer (world, blocks, player) knows nothing about OpenGL, GLFW, or threads. The project is currently in active development.
-
----
-
-## Key Features
-
-- **Procedural World Generation:**
-  OpenSimplex2 noise with multiple octaves drives terrain height, biome selection (plains, forest, mountains, desert, ocean), ore placement, cave carving, and tree spawning — all deterministic from a seed.
-
-- **Chunk Streaming:**
-  The world loads and unloads 16×16 column chunks around the player. A background thread pool handles generation and mesh building; the main thread drains an upload queue each frame to keep GL calls single-threaded.
-
-- **OpenGL 3.3 Renderer:**
-  Greedy face culling, a texture atlas with per-face UV lookup, per-vertex ambient occlusion, face-direction lighting, distance fog, and frustum culling. Transparent blocks (glass, leaves, water) are sorted and drawn in a second pass.
-
-- **Hexagonal Architecture:**
-  The domain (`block/`, `world/`, `player/`) is pure Java — no GL, no GLFW, no thread primitives. Platform adapters (`platform/`) are the only code that calls LWJGL directly. `GameContainer` is the sole composition root; all dependencies flow in through constructors.
-
-- **Input Anti-Corruption Layer:**
-  Raw GLFW keycodes never leave `platform/input/`. An `InputMapper` translates them into a sealed `InputAction` hierarchy (`MoveAction`, `LookAction`, `Simple`) consumed by the game loop. Rebinding a key means changing the mapper only.
-
-- **AABB Physics & Collision:**
-  Axis-separated sweep collision against solid blocks. `Physics` acts on the `IPhysicsBody` interface so future entities get the same system for free.
-
-- **Block Interaction:**
-  Left-click breaks the targeted block; right-click places the selected hotbar block on the hit face. A DDA raycast (Amanatides & Woo) finds the target. Block changes dirty the chunk (and its neighbors at seams) for async re-mesh.
-
-- **Chunk State Machine:**
-  Each `Chunk` owns an `AtomicReference<ChunkState>` with CAS transitions:
-  `UNLOADED → QUEUED_GEN → GENERATING → QUEUED_MESH → MESHING → READY_TO_UPLOAD → UPLOADED → DIRTY → …`
+A **Minecraft clone** built from scratch in **Java 21** using **LWJGL** (OpenGL 3.3 core, GLFW) and **JOML** for 3D math. The project uses a **domain driven architecture** — the domain layer (world, blocks, player) knows nothing about OpenGL, GLFW, or threads. The project is currently in active development.
 
 ---
 
