@@ -2,9 +2,7 @@ package com.beneklund.minecraft.platform.input;
 
 import static org.lwjgl.glfw.GLFW.*;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 // maps glfw keycodes to InputAction
 public class InputMapper {
@@ -34,6 +32,13 @@ public class InputMapper {
 
     private final InputEventQueue queue;
     private final Map<Integer, InputAction> bindings;
+    private final Set<Integer> heldKeys = new HashSet<>();
+    private final Set<Integer> holdableKeys = Set.of(
+            GLFW_KEY_W,
+            GLFW_KEY_A,
+            GLFW_KEY_S,
+            GLFW_KEY_D
+    );
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
 
@@ -42,7 +47,7 @@ public class InputMapper {
         this.bindings = DEFAULT_BINDINGS;
     }
 
-    public InputMapper(InputEventQueue queue, Map<Integer, InputAction> bindings) {
+    public InputMapper(InputEventQueue queue, Map<Integer, InputAction> bindings, Set<Integer> heldKeys) {
         this.queue = queue;
         this.bindings = bindings;
     }
@@ -50,12 +55,21 @@ public class InputMapper {
     public List<InputAction> drain() {
         List<InputAction> actions = new ArrayList<>();
         List<RawInputEvent> rawInputEvents = this.queue.drain();
+        processRawInputEvents(rawInputEvents, actions);
+        processHeldActions(actions);
+        return actions;
+    }
+
+    private void processRawInputEvents(List<RawInputEvent> rawInputEvents, List<InputAction> actions) {
         for (var rawInputEvent : rawInputEvents) {
             switch (rawInputEvent) {
                 case RawInputEvent.KeyEvent e -> {
                     if (e.action() == GLFW_RELEASE) {
                         InputAction action = this.bindings.get(e.key());
                         if (action != null) actions.add(action);
+                        this.heldKeys.remove(e.key());
+                    } else if (e.action() == GLFW_PRESS && this.holdableKeys.contains(e.key())) {
+                        this.heldKeys.add(e.key());
                     }
                 }
                 case RawInputEvent.MouseButtonEvent e -> {
@@ -77,6 +91,15 @@ public class InputMapper {
                         actions.add(new InputAction.ScrollAction((float) e.yoffset()));
             }
         }
-        return actions;
+    }
+
+    private void processHeldActions(List<InputAction> actions) {
+        float dx = 0f;
+        float dz = 0f;
+        if (this.heldKeys.contains(GLFW_KEY_W)) dz -= 1f;
+        if (this.heldKeys.contains(GLFW_KEY_S)) dz += 1f;
+        if (this.heldKeys.contains(GLFW_KEY_A)) dx -= 1f;
+        if (this.heldKeys.contains(GLFW_KEY_D)) dx += 1f;
+        if (dx != 0f || dz != 0f) actions.add(new InputAction.MoveAction(dx, dz));
     }
 }
