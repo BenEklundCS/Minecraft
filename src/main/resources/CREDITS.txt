@@ -1,0 +1,19 @@
+TEXTURES — packs/faithful/
+  Faithful Clone port for MineClone2/VoxeLibre
+  Author: Zormein and Faithful contributors
+  Source: https://github.com/Zormein/Faithful-Clone
+  License: CC BY-SA 4.0 — https://faithfulpack.net/license
+  Notes: Based on the Faithful resource pack, ported for Minetest/Luanti clone.
+         For dev use only. Replace before any public release per Faithful license.
+
+SOUNDS — sounds/
+  Minetest Game / Luanti default sounds
+  Authors: Various (see individual file attributions in minetest_game repo)
+  Source: https://github.com/luanti-org/minetest_game
+  License: CC BY-SA 3.0 — https://creativecommons.org/licenses/by-sa/3.0/
+
+MUSIC (public) — music/public/
+  Kai Engel — "Evening Colors" and "Calls and Echoes"
+  License: CC0 (public domain)
+  Source: https://archive.org/details/Evening_Colors-16606
+          https://archive.org/details/Calls_and_Echoes-15798

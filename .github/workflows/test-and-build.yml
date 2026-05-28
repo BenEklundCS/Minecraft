@@ -13,11 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Java 21
+      - name: Set up Java 25 (Zulu)
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: '25'
+          distribution: 'zulu'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -29,6 +29,9 @@ jobs:
 
       - name: Make gradlew executable
         run: chmod +x gradlew
+
+      - name: Format code
+        run: ./gradlew spotlessApply
 
       - name: Compile and test
         run: ./gradlew build
