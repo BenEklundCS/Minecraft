@@ -3,6 +3,7 @@ import org.gradle.internal.os.OperatingSystem
 plugins {
     id 'java'
     id 'application'
+    id 'checkstyle'
 }
 
 application {
@@ -13,8 +14,19 @@ group = 'com.beneklund.minecraft'
 version = '1.0-SNAPSHOT'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+        vendor = JvmVendorSpec.AZUL
+    }
+}
+
+compileJava {
+    options.release = 25
+    options.compilerArgs += ['--enable-preview']
+}
+
+tasks.withType(JavaExec).configureEach {
+    jvmArgs '--enable-preview', '--enable-native-access=ALL-UNNAMED'
 }
 
 repositories {
@@ -47,6 +59,9 @@ dependencies {
 
     implementation 'org.joml:joml:1.10.5'
 
+    implementation 'org.slf4j:slf4j-api:2.0.16'
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.12'
+
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -54,6 +69,13 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    jvmArgs '--enable-preview'
+}
+
+checkstyle {
+    toolVersion = '10.21.0'
+    configFile = file('config/checkstyle/checkstyle.xml')
+    ignoreFailures = false
 }
 
 jar {

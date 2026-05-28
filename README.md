@@ -1,11 +1,11 @@
 # Minecraft Clone
 
-[![Java](https://img.shields.io/badge/Java_21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+[![Java](https://img.shields.io/badge/Java_25-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/25/)
 [![Gradle](https://img.shields.io/badge/Gradle-02303A?style=for-the-badge&logo=gradle&logoColor=white)](https://gradle.org/)
 [![OpenGL](https://img.shields.io/badge/OpenGL_3.3-5586A4?style=for-the-badge&logo=opengl&logoColor=white)](https://www.opengl.org/)
 
 ## Overview
-A **Minecraft clone** built from scratch in **Java 21** using **LWJGL** (OpenGL 3.3 core, GLFW) and **JOML** for 3D math. The project uses a **domain driven architecture** — the domain layer (world, blocks, player) knows nothing about OpenGL, GLFW, or threads. The project is currently in active development.
+A **Minecraft clone** built from scratch in **Java 25** using **LWJGL** (OpenGL 3.3 core, GLFW) and **JOML** for 3D math. The project uses a **domain driven architecture** — the domain layer (world, blocks, player) knows nothing about OpenGL, GLFW, or threads. The project is currently in active development.
 
 ---
 
@@ -45,7 +45,7 @@ src/main/java/com/beneklund/minecraft/
 ## Getting Started
 
 ### Prerequisites
-- [**Java 21**](https://adoptium.net/) (Temurin recommended)
+- [**Java 25**](https://www.azul.com/downloads/) (Azul Zulu recommended)
 - Gradle wrapper included — no separate install needed
 
 ### Recommended IDE
