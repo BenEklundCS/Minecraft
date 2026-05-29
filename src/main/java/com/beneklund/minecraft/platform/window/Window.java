@@ -104,6 +104,7 @@ public class Window {
         }
 
         glfwShowWindow(this.window);
+        //glfwSetInputMode(this.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         System.out.println("Minecraft started " + Version.getVersion() + "!");
     }
 
