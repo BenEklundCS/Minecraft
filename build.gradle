@@ -27,14 +27,14 @@ compileJava {
 }
 
 tasks.withType(JavaExec).configureEach {
-    jvmArgs '--enable-preview', '--enable-native-access=ALL-UNNAMED'
+    jvmArgs '--enable-preview', '--enable-native-access=ALL-UNNAMED', '--sun-misc-unsafe-memory-access=allow'
 }
 
 repositories {
     mavenCentral()
 }
 
-def lwjglVersion = '3.3.3'
+def lwjglVersion = '3.3.4'
 def lwjglNatives = OperatingSystem.current().isWindows()
     ? 'natives-windows'
     : OperatingSystem.current().isMacOsX()
