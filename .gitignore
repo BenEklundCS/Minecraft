@@ -45,3 +45,5 @@ bin/
 ### Private ###
 private/
 src/main/resources/music/c418/
+local.properties
+gradle.properties

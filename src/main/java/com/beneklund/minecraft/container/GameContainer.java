@@ -2,6 +2,7 @@ package com.beneklund.minecraft.container;
 
 import com.beneklund.minecraft.Game;
 import com.beneklund.minecraft.input.InputHandler;
+import com.beneklund.minecraft.platform.audio.MusicPlayer;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
@@ -12,6 +13,7 @@ import com.beneklund.minecraft.world.World;
 
 public class GameContainer {
     public void run() {
+        LocalConfig localConfig = new LocalConfig();
         WindowConfig config = new WindowConfig("Minecraft", 800, 600, false, Color.SKY);
 
         InputEventQueue queue = new InputEventQueue();
@@ -22,9 +24,13 @@ public class GameContainer {
 
         window.init();
 
+        MusicPlayer music = new MusicPlayer();
+        localConfig.startupDisc().ifPresent(music::play);
+
         World world = new World(handler);
         new Game(window, world, delta, mapper).run();
 
+        music.shutdown();
         window.shutdown();
     }
 }
