@@ -7,6 +7,7 @@ import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.platform.window.WindowConfig;
+import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.world.World;
@@ -24,13 +25,41 @@ public class GameContainer {
 
         window.init();
 
+        Renderer renderer = getRenderer();
+
         MusicPlayer music = new MusicPlayer();
         localConfig.startupDisc().ifPresent(music::play);
 
         World world = new World(handler);
-        new Game(window, world, delta, mapper).run();
+        new Game(window, renderer, world, delta, mapper).run();
 
         music.shutdown();
         window.shutdown();
+    }
+
+    private Renderer getRenderer() {
+        String vertexSource = """
+                #version 330 core
+                layout(location = 0) in vec3 position;
+                void main() {
+                    gl_Position = vec4(position, 1.0);
+                }
+                """;
+        String fragmentSource = """
+                #version 330 core
+                out vec4 FragColor;
+                void main() {
+                    // Minecraft oak leaf green (plains biome foliage #79C05A)
+                    FragColor = vec4(0.475, 0.753, 0.353, 1.0);
+                }
+                """;
+
+        float[] vertices = {
+                0.0f,  0.5f, 0.0f,
+                -0.5f, -0.5f, 0.0f,
+                0.5f, -0.5f, 0.0f
+        };
+
+        return new Renderer(vertexSource, fragmentSource, vertices);
     }
 }
