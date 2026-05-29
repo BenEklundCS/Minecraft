@@ -2,20 +2,26 @@ package com.beneklund.minecraft.util;
 
 import java.util.function.DoubleSupplier;
 
-public class FrameTimeCounter {
+public class DeltaTracker {
     private final DoubleSupplier clock;
     private double lastTime;
     private double currentTime;
+    private double prevFrameTime;
     private int frames;
 
-    public FrameTimeCounter(DoubleSupplier clock) {
+    public DeltaTracker(DoubleSupplier clock) {
         this.clock = clock;
         this.reset();
     }
 
     public void tick() {
+        this.prevFrameTime = this.currentTime;
         this.currentTime = this.clock.getAsDouble();
         this.frames++;
+    }
+
+    public float getDelta() {
+        return (float) (this.currentTime - this.prevFrameTime);
     }
 
     public boolean timePassed(double time) {

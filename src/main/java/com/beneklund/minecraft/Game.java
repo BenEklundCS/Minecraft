@@ -1,22 +1,27 @@
 package com.beneklund.minecraft;
 
-import com.beneklund.minecraft.input.InputHandler;
+import com.beneklund.minecraft.platform.input.InputAction;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
-import com.beneklund.minecraft.util.FrameTimeCounter;
+import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.world.World;
 
-public record Game(
-        Window window, FrameTimeCounter counter, InputMapper mapper, InputHandler handler) {
+import java.util.List;
+
+public record Game(Window window, World world, DeltaTracker delta, InputMapper mapper) {
     public void run() {
         while (!this.window.shouldClose()) {
-            this.counter.tick();
-            if (this.counter.timePassed(1.0f)) {
-                this.window.setTitle("Minecraft FPS: " + this.counter.getFrames());
-                this.counter.reset();
+            this.delta.tick();
+            if (this.delta.timePassed(1.0f)) {
+                this.window.setTitle("Minecraft FPS: " + this.delta.getFrames());
+                this.delta.reset();
             }
             this.window.pollEvents();
-            this.handler.handle(this.mapper.drain());
+            List<InputAction> actions = this.mapper.drain();
+            if (actions.contains(InputAction.Simple.EXIT)) { this.window.close(); }
+            this.world.update(actions, this.delta.getDelta());
             this.window.beginFrame();
+            // this.renderer.render(this.scene);
             this.window.endFrame();
         }
     }
