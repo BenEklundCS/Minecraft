@@ -7,7 +7,8 @@ import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.platform.window.WindowConfig;
 import com.beneklund.minecraft.util.Color;
-import com.beneklund.minecraft.util.FrameTimeCounter;
+import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.world.World;
 
 public class GameContainer {
     public void run() {
@@ -17,11 +18,12 @@ public class GameContainer {
         InputMapper mapper = new InputMapper(queue);
         Window window = new Window(config, queue);
         InputHandler handler = new InputHandler(window);
-        FrameTimeCounter counter = new FrameTimeCounter(window::getTime);
+        DeltaTracker delta = new DeltaTracker(window::getTime);
 
         window.init();
 
-        new Game(window, counter, mapper, handler).run();
+        World world = new World(handler);
+        new Game(window, world, delta, mapper).run();
 
         window.shutdown();
     }
