@@ -38,6 +38,7 @@ public class GameContainer {
     }
 
     private Renderer getRenderer() {
+        Color c = Color.OAK_LEAF;
         String vertexSource = """
                 #version 330 core
                 layout(location = 0) in vec3 position;
@@ -49,10 +50,9 @@ public class GameContainer {
                 #version 330 core
                 out vec4 FragColor;
                 void main() {
-                    // Minecraft oak leaf green (plains biome foliage #79C05A)
-                    FragColor = vec4(0.475, 0.753, 0.353, 1.0);
+                    FragColor = vec4(%f, %f, %f, %f);
                 }
-                """;
+                """.formatted(c.red(), c.green(), c.blue(), c.alpha());
 
         float[] vertices = {
                 0.0f,  0.5f, 0.0f,
