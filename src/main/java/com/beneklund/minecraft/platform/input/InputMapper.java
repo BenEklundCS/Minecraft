@@ -37,8 +37,7 @@ public class InputMapper {
             GLFW_KEY_W,
             GLFW_KEY_A,
             GLFW_KEY_S,
-            GLFW_KEY_D
-    );
+            GLFW_KEY_D);
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
 

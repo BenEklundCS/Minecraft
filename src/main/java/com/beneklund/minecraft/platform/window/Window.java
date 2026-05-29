@@ -20,12 +20,12 @@ import org.lwjgl.system.MemoryStack;
 public class Window {
     // The window handle
     private long window;
-    private InputEventQueue inputQueue;
+    private InputEventQueue queue;
     private WindowConfig config;
 
-    public Window(WindowConfig config, InputEventQueue inputQueue) {
+    public Window(WindowConfig config, InputEventQueue queue) {
         this.config = config;
-        this.inputQueue = inputQueue;
+        this.queue = queue;
     }
 
     public void init() {
@@ -119,24 +119,9 @@ public class Window {
     }
 
     private void initCallbacks() {
-        glfwSetKeyCallback(
-                this.window,
-                (w, key, scancode, action, mods) ->
-                        this.inputQueue.offer(
-                                new RawInputEvent.KeyEvent(key, scancode, action, mods)));
-
-        glfwSetMouseButtonCallback(
-                this.window,
-                (w, button, action, mods) ->
-                        this.inputQueue.offer(new RawInputEvent.MouseButtonEvent(button, action, mods)));
-
-        glfwSetCursorPosCallback(
-                this.window,
-                (w, x, y) -> this.inputQueue.offer(new RawInputEvent.MouseMoveEvent(x, y)));
-
-        glfwSetScrollCallback(
-                this.window,
-                (w, xOffset, yOffset) ->
-                        this.inputQueue.offer(new RawInputEvent.ScrollEvent(xOffset, yOffset)));
+        glfwSetKeyCallback(this.window, RawInputEvent.KeyEvent.callback(this.queue));
+        glfwSetMouseButtonCallback(this.window, RawInputEvent.MouseButtonEvent.callback(this.queue));
+        glfwSetCursorPosCallback(this.window, RawInputEvent.MouseMoveEvent.callback(this.queue));
+        glfwSetScrollCallback(this.window, RawInputEvent.ScrollEvent.callback(this.queue));
     }
 }

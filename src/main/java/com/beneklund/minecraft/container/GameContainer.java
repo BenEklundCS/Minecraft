@@ -14,14 +14,12 @@ public class GameContainer {
         WindowConfig config = new WindowConfig("Minecraft", 800, 600, false, Color.SKY);
 
         InputEventQueue queue = new InputEventQueue();
-
         InputMapper mapper = new InputMapper(queue);
         Window window = new Window(config, queue);
+        InputHandler handler = new InputHandler(window);
+        FrameTimeCounter counter = new FrameTimeCounter(window::getTime);
 
         window.init();
-
-        FrameTimeCounter counter = new FrameTimeCounter(window::getTime);
-        InputHandler handler = new InputHandler(window);
 
         new Game(window, counter, mapper, handler).run();
 
