@@ -49,10 +49,8 @@ public class InputHandler {
 
     private void handleScroll(InputAction.ScrollAction scrollAction) {
         float fov = this.camera.getFov() - scrollAction.delta();
-        if (fov < 1.0f)
-            fov = 1.0f;
-        if (fov > 45.0f)
-            fov = 45.0f;
+        if (fov < 1.0f) fov = 1.0f;
+        if (fov > 45.0f) fov = 45.0f;
         this.camera.setFov(fov);
     }
 }

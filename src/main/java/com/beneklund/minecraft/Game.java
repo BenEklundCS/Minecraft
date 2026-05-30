@@ -10,17 +10,20 @@ import com.beneklund.minecraft.world.World;
 import java.util.List;
 import org.joml.Matrix4f;
 
-public record Game(Window window, Renderer renderer, Camera camera, World world, DeltaTracker delta, InputMapper mapper) {
+public record Game(
+        Window window, Renderer renderer, Camera camera, World world, DeltaTracker delta, InputMapper mapper) {
     public void run() {
         while (!this.window.shouldClose()) {
             this.delta.tick();
             if (this.delta.timePassed(1.0f)) {
-                this.window.setTitle("Minecraft FPS: " + this.delta.getFrames());
+                this.window.setTitle("Minecraft FPS: %d".formatted(this.delta.getFrames()));
                 this.delta.reset();
             }
             this.window.pollEvents();
             List<InputAction> actions = this.mapper.drain();
-            if (actions.contains(InputAction.Simple.EXIT)) { this.window.close(); }
+            if (actions.contains(InputAction.Simple.EXIT)) {
+                this.window.close();
+            }
             this.world.update(actions, this.delta.getDelta());
 
             // Orbit around the origin on a circle (sin/cos of elapsed time), lifted to y=1.5 so the

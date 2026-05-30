@@ -13,6 +13,7 @@ import com.beneklund.minecraft.platform.input.RawInputEvent;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.lwjgl.Version;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWFramebufferSizeCallbackI;
@@ -98,16 +99,12 @@ public class Window {
         glfwFreeCallbacks(this.window);
         glfwDestroyWindow(this.window);
         glfwTerminate();
-        glfwSetErrorCallback(null).free();
+        Objects.requireNonNull(glfwSetErrorCallback(null)).free();
     }
 
     private void initGlfw() {
-        glfwSetErrorCallback(
-                (error, description) ->
-                        LOGGER.error(
-                                "GLFW [{}]: {}",
-                                error,
-                                GLFWErrorCallback.getDescription(description)));
+        glfwSetErrorCallback((error, description) ->
+                LOGGER.error("GLFW [{}]: {}", error, GLFWErrorCallback.getDescription(description)));
         if (!glfwInit()) throw new IllegalStateException("Unable to initialize GLFW");
 
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -116,9 +113,7 @@ public class Window {
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-        this.window =
-                glfwCreateWindow(
-                        this.config.width(), this.config.height(), this.config.title(), NULL, NULL);
+        this.window = glfwCreateWindow(this.config.width(), this.config.height(), this.config.title(), NULL, NULL);
         if (this.window == NULL) throw new RuntimeException("Failed to create the GLFW window");
 
         // Center the window on the primary monitor.
@@ -127,18 +122,18 @@ public class Window {
             IntBuffer pHeight = stack.mallocInt(1);
             glfwGetWindowSize(this.window, pWidth, pHeight);
             GLFWVidMode vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-            if (vidMode == null) { throw new RuntimeException("Failed to get video mode."); }
+            if (vidMode == null) {
+                throw new RuntimeException("Failed to get video mode.");
+            }
             glfwSetWindowPos(
-                    this.window,
-                    (vidMode.width() - pWidth.get(0)) / 2,
-                    (vidMode.height() - pHeight.get(0)) / 2);
+                    this.window, (vidMode.width() - pWidth.get(0)) / 2, (vidMode.height() - pHeight.get(0)) / 2);
         }
 
         glfwShowWindow(this.window);
         glfwRequestWindowAttention(this.window);
 
-        //glfwSetInputMode(this.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        System.out.println("Minecraft started " + Version.getVersion() + "!");
+        // glfwSetInputMode(this.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        System.out.println("Minecraft started %s!".formatted(Version.getVersion()));
     }
 
     private void initOpenGL() {

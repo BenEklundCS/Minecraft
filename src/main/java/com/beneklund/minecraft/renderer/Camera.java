@@ -28,10 +28,8 @@ public class Camera {
     }
 
     public Matrix4f getProjectionMatrix() {
-        return new Matrix4f().perspective(
-                (float) Math.toRadians(this.fov),
-                this.windowSize.x / this.windowSize.y,
-                0.01f, 100f);
+        return new Matrix4f()
+                .perspective((float) Math.toRadians(this.fov), this.windowSize.x / this.windowSize.y, 0.01f, 100f);
     }
 
     public float getFov() {
@@ -74,9 +72,7 @@ public class Camera {
         double y = Math.toRadians(this.yaw);
         double p = Math.toRadians(this.pitch);
         return new Vector3f(
-                (float) (Math.cos(p) * Math.sin(y)),
-                (float) Math.sin(p),
-                (float) (Math.cos(p) * Math.cos(y)))
+                        (float) (Math.cos(p) * Math.sin(y)), (float) Math.sin(p), (float) (Math.cos(p) * Math.cos(y)))
                 .normalize();
     }
 

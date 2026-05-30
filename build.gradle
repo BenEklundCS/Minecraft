@@ -81,9 +81,12 @@ test {
 spotless {
     enforceCheck true
     java {
-        palantirJavaFormat('2.50.0')
+        palantirJavaFormat('2.91.0')
         importOrder()
         removeUnusedImports()
+        // Lets us fence off hand-aligned data (e.g. vertex arrays) with
+        // `// spotless:off` / `// spotless:on` so the formatter won't explode them.
+        toggleOffOn()
     }
 }
 

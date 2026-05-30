@@ -33,7 +33,7 @@ import org.lwjgl.stb.STBVorbisInfo;
  *
  * Lifecycle: play() -> shutdown() on app exit.
  */
-public class MusicPlayer {
+public class AudioPlayer {
     private long device;
     private long context;
     private int source;
@@ -44,7 +44,7 @@ public class MusicPlayer {
         this.device = alcOpenDevice((String) null);
         if (this.device == NULL) throw new RuntimeException("Failed to open OpenAL device");
 
-        this.context = alcCreateContext(this.device, new int[]{0});
+        this.context = alcCreateContext(this.device, new int[] {0});
         alcMakeContextCurrent(this.context);
 
         // Reads driver support and makes the AL functions callable.
@@ -62,7 +62,7 @@ public class MusicPlayer {
         try (STBVorbisInfo info = STBVorbisInfo.malloc()) {
             int[] error = {0};
             long decoder = stb_vorbis_open_memory(oggBytes, error, null);
-            if (decoder == NULL) throw new RuntimeException("Failed to decode OGG (error " + error[0] + ")");
+            if (decoder == NULL) throw new RuntimeException("Failed to decode OGG (error %s)".formatted(error[0]));
 
             stb_vorbis_get_info(decoder, info);
             int channels = info.channels();
@@ -96,15 +96,15 @@ public class MusicPlayer {
     }
 
     private ByteBuffer loadResource(String classpathOgg) {
-        try (var is = MusicPlayer.class.getClassLoader().getResourceAsStream(classpathOgg)) {
-            if (is == null) throw new RuntimeException("Resource not found: " + classpathOgg);
+        try (var is = AudioPlayer.class.getClassLoader().getResourceAsStream(classpathOgg)) {
+            if (is == null) throw new RuntimeException("Resource not found: %s".formatted(classpathOgg));
             byte[] bytes = is.readAllBytes();
             ByteBuffer buffer = memAlloc(bytes.length);
             // flip() resets the cursor to 0 after put() so the native side reads from the start.
             buffer.put(bytes).flip();
             return buffer;
         } catch (IOException e) {
-            throw new RuntimeException("Failed to load audio: " + classpathOgg, e);
+            throw new RuntimeException("Failed to load audio: %s".formatted(classpathOgg), e);
         }
     }
 }

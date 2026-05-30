@@ -2,7 +2,7 @@ package com.beneklund.minecraft.container;
 
 import com.beneklund.minecraft.Game;
 import com.beneklund.minecraft.input.InputHandler;
-import com.beneklund.minecraft.platform.audio.MusicPlayer;
+import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
@@ -32,7 +32,7 @@ public class GameContainer {
         Renderer renderer = getCubeRenderer();
         // Renderer triangleRenderer = getTriangleRenderer(); // oak-leaf textured triangle
 
-        MusicPlayer music = new MusicPlayer();
+        AudioPlayer music = new AudioPlayer();
         localConfig.startupDisc().ifPresent(music::play);
 
         World world = new World(handler);
@@ -44,7 +44,8 @@ public class GameContainer {
 
     private Renderer getCubeRenderer() {
         // Each face is 4 unique vertices (position + uv) so UVs wrap cleanly per face.
-        // 24 vertices total: 4 per face * 6 faces.
+        // 24 vertices total: 4 per face * 6 faces. Each row below is one vertex: x, y, z, u, v.
+        // spotless:off
         float[] vertices = {
             // front (z = +0.5)
             -0.5f,  0.5f,  0.5f,   0.0f, 1.0f,
@@ -80,33 +81,38 @@ public class GameContainer {
 
         // Each face is two triangles. Pattern per face: 0,1,2, 0,2,3 offset by face*4.
         int[] indices = {
-             0,  1,  2,   0,  2,  3,  // front
-             4,  5,  6,   4,  6,  7,  // back
-             8,  9, 10,   8, 10, 11,  // left
-            12, 13, 14,  12, 14, 15,  // right
-            16, 17, 18,  16, 18, 19,  // top
-            20, 21, 22,  20, 22, 23,  // bottom
+             0,  1,  2,    0,  2,  3,  // front
+             4,  5,  6,    4,  6,  7,  // back
+             8,  9, 10,    8, 10, 11,  // left
+            12, 13, 14,   12, 14, 15,  // right
+            16, 17, 18,   16, 18, 19,  // top
+            20, 21, 22,   20, 22, 23,  // bottom
         };
+        // spotless:on
 
         return new Renderer(
-            "/shaders/cube.vert", "/shaders/cube.frag",
-            vertices, indices,
-            "/packs/faithful/textures/default_leaves.png"
-        );
+                "/shaders/cube.vert",
+                "/shaders/cube.frag",
+                vertices,
+                indices,
+                "/packs/faithful/textures/default_leaves.png");
     }
 
     @SuppressWarnings("unused")
     private Renderer getTriangleRenderer() {
+        // spotless:off
         float[] vertices = {
              0.0f,  0.5f, 0.0f,   0.5f, 1.0f,
             -0.5f, -0.5f, 0.0f,   0.0f, 0.0f,
              0.5f, -0.5f, 0.0f,   1.0f, 0.0f,
         };
-        int[] indices = { 0, 1, 2 };
+        // spotless:on
+        int[] indices = {0, 1, 2};
         return new Renderer(
-            "/shaders/triangle.vert", "/shaders/triangle.frag",
-            vertices, indices,
-            "/packs/faithful/textures/default_leaves.png"
-        );
+                "/shaders/triangle.vert",
+                "/shaders/triangle.frag",
+                vertices,
+                indices,
+                "/packs/faithful/textures/default_leaves.png");
     }
 }
