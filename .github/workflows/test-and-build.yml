@@ -13,11 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Java 25 (Zulu)
+      - name: Set up Java 21 (Temurin)
         uses: actions/setup-java@v4
         with:
-          java-version: '25'
-          distribution: 'zulu'
+          java-version: '21'
+          distribution: 'temurin'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

@@ -16,8 +16,10 @@ version = '1.0-SNAPSHOT'
 
 java {
     toolchain {
+        // No vendor pin: any JDK 21 compiles this identically, and pinning a vendor means
+        // the build hard-fails if that exact vendor isn't discoverable. Foojay (see
+        // settings.gradle) auto-downloads a 21 if none is found locally.
         languageVersion = JavaLanguageVersion.of(21)
-        vendor = JvmVendorSpec.AZUL
     }
 }
 
@@ -73,14 +75,11 @@ dependencies {
 test {
     useJUnitPlatform()
     jvmArgs '--enable-preview'
-    javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(21)
-        vendor = JvmVendorSpec.AZUL
-    }
+    // Inherits the project toolchain above; no separate launcher needed.
 }
 
 spotless {
-    enforceCheck false
+    enforceCheck true
     java {
         palantirJavaFormat('2.50.0')
         importOrder()
@@ -99,3 +98,12 @@ jar {
         attributes 'Main-Class': 'com.beneklund.minecraft.Main'
     }
 }
+
+// Point git at the versioned hooks in .githooks so a fresh clone picks up the
+// pre-commit formatter the first time anyone builds.
+tasks.register('installGitHooks', Exec) {
+    description = 'Configures git to use the .githooks directory'
+    group = 'build setup'
+    commandLine 'git', 'config', 'core.hooksPath', '.githooks'
+}
+tasks.named('build') { dependsOn 'installGitHooks' }

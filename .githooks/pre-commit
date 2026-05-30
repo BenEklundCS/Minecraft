@@ -1,0 +1,17 @@
+#!/bin/sh
+# Auto-format staged Java with Spotless (palantir-java-format), then re-stage whatever
+# got reformatted. Keeps unformatted code from ever landing in a commit, so CI's
+# spotlessCheck never trips on you.
+
+staged_java=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.java$')
+[ -z "$staged_java" ] && exit 0
+
+echo "pre-commit: running spotlessApply..."
+if [ -f ./gradlew ]; then
+    sh ./gradlew spotlessApply --quiet || { echo "spotlessApply failed — commit aborted"; exit 1; }
+else
+    echo "no ./gradlew found — skipping format"; exit 0
+fi
+
+# Re-stage only the files that were already staged (don't grab unrelated edits).
+echo "$staged_java" | tr '\n' '\0' | xargs -0 git add

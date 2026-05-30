@@ -1,1 +1,7 @@
+plugins {
+    // Lets Gradle auto-download a matching JDK when one isn't already installed,
+    // so the toolchain constraint can't hard-fail a build (CI included).
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
 rootProject.name = 'Minecraft'
