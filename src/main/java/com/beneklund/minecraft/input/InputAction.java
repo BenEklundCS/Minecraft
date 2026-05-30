@@ -1,4 +1,4 @@
-package com.beneklund.minecraft.platform.input;
+package com.beneklund.minecraft.input;
 
 public sealed interface InputAction {
     record MoveAction(float dx, float dz) implements InputAction {}

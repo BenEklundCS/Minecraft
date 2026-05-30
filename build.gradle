@@ -16,18 +16,18 @@ version = '1.0-SNAPSHOT'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+        languageVersion = JavaLanguageVersion.of(21)
         vendor = JvmVendorSpec.AZUL
     }
 }
 
 compileJava {
-    options.release = 25
+    options.release = 21
     options.compilerArgs += ['--enable-preview']
 }
 
 tasks.withType(JavaExec).configureEach {
-    jvmArgs '--enable-preview', '--enable-native-access=ALL-UNNAMED', '--sun-misc-unsafe-memory-access=allow'
+    jvmArgs '--enable-preview', '--enable-native-access=ALL-UNNAMED'
 }
 
 repositories {
@@ -73,6 +73,10 @@ dependencies {
 test {
     useJUnitPlatform()
     jvmArgs '--enable-preview'
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+        vendor = JvmVendorSpec.AZUL
+    }
 }
 
 spotless {

@@ -2,6 +2,7 @@ package com.beneklund.minecraft.platform.input;
 
 import static org.lwjgl.glfw.GLFW.*;
 
+import com.beneklund.minecraft.input.InputAction;
 import java.util.*;
 
 // maps glfw keycodes to InputAction

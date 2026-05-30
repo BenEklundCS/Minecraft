@@ -1,8 +1,7 @@
 package com.beneklund.minecraft.world;
 
+import com.beneklund.minecraft.input.InputAction;
 import com.beneklund.minecraft.input.InputHandler;
-import com.beneklund.minecraft.platform.input.InputAction;
-
 import java.util.List;
 
 public class World {
@@ -13,6 +12,6 @@ public class World {
     }
 
     public void update(List<InputAction> actions, float dt) {
-        inputHandler.handle(actions);
+        this.inputHandler.handle(actions);
     }
 }

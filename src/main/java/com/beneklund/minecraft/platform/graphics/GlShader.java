@@ -2,13 +2,37 @@ package com.beneklund.minecraft.platform.graphics;
 
 import static com.beneklund.minecraft.util.Log.LOGGER;
 import static org.lwjgl.opengl.GL20.*;
+import static org.lwjgl.system.MemoryStack.stackPush;
 
+import java.nio.FloatBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import org.joml.Matrix4f;
+import org.lwjgl.system.MemoryStack;
+
+/*
+ * Wraps an OpenGL shader program. Compile and link both happen in the constructor
+ * so you can never get a half-built shader - it either works or throws.
+ *
+ * OpenGL treats this like a compiler + linker: compile() turns GLSL source into
+ * GPU machine code for each stage, link() connects them into a runnable program.
+ * After linking, the individual shader objects are dead weight - same idea as
+ * deleting .o files after a successful build.
+ *
+ * vertexShader and fragmentShader remain as fields only so delete() can clean them up.
+ *
+ * Lifecycle: new -> use() each frame -> delete() on shutdown.
+ */
 public class GlShader {
     private int programId;
     private final String vertexShaderSource;
     private final String fragmentShaderSource;
     private int vertexShader;
     private int fragmentShader;
+
+    // glGetUniformLocation is a string lookup into the linked program - cache it so we're not
+    // doing it every frame for the same name. -1 means "no such active uniform" (see setMatrix4).
+    private final Map<String, Integer> uniformLocations = new HashMap<>();
 
     public GlShader(String vertexShaderSource, String fragmentShaderSource) {
         this.vertexShaderSource = vertexShaderSource;
@@ -17,11 +41,45 @@ public class GlShader {
         link();
     }
 
+    public void use() {
+        glUseProgram(this.programId);
+    }
+
+    public int getProgramId() {
+        return this.programId;
+    }
+
+    // Uploads a 4x4 matrix into a mat4 uniform. The program must be bound (use()) first - glUniform*
+    // always writes into the currently-active program, not the one named here.
+    public void setMatrix4(String name, Matrix4f matrix) {
+        int location = location(name);
+        if (location < 0) return; // uniform doesn't exist or got stripped as unused; nothing to set
+
+        // JOML and OpenGL are both column-major, so no transpose (false). The GPU wants the 16
+        // floats laid out contiguously; matrix.get() writes them in column-major order. We alloc
+        // on the LWJGL stack so this per-frame upload doesn't churn the GC heap.
+        try (MemoryStack stack = stackPush()) {
+            FloatBuffer buffer = stack.mallocFloat(16);
+            matrix.get(buffer);
+            glUniformMatrix4fv(location, false, buffer);
+        }
+    }
+
+    private int location(String name) {
+        return this.uniformLocations.computeIfAbsent(name, n -> glGetUniformLocation(this.programId, n));
+    }
+
+    public void delete() {
+        glDeleteProgram(this.programId);
+        glDeleteShader(this.vertexShader);
+        glDeleteShader(this.fragmentShader);
+    }
+
     private void compile() {
         this.vertexShader = glCreateShader(GL_VERTEX_SHADER);
         this.fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(this.vertexShader, vertexShaderSource);
-        glShaderSource(this.fragmentShader, fragmentShaderSource);
+        glShaderSource(this.vertexShader, this.vertexShaderSource);
+        glShaderSource(this.fragmentShader, this.fragmentShaderSource);
         glCompileShader(this.vertexShader);
         glCompileShader(this.fragmentShader);
         if (glGetShaderi(this.vertexShader, GL_COMPILE_STATUS) == GL_FALSE) {
@@ -40,22 +98,8 @@ public class GlShader {
         glAttachShader(this.programId, this.fragmentShader);
         glLinkProgram(this.programId);
         if (glGetProgrami(this.programId, GL_LINK_STATUS) == GL_FALSE) {
-            LOGGER.error(glGetProgramInfoLog(programId));
+            LOGGER.error(glGetProgramInfoLog(this.programId));
             throw new RuntimeException("Failed to link() shader program");
         }
-    }
-
-    public void use() {
-        glUseProgram(this.programId);
-    }
-
-    public int getProgramId() {
-        return this.programId;
-    }
-
-    public void delete() {
-        glDeleteProgram(this.programId);
-        glDeleteShader(this.vertexShader);
-        glDeleteShader(this.fragmentShader);
     }
 }

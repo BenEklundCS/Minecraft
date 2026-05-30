@@ -2,15 +2,17 @@ package com.beneklund.minecraft.input;
 
 import static com.beneklund.minecraft.util.Log.LOGGER;
 
-import com.beneklund.minecraft.platform.input.InputAction;
 import com.beneklund.minecraft.platform.window.Window;
+import com.beneklund.minecraft.renderer.Camera;
 import java.util.List;
 
 public class InputHandler {
     private final Window window;
+    private final Camera camera;
 
-    public InputHandler(Window window) {
+    public InputHandler(Window window, Camera camera) {
         this.window = window;
+        this.camera = camera;
     }
 
     public void handle(List<InputAction> actions) {
@@ -36,9 +38,21 @@ public class InputHandler {
                 case InputAction.Simple.EXIT -> this.window.close();
                 case InputAction.MoveAction m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
                 case InputAction.LookAction l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
-                case InputAction.ScrollAction s -> LOGGER.debug("SCROLL delta={}", s.delta());
+                case InputAction.ScrollAction s -> {
+                    LOGGER.debug("SCROLL delta={}", s.delta());
+                    handleScroll(s);
+                }
                 default -> {}
             }
         }
+    }
+
+    private void handleScroll(InputAction.ScrollAction scrollAction) {
+        float fov = this.camera.getFov() - scrollAction.delta();
+        if (fov < 1.0f)
+            fov = 1.0f;
+        if (fov > 45.0f)
+            fov = 45.0f;
+        this.camera.setFov(fov);
     }
 }

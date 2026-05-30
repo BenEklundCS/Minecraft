@@ -10,13 +10,13 @@ public class LocalConfig {
 
     public LocalConfig() {
         try (var in = new FileInputStream("local.properties")) {
-            props.load(in);
+            this.props.load(in);
         } catch (IOException ignored) {
             // no local.properties — all settings will be absent
         }
     }
 
     public Optional<String> startupDisc() {
-        return Optional.ofNullable(props.getProperty("startup.disc"));
+        return Optional.ofNullable(this.props.getProperty("startup.disc"));
     }
 }
