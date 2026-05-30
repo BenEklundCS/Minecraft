@@ -51,7 +51,7 @@ public class AudioPlayer {
         if (this.device == NULL) {
             init();
         }
-
+        clean();
         try (AudioData data = this.loader.load(classpathOgg)) {
             int format = data.channels() == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
             this.buffer = alGenBuffers();
@@ -72,5 +72,19 @@ public class AudioPlayer {
         alcMakeContextCurrent(NULL);
         alcDestroyContext(this.context);
         alcCloseDevice(this.device);
+    }
+
+    private void clean() {
+        if (alGetSourcei(this.source, AL_SOURCE_STATE) == AL_PLAYING) {
+            alSourceStop(this.source);
+            alDeleteSources(this.source);
+            alDeleteBuffers(this.buffer);
+            this.source = 0;
+            this.buffer = 0;
+        }
+    }
+
+    private void _play(String classpathOgg) {
+
     }
 }
