@@ -8,6 +8,7 @@ import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.world.World;
 import java.util.List;
+import org.joml.Matrix4f;
 
 public record Game(Window window, Renderer renderer, Camera camera, World world, DeltaTracker delta, InputMapper mapper) {
     public void run() {
@@ -29,7 +30,8 @@ public record Game(Window window, Renderer renderer, Camera camera, World world,
             this.camera.setPosition((float) Math.sin(t) * radius, 1.5f, (float) Math.cos(t) * radius);
 
             this.window.beginFrame();
-            this.renderer.render(this.camera.getViewMatrix(), this.camera.getProjectionMatrix());
+            Matrix4f model = new Matrix4f().identity();
+            this.renderer.render(model, this.camera.getViewMatrix(), this.camera.getProjectionMatrix());
             this.window.endFrame();
         }
     }
