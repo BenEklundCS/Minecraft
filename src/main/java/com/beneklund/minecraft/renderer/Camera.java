@@ -91,9 +91,9 @@ public class Camera {
      * view flips.
      */
     public void look(float dxDegrees, float dyDegrees) {
-        yaw += dxDegrees;
-        pitch -= dyDegrees;
-        pitch = Math.clamp(pitch, -89.0f, 89.0f);
+        this.yaw += dxDegrees;
+        this.pitch -= dyDegrees;
+        this.pitch = Math.clamp(this.pitch, -89.0f, 89.0f);
     }
 
     /*
