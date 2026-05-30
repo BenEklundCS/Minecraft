@@ -3,6 +3,7 @@ package com.beneklund.minecraft.platform.images;
 import static com.beneklund.minecraft.util.Log.LOGGER;
 import static org.lwjgl.stb.STBImage.stbi_image_free;
 import static org.lwjgl.stb.STBImage.stbi_load_from_memory;
+import static org.lwjgl.stb.STBImage.stbi_set_flip_vertically_on_load;
 import static org.lwjgl.system.MemoryUtil.memAlloc;
 import static org.lwjgl.system.MemoryUtil.memFree;
 
@@ -24,6 +25,7 @@ public class StbImageLoader implements ImageLoader {
             IntBuffer h = stack.mallocInt(1);
             IntBuffer c = stack.mallocInt(1);
 
+            stbi_set_flip_vertically_on_load(true);
             InputStream stream = getClass().getResourceAsStream(classpathPng);
             if (stream == null) {
                 throw new IOException("Texture not found: %s".formatted(classpathPng));

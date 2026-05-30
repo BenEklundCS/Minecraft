@@ -1,10 +1,12 @@
 package com.beneklund.minecraft.platform.graphics;
 
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL21.GL_SRGB8_ALPHA8;
 
 import com.beneklund.minecraft.platform.images.ImageData;
 import com.beneklund.minecraft.platform.images.ImageLoader;
 import com.beneklund.minecraft.platform.images.StbImageLoader;
+import java.nio.ByteBuffer;
 
 /*
  * Wraps an OpenGL 2D texture. Load and upload are intentionally separate steps -
@@ -21,34 +23,28 @@ import com.beneklund.minecraft.platform.images.StbImageLoader;
  * Lifecycle: new -> load() -> upload() -> bind() each frame -> delete() on shutdown.
  */
 public class GlTexture {
+    private static final ImageLoader LOADER = new StbImageLoader();
+
     private int id;
     private ImageData data;
-    private final ImageLoader loader;
-
-    public GlTexture() {
-        this.loader = new StbImageLoader();
-    }
 
     public void load(String classpathPng) {
-        this.data = loader.load(classpathPng);
+        this.data = LOADER.load(classpathPng);
     }
 
     public void upload() {
+        upload(this.data.pixels(), this.data.width(), this.data.height());
+        data.close();
+    }
+
+    // For callers that build their own pixel buffer (e.g. TextureAtlas stitching).
+    // Caller is responsible for freeing the buffer after this returns.
+    public void upload(ByteBuffer pixels, int width, int height) {
         this.id = glGenTextures();
         glBindTexture(GL_TEXTURE_2D, this.id);
-        glTexImage2D(
-                GL_TEXTURE_2D,
-                0,
-                GL_RGBA,
-                this.data.width(),
-                this.data.height(),
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                this.data.pixels());
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        data.close();
     }
 
     public void bind() {

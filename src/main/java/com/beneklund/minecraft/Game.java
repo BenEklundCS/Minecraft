@@ -28,9 +28,9 @@ public record Game(
 
             // Orbit around the origin on a circle (sin/cos of elapsed time), lifted to y=1.5 so the
             // flat triangle never goes edge-on. View targets the origin, so moving position is enough.
-//            float t = (float) this.window.getTime();
-//            float radius = 3.0f;
-//            this.camera.setPosition((float) Math.sin(t) * radius, 1.5f, (float) Math.cos(t) * radius);
+            //            float t = (float) this.window.getTime();
+            //            float radius = 3.0f;
+            //            this.camera.setPosition((float) Math.sin(t) * radius, 1.5f, (float) Math.cos(t) * radius);
 
             for (var action : actions) {
                 if (action instanceof InputAction.MoveAction(float dx, float dz)) {

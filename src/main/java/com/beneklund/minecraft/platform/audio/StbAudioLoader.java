@@ -1,14 +1,12 @@
 package com.beneklund.minecraft.platform.audio;
 
-import org.lwjgl.stb.STBVorbisInfo;
+import static org.lwjgl.stb.STBVorbis.*;
+import static org.lwjgl.system.MemoryUtil.*;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
-
-import static org.lwjgl.stb.STBVorbis.*;
-import static org.lwjgl.system.MemoryUtil.*;
-
+import org.lwjgl.stb.STBVorbisInfo;
 
 /*
  * Decodes an OGG/Vorbis file from the classpath into raw PCM samples using STBVorbis.

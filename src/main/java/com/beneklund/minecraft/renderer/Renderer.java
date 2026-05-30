@@ -5,7 +5,6 @@ import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
 
 import com.beneklund.minecraft.platform.graphics.GlElementArrayBuffer;
-import com.beneklund.minecraft.platform.graphics.GlTexture;
 import com.beneklund.minecraft.platform.graphics.GlVertexArray;
 import com.beneklund.minecraft.platform.graphics.GlVertexArrayBuffer;
 import org.joml.Matrix4f;
@@ -15,19 +14,16 @@ public class Renderer {
     private final GlVertexArray vao;
     private final GlVertexArrayBuffer vbo;
     private final GlElementArrayBuffer ebo;
-    private final GlTexture texture;
+    private final TextureAtlas atlas;
     private final int indexCount;
 
-    public Renderer(String vertPath, String fragPath, float[] vertices, int[] indices, String texturePath) {
+    public Renderer(String vertPath, String fragPath, float[] vertices, int[] indices, TextureAtlas atlas) {
         this.shader = new ShaderProgram(vertPath, fragPath);
         this.vbo = new GlVertexArrayBuffer();
         this.ebo = new GlElementArrayBuffer();
         this.vao = new GlVertexArray();
-        this.texture = new GlTexture();
         this.indexCount = indices.length;
-
-        this.texture.load(texturePath);
-        this.texture.upload();
+        this.atlas = atlas;
 
         this.vao.bind();
         this.vbo.upload(vertices);
@@ -43,7 +39,7 @@ public class Renderer {
         this.shader.setUniformMat4("view", view);
         this.shader.setUniformMat4("projection", projection);
         glActiveTexture(GL_TEXTURE0);
-        this.texture.bind();
+        this.atlas.bind();
         this.vao.bind();
         glDrawElements(GL_TRIANGLES, this.indexCount, GL_UNSIGNED_INT, 0L);
     }

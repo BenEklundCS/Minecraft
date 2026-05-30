@@ -8,7 +8,7 @@ import org.joml.Vector3f;
 public class Camera {
     private final Vector2f windowSize;
     private final Vector3f position;
-    //private final Vector3f target;
+    // private final Vector3f target;
     private final Vector3f up;
 
     private float yaw;
@@ -18,7 +18,7 @@ public class Camera {
     public Camera(WindowConfig config, Vector3f position, float fov) {
         this.windowSize = new Vector2f(config.width(), config.height());
         this.position = position;
-        //this.target = new Vector3f(0.0f, 0.0f, 0.0f);
+        // this.target = new Vector3f(0.0f, 0.0f, 0.0f);
         this.up = new Vector3f(0.0f, 1.0f, 0.0f);
         this.fov = fov;
     }

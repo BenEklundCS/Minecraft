@@ -30,8 +30,8 @@ public class AudioPlayer {
     private int source;
     private int buffer;
 
-    public AudioPlayer() {
-        this.loader = new StbAudioLoader();
+    public AudioPlayer(AudioLoader loader) {
+        this.loader = loader;
     }
 
     private void init() {
@@ -84,7 +84,5 @@ public class AudioPlayer {
         }
     }
 
-    private void _play(String classpathOgg) {
-
-    }
+    private void _play(String classpathOgg) {}
 }
