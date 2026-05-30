@@ -28,8 +28,9 @@ public class Renderer {
         this.vao.bind();
         this.vbo.upload(vertices);
         this.ebo.upload(indices);
-        this.vao.attribPointer(0, 3, 20, 0L); // position: 3 floats, stride 20 bytes
-        this.vao.attribPointer(1, 2, 20, 12L); // uv: 2 floats, offset 12 bytes (3*4)
+        this.vao.attribPointer(0, 3, 32, 0L); // position: 3 floats, stride 32 bytes
+        this.vao.attribPointer(1, 2, 32, 12L); // uv: 2 floats, offset 12 bytes (3*4)
+        this.vao.attribPointer(2, 3, 32, 20L); // tint: 3 floats, offset 20 bytes (5*4)
         this.vao.unbind();
     }
 

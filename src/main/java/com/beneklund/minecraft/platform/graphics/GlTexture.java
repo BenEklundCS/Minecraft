@@ -33,7 +33,8 @@ public class GlTexture {
 
     public void upload() {
         upload(this.data.pixels(), this.data.width(), this.data.height());
-        data.close();
+        this.data.close();
+        this.data = null;
     }
 
     // For callers that build their own pixel buffer (e.g. TextureAtlas stitching).
@@ -51,8 +52,11 @@ public class GlTexture {
     }
 
     public void delete() {
-        if (this.data.pixels() != null) {
-            data.close();
+        // data is normally already freed in upload(); only non-null if load() ran without
+        // upload(). The atlas path uses the upload(ByteBuffer) overload and never sets data.
+        if (this.data != null) {
+            this.data.close();
+            this.data = null;
         }
         glDeleteTextures(this.id);
     }
