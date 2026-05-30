@@ -50,6 +50,7 @@ public class InputMapper {
     public InputMapper(InputEventQueue queue, Map<Integer, InputAction> bindings, Set<Integer> heldKeys) {
         this.queue = queue;
         this.bindings = bindings;
+        this.heldKeys.addAll(heldKeys);
     }
 
     public List<InputAction> drain() {
