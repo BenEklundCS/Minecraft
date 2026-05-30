@@ -22,7 +22,7 @@ public class GameContainer {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = new InputMapper(queue);
         Window window = new Window(config, queue);
-        Camera camera = new Camera(config, new Vector3f(0.0f, 0.0f, 0.0f), 45.0f);
+        Camera camera = new Camera(config, new Vector3f(0.0f, 0.0f, -3.0f), 45.0f);
         InputHandler handler = new InputHandler(window, camera);
         DeltaTracker delta = new DeltaTracker(window::getTime);
 

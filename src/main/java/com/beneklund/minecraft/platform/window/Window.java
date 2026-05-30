@@ -132,8 +132,8 @@ public class Window {
         glfwShowWindow(this.window);
         glfwRequestWindowAttention(this.window);
 
-        // glfwSetInputMode(this.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        System.out.println("Minecraft started %s!".formatted(Version.getVersion()));
+        glfwSetInputMode(this.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        System.out.printf("Minecraft started %s!%n", Version.getVersion());
     }
 
     private void initOpenGL() {

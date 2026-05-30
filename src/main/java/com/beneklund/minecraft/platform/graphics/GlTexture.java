@@ -23,7 +23,7 @@ import com.beneklund.minecraft.platform.images.StbImageLoader;
 public class GlTexture {
     private int id;
     private ImageData data;
-    private ImageLoader loader;
+    private final ImageLoader loader;
 
     public GlTexture() {
         this.loader = new StbImageLoader();

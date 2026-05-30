@@ -7,6 +7,8 @@ import com.beneklund.minecraft.renderer.Camera;
 import java.util.List;
 
 public class InputHandler {
+    private static final float SENSITIVITY = 0.1f;
+
     private final Window window;
     private final Camera camera;
 
@@ -37,7 +39,7 @@ public class InputHandler {
                 case InputAction.Simple.SLOT_9 -> LOGGER.debug("SLOT_9");
                 case InputAction.Simple.EXIT -> this.window.close();
                 case InputAction.MoveAction m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
-                case InputAction.LookAction l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
+                case InputAction.LookAction l -> this.camera.look(l.dx() * SENSITIVITY, l.dy() * SENSITIVITY);
                 case InputAction.ScrollAction s -> {
                     LOGGER.debug("SCROLL delta={}", s.delta());
                     handleScroll(s);

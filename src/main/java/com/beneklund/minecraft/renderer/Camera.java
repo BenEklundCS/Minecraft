@@ -8,7 +8,7 @@ import org.joml.Vector3f;
 public class Camera {
     private final Vector2f windowSize;
     private final Vector3f position;
-    private final Vector3f target;
+    //private final Vector3f target;
     private final Vector3f up;
 
     private float yaw;
@@ -18,13 +18,14 @@ public class Camera {
     public Camera(WindowConfig config, Vector3f position, float fov) {
         this.windowSize = new Vector2f(config.width(), config.height());
         this.position = position;
-        this.target = new Vector3f(0.0f, 0.0f, 0.0f);
+        //this.target = new Vector3f(0.0f, 0.0f, 0.0f);
         this.up = new Vector3f(0.0f, 1.0f, 0.0f);
         this.fov = fov;
     }
 
     public Matrix4f getViewMatrix() {
-        return new Matrix4f().lookAt(this.position, this.target, this.up);
+        return new Matrix4f().lookAt(this.position, new Vector3f(this.position).add(getLookDirection()), this.up);
+        // orbit: return new Matrix4f().lookAt(this.position, this.target, this.up);
     }
 
     public Matrix4f getProjectionMatrix() {
@@ -87,7 +88,7 @@ public class Camera {
      * view flips.
      */
     public void look(float dxDegrees, float dyDegrees) {
-        this.yaw += dxDegrees;
+        this.yaw -= dxDegrees;
         this.pitch -= dyDegrees;
         this.pitch = Math.clamp(this.pitch, -89.0f, 89.0f);
     }

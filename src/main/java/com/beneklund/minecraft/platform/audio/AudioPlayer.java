@@ -2,46 +2,41 @@ package com.beneklund.minecraft.platform.audio;
 
 import static org.lwjgl.openal.AL10.*;
 import static org.lwjgl.openal.ALC10.*;
-import static org.lwjgl.stb.STBVorbis.*;
 import static org.lwjgl.system.MemoryUtil.*;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ShortBuffer;
 import org.lwjgl.openal.AL;
 import org.lwjgl.openal.ALC;
 import org.lwjgl.openal.ALCCapabilities;
 import org.lwjgl.openal.ALCapabilities;
-import org.lwjgl.stb.STBVorbisInfo;
 
 /*
- * Plays a looping background track using OpenAL - the audio equivalent of OpenGL.
- * Same mental model: open a device, create a context, upload data to a buffer, attach
- * the buffer to a source, play the source.
+ * Owns the OpenAL device/context lifecycle and drives playback. Decoding is delegated
+ * to AudioLoader (StbAudioLoader by default), which returns an AudioData holding decoded
+ * PCM samples. This class uploads that PCM to an AL buffer, attaches it to a source, and plays.
  *
- * OpenAL separates buffers (the raw audio data) from sources (the thing that plays it).
- * A buffer holds PCM samples. A source has position, volume, looping state, and a pointer
- * to a buffer. This separation means multiple sources can play the same buffer simultaneously
- * without duplicating the audio data.
- *
- * OGG/Vorbis is the format. STBVorbis decodes it to raw PCM (uncompressed short samples)
- * which is what OpenAL actually consumes. The full decoded audio lives in RAM - not
- * streamed per-frame.
+ * OpenAL separates buffers (raw PCM data) from sources (playback state: position, volume,
+ * looping). One buffer can be shared across many sources without duplicating audio data.
  *
  * init() is lazy - deferred until the first play() call so the audio device isn't opened
  * if no music is configured (e.g. in headless test environments).
  *
- * Lifecycle: play() -> shutdown() on app exit.
+ * Lifecycle: play() -> shutdown() on app exit. shutdown() is a no-op if play() was never called.
  */
 public class AudioPlayer {
+    private final AudioLoader loader;
     private long device;
     private long context;
     private int source;
     private int buffer;
 
+    public AudioPlayer() {
+        this.loader = new StbAudioLoader();
+    }
+
     private void init() {
         // null = let OpenAL pick the default audio device.
-        this.device = alcOpenDevice((String) null);
+        this.device = alcOpenDevice((ByteBuffer) null);
         if (this.device == NULL) throw new RuntimeException("Failed to open OpenAL device");
 
         this.context = alcCreateContext(this.device, new int[] {0});
@@ -57,27 +52,10 @@ public class AudioPlayer {
             init();
         }
 
-        ByteBuffer oggBytes = loadResource(classpathOgg);
-
-        try (STBVorbisInfo info = STBVorbisInfo.malloc()) {
-            int[] error = {0};
-            long decoder = stb_vorbis_open_memory(oggBytes, error, null);
-            if (decoder == NULL) throw new RuntimeException("Failed to decode OGG (error %s)".formatted(error[0]));
-
-            stb_vorbis_get_info(decoder, info);
-            int channels = info.channels();
-            int sampleRate = info.sample_rate();
-
-            // Decode the entire file to interleaved 16-bit PCM samples.
-            ShortBuffer pcm = memAllocShort(stb_vorbis_stream_length_in_samples(decoder) * channels);
-            stb_vorbis_get_samples_short_interleaved(decoder, channels, pcm);
-            stb_vorbis_close(decoder);
-            memFree(oggBytes);
-
-            int format = channels == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
+        try (AudioData data = this.loader.load(classpathOgg)) {
+            int format = data.channels() == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
             this.buffer = alGenBuffers();
-            alBufferData(this.buffer, format, pcm, sampleRate);
-            memFree(pcm);
+            alBufferData(this.buffer, format, data.pcm(), data.sampleRate());
 
             this.source = alGenSources();
             alSourcei(this.source, AL_BUFFER, this.buffer);
@@ -87,24 +65,12 @@ public class AudioPlayer {
     }
 
     public void shutdown() {
+        if (this.device == NULL) return;
         alSourceStop(this.source);
         alDeleteSources(this.source);
         alDeleteBuffers(this.buffer);
         alcMakeContextCurrent(NULL);
         alcDestroyContext(this.context);
         alcCloseDevice(this.device);
-    }
-
-    private ByteBuffer loadResource(String classpathOgg) {
-        try (var is = AudioPlayer.class.getClassLoader().getResourceAsStream(classpathOgg)) {
-            if (is == null) throw new RuntimeException("Resource not found: %s".formatted(classpathOgg));
-            byte[] bytes = is.readAllBytes();
-            ByteBuffer buffer = memAlloc(bytes.length);
-            // flip() resets the cursor to 0 after put() so the native side reads from the start.
-            buffer.put(bytes).flip();
-            return buffer;
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to load audio: %s".formatted(classpathOgg), e);
-        }
     }
 }
