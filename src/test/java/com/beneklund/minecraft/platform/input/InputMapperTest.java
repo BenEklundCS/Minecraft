@@ -18,8 +18,8 @@ class InputMapperTest {
 
     static List<WasdCase> wasdCases() {
         return List.of(
-                new WasdCase(GLFW_KEY_W, 0f, -1f),
-                new WasdCase(GLFW_KEY_S, 0f, 1f),
+                new WasdCase(GLFW_KEY_W, 0f, 1f),
+                new WasdCase(GLFW_KEY_S, 0f, -1f),
                 new WasdCase(GLFW_KEY_A, -1f, 0f),
                 new WasdCase(GLFW_KEY_D, 1f, 0f));
     }

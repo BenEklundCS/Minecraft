@@ -91,8 +91,8 @@ public class InputMapper {
     private void processHeldActions(List<InputAction> actions) {
         float dx = 0f;
         float dz = 0f;
-        if (this.heldKeys.contains(GLFW_KEY_W)) dz -= 1f;
-        if (this.heldKeys.contains(GLFW_KEY_S)) dz += 1f;
+        if (this.heldKeys.contains(GLFW_KEY_W)) dz += 1f;
+        if (this.heldKeys.contains(GLFW_KEY_S)) dz -= 1f;
         if (this.heldKeys.contains(GLFW_KEY_A)) dx -= 1f;
         if (this.heldKeys.contains(GLFW_KEY_D)) dx += 1f;
         if (dx != 0f || dz != 0f) actions.add(new InputAction.MoveAction(dx, dz));

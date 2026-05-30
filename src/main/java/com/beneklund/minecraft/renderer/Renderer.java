@@ -43,4 +43,11 @@ public class Renderer {
         this.vao.bind();
         glDrawElements(GL_TRIANGLES, this.indexCount, GL_UNSIGNED_INT, 0L);
     }
+
+    public void delete() {
+        this.shader.delete();
+        this.vao.delete();
+        this.vbo.delete();
+        this.ebo.delete();
+    }
 }

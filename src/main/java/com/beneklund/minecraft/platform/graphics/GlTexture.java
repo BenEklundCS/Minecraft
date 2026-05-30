@@ -1,7 +1,6 @@
 package com.beneklund.minecraft.platform.graphics;
 
 import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL21.GL_SRGB8_ALPHA8;
 
 import com.beneklund.minecraft.platform.images.ImageData;
 import com.beneklund.minecraft.platform.images.ImageLoader;

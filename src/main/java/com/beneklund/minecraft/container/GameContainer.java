@@ -64,6 +64,8 @@ public class GameContainer {
 
         // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).
         music.shutdown();
+        renderer.delete();
+        atlas.delete();
         window.shutdown();
     }
 

@@ -23,8 +23,12 @@ public class StbAudioLoader implements AudioLoader {
 
     @Override
     public AudioData load(String classpathOgg) {
-        try (var is = getClass().getResourceAsStream(classpathOgg)) {
-            if (is == null) throw new RuntimeException("Resource not found: %s".formatted(classpathOgg));
+        // Resolve from the classpath root. getResourceAsStream treats a slash-less path as
+        // relative to this class's package, so normalize to a leading slash - that way a
+        // config value like "music/c418/disc_cat.ogg" works the same as "/music/...".
+        String path = classpathOgg.startsWith("/") ? classpathOgg : "/" + classpathOgg;
+        try (var is = getClass().getResourceAsStream(path)) {
+            if (is == null) throw new RuntimeException("Resource not found: %s".formatted(path));
             byte[] bytes = is.readAllBytes();
             ByteBuffer oggBytes = memAlloc(bytes.length);
             oggBytes.put(bytes).flip();
