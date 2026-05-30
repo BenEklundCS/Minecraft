@@ -152,6 +152,8 @@ public class Window {
                 this.config.clearColor().green(),
                 this.config.clearColor().blue(),
                 this.config.clearColor().alpha());
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
     }
 
     private void initCallbacks() {

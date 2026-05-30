@@ -26,12 +26,11 @@ public class GameContainer {
         InputHandler handler = new InputHandler(window, camera);
         DeltaTracker delta = new DeltaTracker(window::getTime);
 
-
         window.addResizeListener(camera::setWindowSize);
-
         window.init();
 
-        Renderer renderer = getRenderer();
+        Renderer renderer = getCubeRenderer();
+        // Renderer triangleRenderer = getTriangleRenderer(); // oak-leaf textured triangle
 
         MusicPlayer music = new MusicPlayer();
         localConfig.startupDisc().ifPresent(music::play);
@@ -43,39 +42,71 @@ public class GameContainer {
         window.shutdown();
     }
 
-    private Renderer getRenderer() {
-        // view/projection are the camera matrices; the vertex stage transforms each position by
-        // them. The Renderer uploads both every frame.
-        String vertexSource = """
-                #version 330 core
-                layout(location = 0) in vec3 position;
-                layout(location = 1) in vec2 uv;
-                out vec2 texCoord;
-                uniform mat4 view;
-                uniform mat4 projection;
-                void main() {
-                    gl_Position = projection * view * vec4(position, 1.0);
-                    texCoord = uv;
-                }
-                """;
-        Color c = Color.OAK_LEAF;
-        String fragmentSource = """
-                #version 330 core
-                in vec2 texCoord;
-                out vec4 FragColor;
-                uniform sampler2D tex;
-                void main() {
-                    FragColor = texture(tex, texCoord) * vec4(%f, %f, %f, %f);
-                }
-                """.formatted(c.red(), c.green(), c.blue(), c.alpha());
-
-        // x, y, z, u, v per vertex
+    private Renderer getCubeRenderer() {
+        // Each face is 4 unique vertices (position + uv) so UVs wrap cleanly per face.
+        // 24 vertices total: 4 per face * 6 faces.
         float[] vertices = {
-                 0.0f,  0.5f, 0.0f,   0.5f, 1.0f,
-                -0.5f, -0.5f, 0.0f,   0.0f, 0.0f,
-                 0.5f, -0.5f, 0.0f,   1.0f, 0.0f
+            // front (z = +0.5)
+            -0.5f,  0.5f,  0.5f,   0.0f, 1.0f,
+            -0.5f, -0.5f,  0.5f,   0.0f, 0.0f,
+             0.5f, -0.5f,  0.5f,   1.0f, 0.0f,
+             0.5f,  0.5f,  0.5f,   1.0f, 1.0f,
+            // back (z = -0.5)
+             0.5f,  0.5f, -0.5f,   0.0f, 1.0f,
+             0.5f, -0.5f, -0.5f,   0.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f,   1.0f, 0.0f,
+            -0.5f,  0.5f, -0.5f,   1.0f, 1.0f,
+            // left (x = -0.5)
+            -0.5f,  0.5f, -0.5f,   0.0f, 1.0f,
+            -0.5f, -0.5f, -0.5f,   0.0f, 0.0f,
+            -0.5f, -0.5f,  0.5f,   1.0f, 0.0f,
+            -0.5f,  0.5f,  0.5f,   1.0f, 1.0f,
+            // right (x = +0.5)
+             0.5f,  0.5f,  0.5f,   0.0f, 1.0f,
+             0.5f, -0.5f,  0.5f,   0.0f, 0.0f,
+             0.5f, -0.5f, -0.5f,   1.0f, 0.0f,
+             0.5f,  0.5f, -0.5f,   1.0f, 1.0f,
+            // top (y = +0.5)
+            -0.5f,  0.5f, -0.5f,   0.0f, 1.0f,
+            -0.5f,  0.5f,  0.5f,   0.0f, 0.0f,
+             0.5f,  0.5f,  0.5f,   1.0f, 0.0f,
+             0.5f,  0.5f, -0.5f,   1.0f, 1.0f,
+            // bottom (y = -0.5)
+            -0.5f, -0.5f,  0.5f,   0.0f, 1.0f,
+            -0.5f, -0.5f, -0.5f,   0.0f, 0.0f,
+             0.5f, -0.5f, -0.5f,   1.0f, 0.0f,
+             0.5f, -0.5f,  0.5f,   1.0f, 1.0f,
         };
 
-        return new Renderer(vertexSource, fragmentSource, vertices, "/packs/faithful/textures/default_leaves.png");
+        // Each face is two triangles. Pattern per face: 0,1,2, 0,2,3 offset by face*4.
+        int[] indices = {
+             0,  1,  2,   0,  2,  3,  // front
+             4,  5,  6,   4,  6,  7,  // back
+             8,  9, 10,   8, 10, 11,  // left
+            12, 13, 14,  12, 14, 15,  // right
+            16, 17, 18,  16, 18, 19,  // top
+            20, 21, 22,  20, 22, 23,  // bottom
+        };
+
+        return new Renderer(
+            "/shaders/cube.vert", "/shaders/cube.frag",
+            vertices, indices,
+            "/packs/faithful/textures/default_leaves.png"
+        );
+    }
+
+    @SuppressWarnings("unused")
+    private Renderer getTriangleRenderer() {
+        float[] vertices = {
+             0.0f,  0.5f, 0.0f,   0.5f, 1.0f,
+            -0.5f, -0.5f, 0.0f,   0.0f, 0.0f,
+             0.5f, -0.5f, 0.0f,   1.0f, 0.0f,
+        };
+        int[] indices = { 0, 1, 2 };
+        return new Renderer(
+            "/shaders/triangle.vert", "/shaders/triangle.frag",
+            vertices, indices,
+            "/packs/faithful/textures/default_leaves.png"
+        );
     }
 }
