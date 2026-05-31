@@ -34,7 +34,7 @@ public class LocalWorldAuthority implements IWorldAuthority {
         if (chunk == null) return;
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
         chunk.setBlock(chunkCoordinates.x, y, chunkCoordinates.z, id);
-        chunk.tryMarkDirty();
+        chunk.tryTransition(ChunkState.DIRTY);
         // TODO: an edit on a chunk border (local x/z == 0 or 15) leaves the neighbor chunk's
         // meshed faces stale - also markDirty the adjacent chunk(s) once meshing is wired up.
     }
