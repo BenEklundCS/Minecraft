@@ -6,7 +6,9 @@ import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.renderer.Camera;
 import java.util.List;
 
+// Placeholder game-logic handler. Most Simple actions are stubs right now - they just log.
 public class InputHandler {
+    // Degrees-per-pixel passed to Camera.look(). Tune this for feel.
     private static final float SENSITIVITY = 0.1f;
 
     private final Window window;
@@ -50,6 +52,8 @@ public class InputHandler {
     }
 
     private void handleScroll(InputAction.ScrollAction scrollAction) {
+        // Scroll zooms by adjusting FOV. 45° is the normal Minecraft FOV; clamped so
+        // it never goes fisheye or collapses to a point.
         float fov = this.camera.getFov() - scrollAction.delta();
         if (fov < 1.0f) fov = 1.0f;
         if (fov > 45.0f) fov = 45.0f;

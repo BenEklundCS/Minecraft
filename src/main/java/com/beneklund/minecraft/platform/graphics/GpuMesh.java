@@ -22,7 +22,7 @@ public class GpuMesh {
 
         vao.bind();
         vbo.upload(vertices);
-        ebo.upload(indices);
+        ebo.upload(indices); // must happen inside vao.bind() — EBO binding is part of VAO state
         vao.attribPointer(0, 3, 40, 0L); // position: xyz
         vao.attribPointer(1, 2, 40, 12L); // uv
         vao.attribPointer(2, 1, 40, 20L); // ao

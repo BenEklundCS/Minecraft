@@ -8,6 +8,16 @@ import com.beneklund.minecraft.world.Chunk;
 import java.util.ArrayList;
 import java.util.List;
 
+// Converts a Chunk's block data into a ChunkMeshData (float[] vertices, int[] indices).
+// No GL calls — safe to run on any worker thread. The caller uploads the result to the
+// GPU via GpuMesh on the main thread.
+//
+// Vertex format (10 floats, stride 40 bytes):
+//   [0-2]  x, y, z       world position
+//   [3-4]  u, v          atlas UV
+//   [5]    ao            ambient occlusion (placeholder 1.0 until Phase 20)
+//   [6]    faceId        0=UP, 1=side, 2=DOWN (drives brightness bands in chunk.frag)
+//   [7-9]  r, g, b       biome tint (1,1,1 = no tint)
 public class ChunkMesher {
 
     // 4 corner offsets per face, CCW winding when viewed from outside the block.
@@ -40,17 +50,26 @@ public class ChunkMesher {
 
     private static final float[] DEFAULT_UV = {0f, 0f, 1f, 1f};
 
-    // Per-face UV fractions: [u0,v0, u1,v1, u2,v2, u3,v3] where 0=min, 1=max.
-    // Side faces need V=max at the bottom vertex and V=min at the top vertex so the
-    // texture isn't rotated 90°. (STB loads images top-first; OpenGL treats the first
-    // buffer bytes as the bottom row, flipping the V axis relative to the image file.)
+    // Per-face UV fractions: [u0,v0, u1,v1, u2,v2, u3,v3] where 0=uMin/vMin, 1=uMax/vMax.
+    // Index order matches FACE_VERTICES — vertex 0 uses fracs[0,1], vertex 1 uses [2,3], etc.
+    //
+    // The V-axis is flipped between STB and OpenGL:
+    //   STB loads images top-to-bottom  → row 0 = top of the image file
+    //   OpenGL UV V=0                   → bottom of the texture on screen
+    // So vMin (small number) maps to the TOP of the image, vMax to the BOTTOM.
+    //
+    // For grass_side the green strip is at the top of the image. To render it at the top
+    // of the block face, assign vMin to top vertices (by+1) and vMax to bottom vertices (by+0).
+    // A naive uniform UV assignment maps V uniformly across both y values, which rotates the
+    // texture 90° on side faces because U ends up tracking the vertical Y axis instead of
+    // the horizontal block-face axis.
     private static final float[][] FACE_UV_FRACS = {
         {0, 0, 0, 1, 1, 1, 1, 0}, // UP:    U→+X, V→+Z
-        {0, 0, 0, 1, 1, 1, 1, 0}, // DOWN:  dirt — symmetric, orientation irrelevant
+        {0, 0, 0, 1, 1, 1, 1, 0}, // DOWN:  symmetric, orientation irrelevant
         {1, 1, 0, 1, 0, 0, 1, 0}, // NORTH: U→-X, bottom=vMax, top=vMin
         {0, 1, 1, 1, 1, 0, 0, 0}, // SOUTH: U→+X, bottom=vMax, top=vMin
-        {0, 1, 1, 1, 1, 0, 0, 0}, // EAST:  U→-Z, bottom=vMax, top=vMin
-        {0, 1, 1, 1, 1, 0, 0, 0}, // WEST:  U→+Z, bottom=vMax, top=vMin
+        {0, 1, 1, 1, 1, 0, 0, 0}, // EAST:  bottom=vMax, top=vMin
+        {0, 1, 1, 1, 1, 0, 0, 0}, // WEST:  bottom=vMax, top=vMin
     };
 
     // Tints for blocks whose textures are stored as greyscale in the pack.

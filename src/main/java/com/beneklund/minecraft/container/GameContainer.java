@@ -30,6 +30,8 @@ import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import org.joml.Vector3f;
 
+// Composition root — the only place that wires concrete types together.
+// Nothing outside this class should call `new` on platform or renderer objects.
 public class GameContainer {
     public void run() throws IOException {
         // 1. Config - pure data, no platform deps.
@@ -82,6 +84,8 @@ public class GameContainer {
         window.shutdown();
     }
 
+    // Kept for reference while the chunk renderer is being built out — shows
+    // how a single-block mesh is laid out before face culling is added.
     @SuppressWarnings("unused")
     private Renderer getCubeRenderer(TextureAtlas atlas, BlockDef def) {
         // Each face is 4 unique vertices (position + uv + tint) so UVs wrap cleanly per face.

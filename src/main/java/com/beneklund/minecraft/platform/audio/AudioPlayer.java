@@ -74,6 +74,7 @@ public class AudioPlayer {
         alcCloseDevice(this.device);
     }
 
+    // Called before each play() to avoid leaking AL objects if play() is called multiple times.
     private void clean() {
         if (this.source != 0) {
             alSourceStop(this.source);

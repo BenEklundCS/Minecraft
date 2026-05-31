@@ -7,6 +7,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class World {
     private final InputHandler inputHandler;
+    // ConcurrentHashMap because chunk load/unload happens on worker threads while the
+    // render thread reads this map every frame.
     private final ConcurrentHashMap<ChunkPos, Chunk> chunks;
 
     public World(ConcurrentHashMap<ChunkPos, Chunk> chunks, InputHandler inputHandler) {

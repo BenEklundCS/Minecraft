@@ -32,6 +32,8 @@ public class JsonResourcePack implements ResourcePack {
         this.license = root.get("license").getAsString();
         this.tileSize = root.get("tileSize").getAsInt();
 
+        // Tile paths in the JSON are relative to the pack file itself, so prefix with the
+        // pack's directory so ImageLoader gets a full classpath path.
         String baseDir = classpathJson.substring(0, classpathJson.lastIndexOf('/') + 1);
         for (var entry : root.getAsJsonObject("tiles").entrySet()) {
             tilePaths.put(entry.getKey(), baseDir + entry.getValue().getAsString());
@@ -60,6 +62,7 @@ public class JsonResourcePack implements ResourcePack {
 
     @Override
     public Map<String, ImageData> loadTiles() {
+        // LinkedHashMap preserves insertion order, which keeps atlas stitching deterministic.
         Map<String, ImageData> data = new LinkedHashMap<>();
         for (var entry : this.tilePaths.entrySet()) {
             data.put(entry.getKey(), this.loader.load(entry.getValue()));

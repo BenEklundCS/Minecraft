@@ -33,7 +33,9 @@ public class InputMapper {
     private final InputEventQueue queue;
     private final Map<Integer, InputAction> bindings;
     private final Set<Integer> heldKeys = new HashSet<>();
+    // Only WASD generate continuous MoveActions each frame. All other keys fire once on release.
     private final Set<Integer> holdableKeys = Set.of(GLFW_KEY_W, GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D);
+    // NaN on startup so the first mouse event doesn't produce a huge delta from (0,0).
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
 
@@ -61,6 +63,8 @@ public class InputMapper {
             switch (rawInputEvent) {
                 case RawInputEvent.KeyEvent e -> {
                     if (e.action() == GLFW_RELEASE) {
+                        // Fire the bound action on key-up, not key-down, to avoid double-firing
+                        // with GLFW's built-in key-repeat events (GLFW_REPEAT is ignored here).
                         InputAction action = this.bindings.get(e.key());
                         if (action != null) actions.add(action);
                         this.heldKeys.remove(e.key());

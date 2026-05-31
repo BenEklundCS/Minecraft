@@ -5,6 +5,9 @@ import java.io.IOException;
 import java.util.Optional;
 import java.util.Properties;
 
+// Optional developer overrides loaded from local.properties in the working directory.
+// The file is intentionally not on the classpath — it's a per-machine dev tool, not a
+// shipped config. Missing file is normal; all getters just return Optional.empty().
 public class LocalConfig {
     private final Properties props = new Properties();
 
@@ -16,6 +19,7 @@ public class LocalConfig {
         }
     }
 
+    // e.g. "music/c418/disc_cat.ogg" — plays on startup if set.
     public Optional<String> startupDisc() {
         return Optional.ofNullable(this.props.getProperty("startup.disc"));
     }

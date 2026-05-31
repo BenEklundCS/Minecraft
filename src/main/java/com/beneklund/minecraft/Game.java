@@ -10,8 +10,12 @@ import com.beneklund.minecraft.world.World;
 import java.util.List;
 import org.joml.Matrix4f;
 
+// Per-frame update/render loop. Not a record because the loop mutates
+// delta/camera state; a record's immutability would be misleading here.
 public class Game {
 
+    // Scaling raw pixel delta to degrees. Lives here, not in Camera, because
+    // it's a player preference — Camera shouldn't know what device drove it.
     private static final float MOUSE_SENSITIVITY = 0.15f;
 
     private final Window window;
@@ -45,6 +49,8 @@ public class Game {
             }
 
             window.pollEvents();
+            // drain() clears the queue — actions are consumed once per frame so
+            // nothing is processed twice if the frame rate fluctuates.
             List<InputAction> actions = mapper.drain();
 
             if (actions.contains(InputAction.Simple.EXIT)) {
@@ -55,6 +61,8 @@ public class Game {
 
             for (var action : actions) {
                 switch (action) {
+                    // MoveAction carries (dx=strafe, dz=forward); moveRelative expects
+                    // (forward, strafe, dt) — so the arguments are intentionally swapped.
                     case InputAction.MoveAction(float dx, float dz) ->
                         camera.moveRelative(dz, dx, (float) delta.getDelta());
                     case InputAction.LookAction(float dx, float dy) ->

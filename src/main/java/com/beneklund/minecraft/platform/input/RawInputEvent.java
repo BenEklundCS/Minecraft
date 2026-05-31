@@ -5,6 +5,8 @@ import org.lwjgl.glfw.GLFWKeyCallbackI;
 import org.lwjgl.glfw.GLFWMouseButtonCallbackI;
 import org.lwjgl.glfw.GLFWScrollCallbackI;
 
+// GLFW callback data captured verbatim and queued for the game thread to process.
+// The callback static factories are here so the wiring stays self-contained per event type.
 public sealed interface RawInputEvent {
     record KeyEvent(int key, int scancode, int action, int mods) implements RawInputEvent {
         public static GLFWKeyCallbackI callback(InputEventQueue queue) {

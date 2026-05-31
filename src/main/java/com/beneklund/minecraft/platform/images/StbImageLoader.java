@@ -15,7 +15,10 @@ import java.nio.IntBuffer;
 import java.util.function.Consumer;
 import org.lwjgl.system.MemoryStack;
 
+// Loads PNGs from the classpath via STB. Flips vertically on load because OpenGL's texture
+// origin is bottom-left, but image files are stored top-to-bottom.
 public class StbImageLoader implements ImageLoader {
+    // Shared close handler — all ImageData instances point to this rather than allocating a lambda each time.
     private static final Consumer<ImageData> ON_CLOSE = data -> stbi_image_free(data.pixels());
 
     @Override

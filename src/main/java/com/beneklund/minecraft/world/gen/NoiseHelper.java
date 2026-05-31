@@ -2,7 +2,24 @@ package com.beneklund.minecraft.world.gen;
 
 import com.beneklund.minecraft.util.OpenSimplex2;
 
+// Fractal (octave) noise on top of OpenSimplex2.
+//
+// One noise sample gives a smooth blobby field. "Octaves" layer multiple samples
+// at progressively finer frequencies to add detail: coarse shapes from the first
+// octave, medium hills from the second, rocky bumps from the third, etc.
+// Each finer octave contributes less (amplitude shrinks by persistence each pass).
+// Dividing by maxAmplitude at the end normalises the result to [-1, 1] regardless
+// of how many octaves are used.
+//
+// Typical call sites in WorldGenerator:
+//   scale=0.002 → continental (changes slowly over thousands of blocks)
+//   scale=0.008 → erosion/hilliness
+//   scale=0.04  → fine surface detail or cave carving
 public class NoiseHelper {
+
+    // 2D fractal noise — use for surface height maps.
+    // frequency doubles each octave so each pass samples 2× finer detail.
+    // persistence=0.5 means each octave contributes half as much as the previous.
     public double noise2(long seed, double x, double z, int octaves, double persistence, double scale) {
         double total = 0;
         double amplitude = 1.0;
@@ -19,6 +36,10 @@ public class NoiseHelper {
         return total / maxAmplitude;
     }
 
+    // 3D fractal noise — use for volumetric features like caves.
+    // noise3_ImproveXZ is an OpenSimplex2 variant optimised for terrain: it orients
+    // the noise lattice so the XZ plane has higher isotropy than a naive 3D grid,
+    // avoiding the vertical-stripe artefacts you'd otherwise get in cave systems.
     public double noise3(long seed, double x, double y, double z, int octaves, double persistence, double scale) {
         double total = 0;
         double amplitude = 1.0;

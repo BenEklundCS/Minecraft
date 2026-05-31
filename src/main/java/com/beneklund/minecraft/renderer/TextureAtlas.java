@@ -73,6 +73,9 @@ public class TextureAtlas {
     // uMax = ((col + 1) * tileSize) / (float) atlasW
     // vMin/vMax same pattern with row and atlasH.
     // Return float[]{uMin, vMin, uMax, vMax} - renderer unpacks the 4 corners per-vertex.
+    // Note on V orientation: vMin (small value) maps to the TOP of the image file because STB
+    // loads rows top-to-bottom and OpenGL V=0 is the bottom of the texture. ChunkMesher's
+    // FACE_UV_FRACS table assigns vMin to the top vertex of each side face to exploit this.
     private float[] computeUVs(int col, int row, int tileSize, int atlasW, int atlasH) {
         // Inset by half a texel on each edge so GL_NEAREST never rounds across a tile boundary
         // and samples a pixel from an adjacent tile in the atlas.

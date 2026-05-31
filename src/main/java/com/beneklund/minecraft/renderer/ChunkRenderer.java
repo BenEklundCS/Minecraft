@@ -23,7 +23,7 @@ public class ChunkRenderer {
 
     public void render(Matrix4f view, Matrix4f projection) {
         shader.bind();
-        shader.setUniformMat4("uModel", new Matrix4f().identity());
+        shader.setUniformMat4("uModel", new Matrix4f().identity()); // chunk verts are already in world space
         shader.setUniformMat4("uView", view);
         shader.setUniformMat4("uProjection", projection);
         glActiveTexture(GL_TEXTURE0);

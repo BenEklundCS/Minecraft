@@ -9,6 +9,8 @@ import org.joml.Matrix4f;
 public class ShaderProgram {
     private final GlShader shader;
 
+    // Paths must start with '/' to be resolved from the classpath root.
+    // Without the leading slash, getResourceAsStream() looks relative to this class's package.
     public ShaderProgram(String vertexShaderPath, String fragmentShaderPath) {
         try {
             String vertexShaderSource;

@@ -9,6 +9,8 @@ import com.beneklund.minecraft.platform.graphics.GlVertexArray;
 import com.beneklund.minecraft.platform.graphics.GlVertexArrayBuffer;
 import org.joml.Matrix4f;
 
+// Earlier triangle/cube renderer kept for reference. Uses an 8-float vertex format
+// (pos+uv+tint, stride 32), unlike GpuMesh which uses the 10-float chunk format (stride 40).
 public class Renderer {
     private final ShaderProgram shader;
     private final GlVertexArray vao;

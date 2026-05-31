@@ -46,15 +46,17 @@ public class LocalWorldAuthority implements IWorldAuthority {
 
     @Override
     public List<Entity> getEntities(AABB aabb) {
-        return List.of();
+        return List.of(); // stub — no entity tracking yet
     }
 
     private Chunk getChunk(int x, int z) {
+        // floorDiv, not /, so negative world coords map to the right chunk (e.g. x=-1 → chunk -1, not 0).
         ChunkPos pos = new ChunkPos(Math.floorDiv(x, 16), Math.floorDiv(z, 16));
         return this.world.getChunk(pos);
     }
 
     private ChunkCoordinates getChunkCoordinates(int worldX, int worldZ) {
+        // floorMod gives a non-negative remainder, matching floorDiv above.
         int chunkX = Math.floorMod(worldX, 16);
         int chunkZ = Math.floorMod(worldZ, 16);
         return new ChunkCoordinates(chunkX, chunkZ);

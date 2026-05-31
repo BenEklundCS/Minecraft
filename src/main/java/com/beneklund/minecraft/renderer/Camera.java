@@ -88,7 +88,7 @@ public class Camera {
      * view flips.
      */
     public void look(float dxDegrees, float dyDegrees) {
-        this.yaw -= dxDegrees;
+        this.yaw -= dxDegrees; // subtract so mouse-right turns right (yaw grows clockwise toward -Z)
         this.pitch -= dyDegrees;
         this.pitch = Math.clamp(this.pitch, -89.0f, 89.0f);
     }

@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+// Bridge between the GLFW callback thread (offers) and the game-update thread (drains).
+// ConcurrentLinkedQueue is lock-free, so the callback never blocks the main thread.
 public class InputEventQueue {
     private final ConcurrentLinkedQueue<RawInputEvent> queue = new ConcurrentLinkedQueue<>();
 
