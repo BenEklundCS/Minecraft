@@ -2,7 +2,7 @@ package com.beneklund.minecraft.renderer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.beneklund.minecraft.platform.window.WindowConfig;
+import com.beneklund.minecraft.container.WindowConfig;
 import com.beneklund.minecraft.util.Color;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.BeforeEach;

@@ -11,6 +11,11 @@ public sealed interface InputAction {
 
     record ScrollAction(float delta) implements InputAction {}
 
+    // slot is 0-indexed: slot 0 = hotbar key '1', slot 8 = hotbar key '9'.
+    sealed interface HotbarAction extends InputAction {
+        record Select(int slot) implements HotbarAction {}
+    }
+
     enum Simple implements InputAction {
         JUMP,
         BREAK_BLOCK,
@@ -21,15 +26,6 @@ public sealed interface InputAction {
         DEBUG_OVERLAY,
         INVENTORY,
         EXIT,
-        NONE,
-        SLOT_1,
-        SLOT_2,
-        SLOT_3,
-        SLOT_4,
-        SLOT_5,
-        SLOT_6,
-        SLOT_7,
-        SLOT_8,
-        SLOT_9
+        NONE
     }
 }

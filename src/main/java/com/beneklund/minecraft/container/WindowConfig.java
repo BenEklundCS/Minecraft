@@ -1,4 +1,4 @@
-package com.beneklund.minecraft.platform.window;
+package com.beneklund.minecraft.container;
 
 import com.beneklund.minecraft.util.Color;
 

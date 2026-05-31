@@ -15,8 +15,8 @@ import java.nio.IntBuffer;
 import java.util.function.Consumer;
 import org.lwjgl.system.MemoryStack;
 
-// Loads PNGs from the classpath via STB. Flips vertically on load because OpenGL's texture
-// origin is bottom-left, but image files are stored top-to-bottom.
+// Loads PNGs from the classpath via STB. Flips vertically on load so that V=0 is the
+// bottom of the image and V=1 is the top — standard OpenGL UV convention throughout.
 public class StbImageLoader implements ImageLoader {
     // Shared close handler — all ImageData instances point to this rather than allocating a lambda each time.
     private static final Consumer<ImageData> ON_CLOSE = data -> stbi_image_free(data.pixels());
@@ -28,6 +28,8 @@ public class StbImageLoader implements ImageLoader {
             IntBuffer h = stack.mallocInt(1);
             IntBuffer c = stack.mallocInt(1);
 
+            // Flip so OpenGL's V=0 (bottom of texture) matches the bottom of the image file.
+            // Without this, V=0 would map to the top row of the PNG, inverting all textures.
             stbi_set_flip_vertically_on_load(true);
             InputStream stream = getClass().getResourceAsStream(classpathPng);
             if (stream == null) {

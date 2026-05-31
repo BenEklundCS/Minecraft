@@ -7,9 +7,9 @@ import com.beneklund.minecraft.renderer.Camera;
 import java.util.List;
 
 // Placeholder game-logic handler. Most Simple actions are stubs right now - they just log.
+// Move and look are handled in Game (frame-rate-sensitive); scroll lives here because
+// FOV adjustment is a camera concern, not a game-loop concern.
 public class InputHandler {
-    // Degrees-per-pixel passed to Camera.look(). Tune this for feel.
-    private static final float SENSITIVITY = 0.1f;
 
     private final Window window;
     private final Camera camera;
@@ -30,18 +30,10 @@ public class InputHandler {
                 case InputAction.Simple.PAUSE -> LOGGER.debug("PAUSE");
                 case InputAction.Simple.DEBUG_OVERLAY -> LOGGER.debug("DEBUG_OVERLAY");
                 case InputAction.Simple.INVENTORY -> LOGGER.debug("INVENTORY");
-                case InputAction.Simple.SLOT_1 -> LOGGER.debug("SLOT_1");
-                case InputAction.Simple.SLOT_2 -> LOGGER.debug("SLOT_2");
-                case InputAction.Simple.SLOT_3 -> LOGGER.debug("SLOT_3");
-                case InputAction.Simple.SLOT_4 -> LOGGER.debug("SLOT_4");
-                case InputAction.Simple.SLOT_5 -> LOGGER.debug("SLOT_5");
-                case InputAction.Simple.SLOT_6 -> LOGGER.debug("SLOT_6");
-                case InputAction.Simple.SLOT_7 -> LOGGER.debug("SLOT_7");
-                case InputAction.Simple.SLOT_8 -> LOGGER.debug("SLOT_8");
-                case InputAction.Simple.SLOT_9 -> LOGGER.debug("SLOT_9");
+                case InputAction.HotbarAction.Select h -> LOGGER.debug("SLOT_{}", h.slot() + 1);
                 case InputAction.Simple.EXIT -> this.window.close();
                 case InputAction.MoveAction m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
-                case InputAction.LookAction l -> this.camera.look(l.dx() * SENSITIVITY, l.dy() * SENSITIVITY);
+                case InputAction.LookAction l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
                 case InputAction.ScrollAction s -> {
                     LOGGER.debug("SCROLL delta={}", s.delta());
                     handleScroll(s);

@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.container;
 
 import com.beneklund.minecraft.Game;
+import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.input.InputHandler;
@@ -12,7 +13,6 @@ import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.resources.JsonResourcePack;
 import com.beneklund.minecraft.platform.window.Window;
-import com.beneklund.minecraft.platform.window.WindowConfig;
 import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.ChunkMesher;
@@ -25,8 +25,11 @@ import com.beneklund.minecraft.util.Direction;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.World;
+import com.beneklund.minecraft.world.WorldConfig;
+import com.beneklund.minecraft.world.gen.GenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import org.joml.Vector3f;
 
@@ -43,10 +46,11 @@ public class GameContainer {
         InputMapper mapper = new InputMapper(queue);
 
         // 3. Pre-init platform objects - constructed but not yet active.
+        CameraConfig cameraConfig = new CameraConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 70.0f);
+        PlayerConfig playerConfig = new PlayerConfig(5.0f);
         Window window = new Window(config, queue);
-        // Start above terrain, slightly in front of the chunk so it fills the view.
-        Camera camera = new Camera(config, new Vector3f(8.0f, 75.0f, -5.0f), 70.0f);
-        camera.look(0, 20); // pitch down so terrain is immediately visible
+        Camera camera = new Camera(config, cameraConfig.startPosition(), cameraConfig.fov(), playerConfig);
+        camera.look(0, cameraConfig.startPitch());
         InputHandler handler = new InputHandler(window, camera);
         DeltaTracker delta = new DeltaTracker(window::getTime);
         window.addResizeListener(camera::setWindowSize);
@@ -61,12 +65,7 @@ public class GameContainer {
         BlockRegistry registry = BlockRegistry.createDefault();
 
         // Generate one chunk at the world origin and upload its mesh to the GPU.
-        WorldGenerator worldGen = new WorldGenerator(registry);
-        ChunkMesher mesher = new ChunkMesher(registry, atlas);
-        Chunk chunk = worldGen.generate(new ChunkPos(0, 0), 42L);
-        ChunkMeshData meshData = mesher.mesh(chunk);
-        GpuMesh gpuMesh = new GpuMesh(meshData.vertices(), meshData.indices());
-        ChunkRenderer chunkRenderer = new ChunkRenderer(gpuMesh, atlas);
+        ChunkRenderer chunkRenderer = getChunkRenderer(registry, atlas);
 
         // 6. Audio - OpenAL is lazy-initialized on first play(), but construct after GL
         //    so the window is confirmed healthy before we open the audio device.
@@ -82,6 +81,25 @@ public class GameContainer {
         chunkRenderer.delete();
         atlas.delete();
         window.shutdown();
+    }
+
+    private static ChunkRenderer getChunkRenderer(BlockRegistry registry, TextureAtlas atlas) {
+        List<GenerationSpec> generationSpecs = List.of(
+                new GenerationSpec.NoiseLayersSpec(
+                        new GenerationSpec.NoiseLayerSpec(4, 0.002, 0.5, 0.5, 0),
+                        new GenerationSpec.NoiseLayerSpec(3, 0.008, 0.5, 0.3, 100),
+                        new GenerationSpec.NoiseLayerSpec(2, 0.04, 0.5, 0.2, 200)),
+                new GenerationSpec.OreSpec(Block.COAL_ORE, 5, 50, 0.01f),
+                new GenerationSpec.OreSpec(Block.IRON_ORE, 5, 30, 0.005f),
+                new GenerationSpec.TreeSpec(0.05f, 8),
+                new GenerationSpec.CaveSpec(0.6, 2, 0.04, 0.5, 5));
+        WorldConfig worldConfig = new WorldConfig(42L, 4);
+        WorldGenerator worldGen = new WorldGenerator(registry, generationSpecs);
+        ChunkMesher mesher = new ChunkMesher(registry, atlas);
+        Chunk chunk = worldGen.generate(new ChunkPos(0, 0), worldConfig.seed());
+        ChunkMeshData meshData = mesher.mesh(chunk);
+        GpuMesh gpuMesh = new GpuMesh(meshData.vertices(), meshData.indices());
+        return new ChunkRenderer(gpuMesh, atlas);
     }
 
     // Kept for reference while the chunk renderer is being built out — shows

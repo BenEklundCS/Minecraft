@@ -28,9 +28,12 @@ public class Chunk {
         return state.get(); // volatile read - always sees the latest write
     }
 
-    public void markDirty() {
-        // TODO: route through a CAS transitionTo(DIRTY) once the worker pipeline exists,
-        // so ChunkState.canTransitionTo actually guards the hand-off instead of set() forcing it.
-        this.state.set(ChunkState.DIRTY);
+    public boolean tryMarkDirty() {
+        ChunkState current;
+        do {
+            current = state.get();
+            if (!current.canTransitionTo(ChunkState.DIRTY)) return false;
+        } while (!state.compareAndSet(current, ChunkState.DIRTY));
+        return true;
     }
 }

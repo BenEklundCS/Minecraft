@@ -1,6 +1,8 @@
 package com.beneklund.minecraft.block;
 
 public final class Block {
+    private Block() {}
+
     public static final byte AIR = 0;
     public static final byte STONE = 1;
     public static final byte DIRT = 2;

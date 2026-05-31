@@ -9,8 +9,10 @@ public class BlockRegistry {
         this.blockDefs = blockDefs;
     }
 
-    public BlockDef get(Byte b) {
-        return blockDefs.get(b);
+    // Falls back to AIR so an unregistered block ID renders as invisible rather than NPE-ing
+    // in a worker thread where the stack trace would be hard to trace back to the bad ID.
+    public BlockDef get(byte b) {
+        return blockDefs.getOrDefault(b, blockDefs.get(Block.AIR));
     }
 
     public static BlockRegistry createDefault() {

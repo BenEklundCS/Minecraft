@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.renderer;
 
-import com.beneklund.minecraft.platform.window.WindowConfig;
+import com.beneklund.minecraft.container.PlayerConfig;
+import com.beneklund.minecraft.container.WindowConfig;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
@@ -14,13 +15,20 @@ public class Camera {
     private float yaw;
     private float pitch;
     private float fov;
+    private final PlayerConfig playerConfig;
 
+    // Convenience constructor for tests — uses default movement speed.
     public Camera(WindowConfig config, Vector3f position, float fov) {
+        this(config, position, fov, new PlayerConfig(5.0f));
+    }
+
+    public Camera(WindowConfig config, Vector3f position, float fov, PlayerConfig playerConfig) {
         this.windowSize = new Vector2f(config.width(), config.height());
         this.position = position;
         // this.target = new Vector3f(0.0f, 0.0f, 0.0f);
         this.up = new Vector3f(0.0f, 1.0f, 0.0f);
         this.fov = fov;
+        this.playerConfig = playerConfig;
     }
 
     public Matrix4f getViewMatrix() {
@@ -97,7 +105,7 @@ public class Camera {
      * Free-fly: move along look (forward/back) and right (strafe), scaled by speed and dt.
      */
     public void moveRelative(float forward, float right, float dt) {
-        float speed = 5.0f; // blocks per second
+        float speed = playerConfig.movementSpeed();
         // fma(s, v) does position += s*v in place.
         this.position.fma(forward * speed * dt, getLookDirection());
         this.position.fma(right * speed * dt, getRight());

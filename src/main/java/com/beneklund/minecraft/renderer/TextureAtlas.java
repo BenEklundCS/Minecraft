@@ -73,9 +73,9 @@ public class TextureAtlas {
     // uMax = ((col + 1) * tileSize) / (float) atlasW
     // vMin/vMax same pattern with row and atlasH.
     // Return float[]{uMin, vMin, uMax, vMax} - renderer unpacks the 4 corners per-vertex.
-    // Note on V orientation: vMin (small value) maps to the TOP of the image file because STB
-    // loads rows top-to-bottom and OpenGL V=0 is the bottom of the texture. ChunkMesher's
-    // FACE_UV_FRACS table assigns vMin to the top vertex of each side face to exploit this.
+    // V orientation: STB flips images on load, so vMin maps to the BOTTOM of the image and
+    // vMax to the TOP — standard OpenGL convention. ChunkMesher's FACE_UV_FRACS assigns
+    // vMin to bottom vertices and vMax to top vertices on side faces.
     private float[] computeUVs(int col, int row, int tileSize, int atlasW, int atlasH) {
         // Inset by half a texel on each edge so GL_NEAREST never rounds across a tile boundary
         // and samples a pixel from an adjacent tile in the atlas.
@@ -97,8 +97,12 @@ public class TextureAtlas {
         memFree(atlas);
     }
 
+    // A missing tile name is a data bug in BlockDef — fail fast so typos surface immediately
+    // rather than silently rendering wrong textures.
     public float[] getUVs(String tileName) {
-        return uvCache.get(tileName);
+        float[] uvs = uvCache.get(tileName);
+        if (uvs == null) throw new IllegalArgumentException("Unknown tile: " + tileName);
+        return uvs;
     }
 
     public float[] getFaceUVs(BlockDef def, Direction dir) {

@@ -48,16 +48,37 @@ class InputMapperTest {
                 new SimpleKeyCase(GLFW_KEY_SPACE, Simple.JUMP),
                 new SimpleKeyCase(GLFW_KEY_I, Simple.INVENTORY),
                 new SimpleKeyCase(GLFW_KEY_F3, Simple.DEBUG_OVERLAY),
-                new SimpleKeyCase(GLFW_KEY_P, Simple.PAUSE),
-                new SimpleKeyCase(GLFW_KEY_1, Simple.SLOT_1),
-                new SimpleKeyCase(GLFW_KEY_2, Simple.SLOT_2),
-                new SimpleKeyCase(GLFW_KEY_3, Simple.SLOT_3),
-                new SimpleKeyCase(GLFW_KEY_4, Simple.SLOT_4),
-                new SimpleKeyCase(GLFW_KEY_5, Simple.SLOT_5),
-                new SimpleKeyCase(GLFW_KEY_6, Simple.SLOT_6),
-                new SimpleKeyCase(GLFW_KEY_7, Simple.SLOT_7),
-                new SimpleKeyCase(GLFW_KEY_8, Simple.SLOT_8),
-                new SimpleKeyCase(GLFW_KEY_9, Simple.SLOT_9));
+                new SimpleKeyCase(GLFW_KEY_P, Simple.PAUSE));
+    }
+
+    // --- Hotbar select actions ---
+
+    record HotbarCase(int key, int expectedSlot) {}
+
+    static List<HotbarCase> hotbarCases() {
+        return List.of(
+                new HotbarCase(GLFW_KEY_1, 0),
+                new HotbarCase(GLFW_KEY_2, 1),
+                new HotbarCase(GLFW_KEY_3, 2),
+                new HotbarCase(GLFW_KEY_4, 3),
+                new HotbarCase(GLFW_KEY_5, 4),
+                new HotbarCase(GLFW_KEY_6, 5),
+                new HotbarCase(GLFW_KEY_7, 6),
+                new HotbarCase(GLFW_KEY_8, 7),
+                new HotbarCase(GLFW_KEY_9, 8));
+    }
+
+    @ParameterizedTest
+    @MethodSource("hotbarCases")
+    void keyRelease_returnsHotbarSelect(HotbarCase tc) {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
+        queue.offer(new RawInputEvent.KeyEvent(tc.key(), 0, GLFW_RELEASE, 0));
+
+        List<InputAction> actions = mapper.drain();
+
+        assertEquals(1, actions.size());
+        assertEquals(new InputAction.HotbarAction.Select(tc.expectedSlot()), actions.getFirst());
     }
 
     @ParameterizedTest

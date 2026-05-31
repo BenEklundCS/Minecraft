@@ -4,6 +4,8 @@ import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 // Pure factory: same (ChunkPos, seed) always produces the same Chunk.
@@ -24,11 +26,45 @@ public class WorldGenerator implements IWorldGenerator {
     private final BlockRegistry registry;
     private final NoiseHelper noiseHelper;
     private final TreePlacer treePlacer;
+    private final List<GenerationSpec.OreSpec> oreSpecs;
+    private final GenerationSpec.TreeSpec treeSpec;
+    private final GenerationSpec.CaveSpec caveSpec;
+    private final GenerationSpec.NoiseLayersSpec noiseLayers;
 
+    // Convenience constructor for tests — uses vanilla-approximate defaults.
     public WorldGenerator(BlockRegistry registry) {
+        this(
+                registry,
+                List.of(
+                        new GenerationSpec.NoiseLayersSpec(
+                                new GenerationSpec.NoiseLayerSpec(4, 0.002, 0.5, 0.5, 0),
+                                new GenerationSpec.NoiseLayerSpec(3, 0.008, 0.5, 0.3, 100),
+                                new GenerationSpec.NoiseLayerSpec(2, 0.04, 0.5, 0.2, 200)),
+                        new GenerationSpec.OreSpec(Block.COAL_ORE, 5, 50, 0.01f),
+                        new GenerationSpec.OreSpec(Block.IRON_ORE, 5, 30, 0.005f),
+                        new GenerationSpec.TreeSpec(0.05f, 8),
+                        new GenerationSpec.CaveSpec(0.6, 2, 0.04, 0.5, 5)));
+    }
+
+    public WorldGenerator(BlockRegistry registry, List<GenerationSpec> specs) {
         this.registry = registry;
         this.noiseHelper = new NoiseHelper();
         this.treePlacer = new TreePlacer();
+
+        List<GenerationSpec.OreSpec> ores = new ArrayList<>();
+        GenerationSpec.NoiseLayersSpec layers = null;
+        GenerationSpec.TreeSpec tree = null;
+        GenerationSpec.CaveSpec cave = null;
+        for (GenerationSpec spec : specs) {
+            if (spec instanceof GenerationSpec.OreSpec ore) ores.add(ore);
+            else if (spec instanceof GenerationSpec.NoiseLayersSpec n) layers = n;
+            else if (spec instanceof GenerationSpec.TreeSpec t) tree = t;
+            else if (spec instanceof GenerationSpec.CaveSpec c) cave = c;
+        }
+        this.oreSpecs = ores;
+        this.noiseLayers = layers;
+        this.treeSpec = tree;
+        this.caveSpec = cave;
     }
 
     @Override
@@ -54,25 +90,11 @@ public class WorldGenerator implements IWorldGenerator {
         return chunk;
     }
 
-    // Three noise layers blend to form the raw [-1,1] height value, then a biome
-    // stretches and shifts it into a final Y coordinate.
-    //
-    // Layer weights and roles:
-    //   continental  scale=0.002, 4oct, 50% weight — slow large-scale shapes (continent vs ocean basin)
-    //   erosion      scale=0.008, 3oct, 30% weight — medium variation, smoothed ridges
-    //   detail       scale=0.04,  2oct, 20% weight — fine surface bumps
-    //
-    // Each layer uses a different seed offset (+0, +100, +200) so the three noise fields
-    // are statistically independent — changing one layer's parameters doesn't shift the others.
-    //
-    // Biome is picked from a fourth sample at scale=0.0005 (seed+300 keeps it independent),
-    // which changes so slowly that biome transitions are hundreds of blocks wide.
-    // The biome maps the -1..1 noise range onto its own baseHeight ± amplitude band.
+    // Biome noise is separate from the terrain layers — it drives biome selection, not blending.
     private int computeSurfaceY(long seed, int worldX, int worldZ) {
-        double continental = noiseHelper.noise2(seed, worldX, worldZ, 4, 0.5, 0.002);
-        double erosion = noiseHelper.noise2(seed + 100, worldX, worldZ, 3, 0.5, 0.008);
-        double detail = noiseHelper.noise2(seed + 200, worldX, worldZ, 2, 0.5, 0.04);
-        double raw = continental * 0.5 + erosion * 0.3 + detail * 0.2;
+        double raw = sampleLayer(seed, worldX, worldZ, noiseLayers.continental())
+                + sampleLayer(seed, worldX, worldZ, noiseLayers.erosion())
+                + sampleLayer(seed, worldX, worldZ, noiseLayers.detail());
 
         double biomeNoise = noiseHelper.noise2(seed + 300, worldX, worldZ, 1, 0.5, 0.0005);
         Biome[] biomes = Biome.values();
@@ -80,6 +102,11 @@ public class WorldGenerator implements IWorldGenerator {
         Biome biome = biomes[biomeIndex];
 
         return Math.clamp((int) (biome.getBaseHeight() + raw * biome.getAmplitude()), 4, 250);
+    }
+
+    private double sampleLayer(long seed, int x, int z, GenerationSpec.NoiseLayerSpec layer) {
+        return noiseHelper.noise2(seed + layer.seedOffset(), x, z, layer.octaves(), layer.persistence(), layer.scale())
+                * layer.weight();
     }
 
     // Column stack from bottom to top:
@@ -114,15 +141,11 @@ public class WorldGenerator implements IWorldGenerator {
         long colSeed = seed ^ ((long) worldX * 341873128712L) ^ ((long) worldZ * 132897987541L);
         Random colRng = new Random(colSeed);
 
-        for (int y = 5; y <= 50; y++) {
-            if (chunk.getBlock(localX, y, localZ) == Block.STONE && colRng.nextFloat() < 0.01f) {
-                chunk.setBlock(localX, y, localZ, Block.COAL_ORE);
-            }
-        }
-
-        for (int y = 5; y <= 30; y++) {
-            if (chunk.getBlock(localX, y, localZ) == Block.STONE && colRng.nextFloat() < 0.005f) {
-                chunk.setBlock(localX, y, localZ, Block.IRON_ORE);
+        for (GenerationSpec.OreSpec ore : oreSpecs) {
+            for (int y = ore.minY(); y <= ore.maxY(); y++) {
+                if (chunk.getBlock(localX, y, localZ) == Block.STONE && colRng.nextFloat() < ore.chance()) {
+                    chunk.setBlock(localX, y, localZ, ore.blockId());
+                }
             }
         }
     }
@@ -137,31 +160,38 @@ public class WorldGenerator implements IWorldGenerator {
 
                 if (chunk.getBlock(localX, surfaceY, localZ) != Block.GRASS) continue;
                 if (surfaceY <= SEA_LEVEL) continue;
-                if (surfaceY + 8 >= Chunk.SIZE_Y) continue;
+                if (treeSpec == null || surfaceY + treeSpec.minHeadroom() >= Chunk.SIZE_Y) continue;
 
                 int worldX = pos.x() * Chunk.SIZE_XZ + localX;
                 int worldZ = pos.z() * Chunk.SIZE_XZ + localZ;
                 long colSeed = seed ^ ((long) worldX * 341873128712L) ^ ((long) worldZ * 132897987541L);
-                if (new Random(colSeed).nextFloat() >= 0.05f) continue;
+                if (new Random(colSeed).nextFloat() >= treeSpec.spawnChance()) continue;
 
                 treePlacer.placeTree(chunk, localX, surfaceY, localZ);
             }
         }
     }
 
-    // Threshold > 0.6 means only the top ~20% of noise values carve air — caves are
-    // intentionally sparse at this phase. Lower the threshold to get denser cave systems.
-    // y > 4 guard preserves bedrock; seed+400 keeps cave noise independent of terrain.
+    // seed+400 keeps cave noise independent of terrain layers (offsets 0–300).
+    // Lower caveSpec.threshold() to get denser cave systems; raise it for sparse/rare caves.
     private void carveCaves(Chunk chunk, long seed, ChunkPos pos) {
+        if (caveSpec == null) return;
         for (int localX = 0; localX < Chunk.SIZE_XZ; localX++) {
             for (int localZ = 0; localZ < Chunk.SIZE_XZ; localZ++) {
                 int worldX = pos.x() * Chunk.SIZE_XZ + localX;
                 int worldZ = pos.z() * Chunk.SIZE_XZ + localZ;
 
-                for (int y = 5; y < Chunk.SIZE_Y; y++) {
+                for (int y = caveSpec.minY(); y < Chunk.SIZE_Y; y++) {
                     if (chunk.getBlock(localX, y, localZ) == Block.BEDROCK) continue;
-                    double caveNoise = noiseHelper.noise3(seed + 400, worldX, y, worldZ, 2, 0.5, 0.04);
-                    if (caveNoise > 0.6) {
+                    double caveNoise = noiseHelper.noise3(
+                            seed + 400,
+                            worldX,
+                            y,
+                            worldZ,
+                            caveSpec.octaves(),
+                            caveSpec.persistence(),
+                            caveSpec.scale());
+                    if (caveNoise > caveSpec.threshold()) {
                         chunk.setBlock(localX, y, localZ, Block.AIR);
                     }
                 }

@@ -3,8 +3,10 @@ package com.beneklund.minecraft.renderer;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
+import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.Direction;
 import com.beneklund.minecraft.world.Chunk;
+import com.beneklund.minecraft.world.gen.Biome;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,31 +55,23 @@ public class ChunkMesher {
     // Per-face UV fractions: [u0,v0, u1,v1, u2,v2, u3,v3] where 0=uMin/vMin, 1=uMax/vMax.
     // Index order matches FACE_VERTICES — vertex 0 uses fracs[0,1], vertex 1 uses [2,3], etc.
     //
-    // The V-axis is flipped between STB and OpenGL:
-    //   STB loads images top-to-bottom  → row 0 = top of the image file
-    //   OpenGL UV V=0                   → bottom of the texture on screen
-    // So vMin (small number) maps to the TOP of the image, vMax to the BOTTOM.
-    //
-    // For grass_side the green strip is at the top of the image. To render it at the top
-    // of the block face, assign vMin to top vertices (by+1) and vMax to bottom vertices (by+0).
-    // A naive uniform UV assignment maps V uniformly across both y values, which rotates the
-    // texture 90° on side faces because U ends up tracking the vertical Y axis instead of
-    // the horizontal block-face axis.
+    // STB flips images on load so V=0 = bottom of image, V=1 = top — standard OpenGL convention.
+    // Side faces simply map bottom vertices to vMin and top vertices to vMax.
+    // Without per-face fracs (uniform UV) the U axis would track the vertical Y instead of
+    // the horizontal face axis, rotating side textures 90°.
     private static final float[][] FACE_UV_FRACS = {
         {0, 0, 0, 1, 1, 1, 1, 0}, // UP:    U→+X, V→+Z
-        {0, 0, 0, 1, 1, 1, 1, 0}, // DOWN:  symmetric, orientation irrelevant
-        {1, 1, 0, 1, 0, 0, 1, 0}, // NORTH: U→-X, bottom=vMax, top=vMin
-        {0, 1, 1, 1, 1, 0, 0, 0}, // SOUTH: U→+X, bottom=vMax, top=vMin
-        {0, 1, 1, 1, 1, 0, 0, 0}, // EAST:  bottom=vMax, top=vMin
-        {0, 1, 1, 1, 1, 0, 0, 0}, // WEST:  bottom=vMax, top=vMin
+        {0, 0, 0, 1, 1, 1, 1, 0}, // DOWN:  symmetric
+        {1, 0, 0, 0, 0, 1, 1, 1}, // NORTH: U→-X, bottom=vMin, top=vMax
+        {0, 0, 1, 0, 1, 1, 0, 1}, // SOUTH: U→+X, bottom=vMin, top=vMax
+        {0, 0, 1, 0, 1, 1, 0, 1}, // EAST:  bottom=vMin, top=vMax
+        {0, 0, 1, 0, 1, 1, 0, 1}, // WEST:  bottom=vMin, top=vMax
     };
 
-    // Tints for blocks whose textures are stored as greyscale in the pack.
-    // Faithful (like vanilla) stores grass_top and leaves as greyscale — the game
-    // supplies the biome color. These are hardcoded plains-biome values for now.
-    private static final float[] WHITE = {1.00f, 1.00f, 1.00f};
-    private static final float[] GRASS_TINT = {0.57f, 0.74f, 0.35f};
-    private static final float[] FOLIAGE_TINT = {0.38f, 0.60f, 0.20f};
+    // Grass and foliage tints come from the biome. PLAINS is the default until chunks
+    // carry per-block biome data and the mesher can look up the correct biome per column.
+    private static final Color GRASS_TINT = Biome.PLAINS.grassColor();
+    private static final Color FOLIAGE_TINT = Biome.PLAINS.foliageColor();
 
     private final BlockRegistry registry;
     private final TextureAtlas atlas; // null-safe — tests pass null
@@ -106,7 +100,7 @@ public class ChunkMesher {
                         if (isCulled(chunk, x, y, z, dir)) continue;
 
                         float[] uvs = getUVs(def, dir);
-                        float[] tint = getTint(blockId, dir);
+                        Color tint = getTint(blockId, dir);
                         vertCount = emitQuad(verts, idxs, x, y, z, dir, uvs, tint, vertCount);
                     }
                 }
@@ -141,7 +135,7 @@ public class ChunkMesher {
             int bz,
             Direction dir,
             float[] uvs,
-            float[] tint,
+            Color tint,
             int base) {
         float[][] corners = FACE_VERTICES[dir.ordinal()];
         float faceId = faceIdFor(dir);
@@ -157,9 +151,9 @@ public class ChunkMesher {
             vertices.add(fracs[i * 2 + 1] == 0 ? vMin : vMax);
             vertices.add(1.0f); // ao — placeholder; always fully lit until Phase 20
             vertices.add(faceId);
-            vertices.add(tint[0]);
-            vertices.add(tint[1]);
-            vertices.add(tint[2]);
+            vertices.add(tint.red());
+            vertices.add(tint.green());
+            vertices.add(tint.blue());
         }
 
         // Two triangles sharing the diagonal: 0-1-2 and 2-3-0
@@ -183,16 +177,15 @@ public class ChunkMesher {
 
     // Grass top and all leaf blocks store greyscale textures in the faithful pack —
     // they need a biome color multiplied in. Everything else is white (no tint).
-    private static float[] getTint(byte blockId, Direction dir) {
+    private static Color getTint(byte blockId, Direction dir) {
         if (blockId == Block.OAK_LEAF) return FOLIAGE_TINT;
         if (blockId == Block.GRASS && dir == Direction.UP) return GRASS_TINT;
-        return WHITE;
+        return Color.WHITE;
     }
 
     private float[] getUVs(BlockDef def, Direction dir) {
-        if (atlas == null) return DEFAULT_UV;
-        float[] uvs = atlas.getFaceUVs(def, dir);
-        return uvs != null ? uvs : DEFAULT_UV;
+        if (atlas == null) return DEFAULT_UV; // null atlas = test mode, no GL context
+        return atlas.getFaceUVs(def, dir);
     }
 
     private static float[] toFloatArray(List<Float> list) {
