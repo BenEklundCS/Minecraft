@@ -7,6 +7,10 @@ import org.joml.Vector2f;
 import org.joml.Vector3f;
 
 public class Camera {
+    private static final float NEAR_PLANE = 0.1f;
+    private static final float FAR_PLANE = 1000.0f;
+    private static final float MAX_PITCH = 89.0f;
+
     private final Vector2f windowSize;
     private final Vector3f position;
     // private final Vector3f target;
@@ -38,7 +42,8 @@ public class Camera {
 
     public Matrix4f getProjectionMatrix() {
         return new Matrix4f()
-                .perspective((float) Math.toRadians(this.fov), this.windowSize.x / this.windowSize.y, 0.1f, 1000f);
+                .perspective(
+                        (float) Math.toRadians(this.fov), this.windowSize.x / this.windowSize.y, NEAR_PLANE, FAR_PLANE);
     }
 
     public float getFov() {
@@ -87,7 +92,7 @@ public class Camera {
     public void look(float dxDegrees, float dyDegrees) {
         this.yaw -= dxDegrees; // subtract so mouse-right turns right (yaw grows clockwise toward -Z)
         this.pitch -= dyDegrees;
-        this.pitch = Math.clamp(this.pitch, -89.0f, 89.0f);
+        this.pitch = Math.clamp(this.pitch, -MAX_PITCH, MAX_PITCH);
     }
 
     /*

@@ -4,24 +4,31 @@ import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.world.Chunk;
 
 public class TreePlacer {
+    private static final int TRUNK_HEIGHT = 5;
+    private static final int LOWER_CANOPY_START = TRUNK_HEIGHT - 1;
+    private static final int LOWER_CANOPY_END = TRUNK_HEIGHT;
+    private static final int UPPER_CANOPY_START = TRUNK_HEIGHT + 1;
+    private static final int UPPER_CANOPY_END = TRUNK_HEIGHT + 2;
+    private static final int LOWER_CANOPY_RADIUS = 2;
+    private static final int UPPER_CANOPY_RADIUS = 1;
 
     // Places a 5-block oak trunk topped with a two-tier leaf canopy.
     // Blocks outside chunk bounds are silently skipped — edge trees are truncated.
     public void placeTree(Chunk chunk, int localX, int surfaceY, int localZ) {
-        for (int y = surfaceY + 1; y <= surfaceY + 5; y++) {
+        for (int y = surfaceY + 1; y <= surfaceY + TRUNK_HEIGHT; y++) {
             if (inBounds(localX, y, localZ)) {
                 chunk.setBlock(localX, y, localZ, Block.OAK_LOG);
             }
         }
 
-        // lower canopy: full 5x5 ring around the top two trunk layers
-        for (int dy = 4; dy <= 5; dy++) {
-            placeLeavesRing(chunk, localX, surfaceY + dy, localZ, 2);
+        // lower canopy
+        for (int dy = LOWER_CANOPY_START; dy <= LOWER_CANOPY_END; dy++) {
+            placeLeavesRing(chunk, localX, surfaceY + dy, localZ, LOWER_CANOPY_RADIUS);
         }
 
         // upper canopy: tighter 3x3 ring above the trunk tip
-        for (int dy = 6; dy <= 7; dy++) {
-            placeLeavesRing(chunk, localX, surfaceY + dy, localZ, 1);
+        for (int dy = UPPER_CANOPY_START; dy <= UPPER_CANOPY_END; dy++) {
+            placeLeavesRing(chunk, localX, surfaceY + dy, localZ, UPPER_CANOPY_RADIUS);
         }
     }
 

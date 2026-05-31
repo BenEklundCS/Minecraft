@@ -22,6 +22,11 @@ import java.util.Random;
 public class WorldGenerator implements IWorldGenerator {
 
     private static final int SEA_LEVEL = 62;
+    private static final int MIN_SURFACE_Y = 4;
+    private static final int MAX_SURFACE_Y = 250;
+    private static final int DIRT_DEPTH = 2;
+    private static final long COL_SEED_PRIME_X = 341873128712L;
+    private static final long COL_SEED_PRIME_Z = 132897987541L;
 
     private final BlockRegistry registry;
     private final NoiseHelper noiseHelper;
@@ -30,20 +35,11 @@ public class WorldGenerator implements IWorldGenerator {
     private final GenerationSpec.TreeSpec treeSpec;
     private final GenerationSpec.CaveSpec caveSpec;
     private final GenerationSpec.NoiseLayersSpec noiseLayers;
+    private final GenerationSpec.BiomeSpec biomeSpec;
 
-    // Convenience constructor for tests — uses vanilla-approximate defaults.
+    // Convenience constructor for tests, uses vanilla-defaults.
     public WorldGenerator(BlockRegistry registry) {
-        this(
-                registry,
-                List.of(
-                        new GenerationSpec.NoiseLayersSpec(
-                                new GenerationSpec.NoiseLayerSpec(4, 0.002, 0.5, 0.5, 0),
-                                new GenerationSpec.NoiseLayerSpec(3, 0.008, 0.5, 0.3, 100),
-                                new GenerationSpec.NoiseLayerSpec(2, 0.04, 0.5, 0.2, 200)),
-                        new GenerationSpec.OreSpec(Block.COAL_ORE, 5, 50, 0.01f),
-                        new GenerationSpec.OreSpec(Block.IRON_ORE, 5, 30, 0.005f),
-                        new GenerationSpec.TreeSpec(0.05f, 8),
-                        new GenerationSpec.CaveSpec(0.6, 2, 0.04, 0.5, 5)));
+        this(registry, GenerationSpec.DEFAULT_WORLD_GENERATION);
     }
 
     public WorldGenerator(BlockRegistry registry, List<GenerationSpec> specs) {
@@ -55,16 +51,19 @@ public class WorldGenerator implements IWorldGenerator {
         GenerationSpec.NoiseLayersSpec layers = null;
         GenerationSpec.TreeSpec tree = null;
         GenerationSpec.CaveSpec cave = null;
+        GenerationSpec.BiomeSpec biome = null;
         for (GenerationSpec spec : specs) {
             if (spec instanceof GenerationSpec.OreSpec ore) ores.add(ore);
             else if (spec instanceof GenerationSpec.NoiseLayersSpec n) layers = n;
             else if (spec instanceof GenerationSpec.TreeSpec t) tree = t;
             else if (spec instanceof GenerationSpec.CaveSpec c) cave = c;
+            else if (spec instanceof GenerationSpec.BiomeSpec b) biome = b;
         }
         this.oreSpecs = ores;
         this.noiseLayers = layers;
         this.treeSpec = tree;
         this.caveSpec = cave;
+        this.biomeSpec = biome;
     }
 
     @Override
@@ -90,18 +89,20 @@ public class WorldGenerator implements IWorldGenerator {
         return chunk;
     }
 
-    // Biome noise is separate from the terrain layers — it drives biome selection, not blending.
     private int computeSurfaceY(long seed, int worldX, int worldZ) {
         double raw = sampleLayer(seed, worldX, worldZ, noiseLayers.continental())
                 + sampleLayer(seed, worldX, worldZ, noiseLayers.erosion())
                 + sampleLayer(seed, worldX, worldZ, noiseLayers.detail());
+        Biome biome = selectBiome(sampleSpec(seed, worldX, worldZ, biomeSpec));
+        return Math.clamp((int) (biome.getBaseHeight() + raw * biome.getAmplitude()), MIN_SURFACE_Y, MAX_SURFACE_Y);
+    }
 
-        double biomeNoise = noiseHelper.noise2(seed + 300, worldX, worldZ, 1, 0.5, 0.0005);
+    // Adjacent Biome ordinals are geographically adjacent in-world because biomeNoise
+    // changes slowly — so the linear mapping produces wide, gradual transitions.
+    private Biome selectBiome(double noise) {
         Biome[] biomes = Biome.values();
-        int biomeIndex = Math.clamp((int) ((biomeNoise + 1.0) / 2.0 * biomes.length), 0, biomes.length - 1);
-        Biome biome = biomes[biomeIndex];
-
-        return Math.clamp((int) (biome.getBaseHeight() + raw * biome.getAmplitude()), 4, 250);
+        int index = Math.clamp((int) (noiseHelper.normalize(noise) * biomes.length), 0, biomes.length - 1);
+        return biomes[index];
     }
 
     private double sampleLayer(long seed, int x, int z, GenerationSpec.NoiseLayerSpec layer) {
@@ -109,26 +110,28 @@ public class WorldGenerator implements IWorldGenerator {
                 * layer.weight();
     }
 
-    // Column stack from bottom to top:
-    //   y=0             BEDROCK  (never carve-able; carveCaves guards y > 4 anyway)
-    //   y=1..surfY-3    STONE    (ore placement targets this range)
-    //   y=surfY-2,-1    DIRT     (two-layer dirt cap, mimics vanilla)
-    //   y=surfY         GRASS or SAND (sand when surface is at or below sea level)
-    //   y=surfY+1..62   WATER    (only when column is submerged)
+    private double sampleSpec(long seed, int x, int z, GenerationSpec.BiomeSpec spec) {
+        return noiseHelper.noise2(seed + spec.seedOffset(), x, z, spec.octaves(), spec.persistence(), spec.scale());
+    }
+
     private void fillColumn(Chunk chunk, int localX, int localZ, int surfaceY) {
+        int stoneTop = surfaceY - DIRT_DEPTH - 1;
+        int dirtBottom = surfaceY - DIRT_DEPTH;
+        int dirtTop = surfaceY - 1;
+        int waterStart = surfaceY + 1;
+        byte surfaceBlock = surfaceY > SEA_LEVEL ? Block.GRASS : Block.SAND;
+
         chunk.setBlock(localX, 0, localZ, Block.BEDROCK);
 
-        for (int y = 1; y <= surfaceY - 3; y++) {
+        for (int y = 1; y <= stoneTop; y++) {
             chunk.setBlock(localX, y, localZ, Block.STONE);
         }
 
-        chunk.setBlock(localX, surfaceY - 2, localZ, Block.DIRT);
-        chunk.setBlock(localX, surfaceY - 1, localZ, Block.DIRT);
+        chunk.setBlock(localX, dirtBottom, localZ, Block.DIRT);
+        chunk.setBlock(localX, dirtTop, localZ, Block.DIRT);
+        chunk.setBlock(localX, surfaceY, localZ, surfaceBlock);
 
-        byte surface = surfaceY > SEA_LEVEL ? Block.GRASS : Block.SAND;
-        chunk.setBlock(localX, surfaceY, localZ, surface);
-
-        for (int y = surfaceY + 1; y <= SEA_LEVEL; y++) {
+        for (int y = waterStart; y <= SEA_LEVEL; y++) {
             chunk.setBlock(localX, y, localZ, Block.WATER);
         }
     }
@@ -138,7 +141,7 @@ public class WorldGenerator implements IWorldGenerator {
     // placement is uncorrelated between columns. Same formula is used in placeTrees so
     // the two passes share the same per-column identity without sharing a Random instance.
     private void placeOres(Chunk chunk, long seed, int worldX, int worldZ, int localX, int localZ) {
-        long colSeed = seed ^ ((long) worldX * 341873128712L) ^ ((long) worldZ * 132897987541L);
+        long colSeed = seed ^ ((long) worldX * COL_SEED_PRIME_X) ^ ((long) worldZ * COL_SEED_PRIME_Z);
         Random colRng = new Random(colSeed);
 
         for (GenerationSpec.OreSpec ore : oreSpecs) {
@@ -164,7 +167,7 @@ public class WorldGenerator implements IWorldGenerator {
 
                 int worldX = pos.x() * Chunk.SIZE_XZ + localX;
                 int worldZ = pos.z() * Chunk.SIZE_XZ + localZ;
-                long colSeed = seed ^ ((long) worldX * 341873128712L) ^ ((long) worldZ * 132897987541L);
+                long colSeed = seed ^ ((long) worldX * COL_SEED_PRIME_X) ^ ((long) worldZ * COL_SEED_PRIME_Z);
                 if (new Random(colSeed).nextFloat() >= treeSpec.spawnChance()) continue;
 
                 treePlacer.placeTree(chunk, localX, surfaceY, localZ);
@@ -172,7 +175,6 @@ public class WorldGenerator implements IWorldGenerator {
         }
     }
 
-    // seed+400 keeps cave noise independent of terrain layers (offsets 0–300).
     // Lower caveSpec.threshold() to get denser cave systems; raise it for sparse/rare caves.
     private void carveCaves(Chunk chunk, long seed, ChunkPos pos) {
         if (caveSpec == null) return;
@@ -184,7 +186,7 @@ public class WorldGenerator implements IWorldGenerator {
                 for (int y = caveSpec.minY(); y < Chunk.SIZE_Y; y++) {
                     if (chunk.getBlock(localX, y, localZ) == Block.BEDROCK) continue;
                     double caveNoise = noiseHelper.noise3(
-                            seed + 400,
+                            seed + caveSpec.seedOffset(),
                             worldX,
                             y,
                             worldZ,

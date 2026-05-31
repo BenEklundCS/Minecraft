@@ -44,6 +44,8 @@ public class ChunkMesher {
         {-1, 0, 0}, // WEST
     };
 
+    private static final int VERTICES_PER_QUAD = 4;
+
     // faceId values matched to the brightness bands in chunk.frag:
     //   < 0.5 → 1.0 (bright),  < 2.5 → 0.8 (side),  else → 0.6 (dark)
     private static final float FACE_ID_UP = 0.0f;
@@ -142,7 +144,7 @@ public class ChunkMesher {
         float uMin = uvs[0], vMin = uvs[1], uMax = uvs[2], vMax = uvs[3];
         float[] fracs = FACE_UV_FRACS[dir.ordinal()];
 
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < VERTICES_PER_QUAD; i++) {
             float[] c = corners[i];
             vertices.add(bx + c[0]);
             vertices.add(by + c[1]);
@@ -164,7 +166,7 @@ public class ChunkMesher {
         indices.add(base + 3);
         indices.add(base);
 
-        return base + 4;
+        return base + VERTICES_PER_QUAD;
     }
 
     private static float faceIdFor(Direction dir) {

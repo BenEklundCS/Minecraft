@@ -55,4 +55,10 @@ public class NoiseHelper {
 
         return total / maxAmplitude;
     }
+
+    // Shift the [-1, 1] output range to [0, 1]. The +1 moves the floor to 0,
+    // the /2 compresses the resulting [0, 2] back to unit width.
+    public double normalize(double noise) {
+        return (noise + 1.0) / 2.0;
+    }
 }
