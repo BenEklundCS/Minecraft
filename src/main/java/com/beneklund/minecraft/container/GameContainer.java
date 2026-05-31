@@ -1,12 +1,12 @@
 package com.beneklund.minecraft.container;
 
 import com.beneklund.minecraft.Game;
-import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbAudioLoader;
+import com.beneklund.minecraft.platform.graphics.GpuMesh;
 import com.beneklund.minecraft.platform.images.StbImageLoader;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
@@ -14,12 +14,18 @@ import com.beneklund.minecraft.platform.resources.JsonResourcePack;
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.platform.window.WindowConfig;
 import com.beneklund.minecraft.renderer.Camera;
+import com.beneklund.minecraft.renderer.ChunkMeshData;
+import com.beneklund.minecraft.renderer.ChunkMesher;
+import com.beneklund.minecraft.renderer.ChunkRenderer;
 import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.renderer.TextureAtlas;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.util.Direction;
+import com.beneklund.minecraft.world.Chunk;
+import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.World;
+import com.beneklund.minecraft.world.gen.WorldGenerator;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import org.joml.Vector3f;
@@ -36,7 +42,9 @@ public class GameContainer {
 
         // 3. Pre-init platform objects - constructed but not yet active.
         Window window = new Window(config, queue);
-        Camera camera = new Camera(config, new Vector3f(0.0f, 0.0f, -3.0f), 45.0f);
+        // Start above terrain, slightly in front of the chunk so it fills the view.
+        Camera camera = new Camera(config, new Vector3f(8.0f, 75.0f, -5.0f), 70.0f);
+        camera.look(0, 20); // pitch down so terrain is immediately visible
         InputHandler handler = new InputHandler(window, camera);
         DeltaTracker delta = new DeltaTracker(window::getTime);
         window.addResizeListener(camera::setWindowSize);
@@ -46,13 +54,17 @@ public class GameContainer {
         window.init();
 
         // 5. GL resources - shaders, VAOs, textures. Requires active GL context.
-        // Renderer triangleRenderer = getTriangleRenderer(); // oak-leaf textured triangle
-
         JsonResourcePack resourcePack = new JsonResourcePack("/packs/faithful/pack.json", new StbImageLoader());
         TextureAtlas atlas = new TextureAtlas(resourcePack);
         BlockRegistry registry = BlockRegistry.createDefault();
 
-        Renderer renderer = getCubeRenderer(atlas, registry.get(Block.GRASS));
+        // Generate one chunk at the world origin and upload its mesh to the GPU.
+        WorldGenerator worldGen = new WorldGenerator(registry);
+        ChunkMesher mesher = new ChunkMesher(registry, atlas);
+        Chunk chunk = worldGen.generate(new ChunkPos(0, 0), 42L);
+        ChunkMeshData meshData = mesher.mesh(chunk);
+        GpuMesh gpuMesh = new GpuMesh(meshData.vertices(), meshData.indices());
+        ChunkRenderer chunkRenderer = new ChunkRenderer(gpuMesh, atlas);
 
         // 6. Audio - OpenAL is lazy-initialized on first play(), but construct after GL
         //    so the window is confirmed healthy before we open the audio device.
@@ -61,15 +73,16 @@ public class GameContainer {
 
         // 7. Game logic - depends on input and the GL renderer being ready.
         World world = new World(new ConcurrentHashMap<>(), handler);
-        new Game(window, renderer, camera, world, delta, mapper).run();
+        new Game(window, chunkRenderer, camera, world, delta, mapper).run();
 
         // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).
         music.shutdown();
-        renderer.delete();
+        chunkRenderer.delete();
         atlas.delete();
         window.shutdown();
     }
 
+    @SuppressWarnings("unused")
     private Renderer getCubeRenderer(TextureAtlas atlas, BlockDef def) {
         // Each face is 4 unique vertices (position + uv + tint) so UVs wrap cleanly per face.
         // 24 vertices total: 4 per face * 6 faces. Each row is one vertex: x, y, z, u, v, r, g, b.

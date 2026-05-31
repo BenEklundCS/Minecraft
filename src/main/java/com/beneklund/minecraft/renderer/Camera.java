@@ -30,7 +30,7 @@ public class Camera {
 
     public Matrix4f getProjectionMatrix() {
         return new Matrix4f()
-                .perspective((float) Math.toRadians(this.fov), this.windowSize.x / this.windowSize.y, 0.01f, 100f);
+                .perspective((float) Math.toRadians(this.fov), this.windowSize.x / this.windowSize.y, 0.1f, 1000f);
     }
 
     public float getFov() {

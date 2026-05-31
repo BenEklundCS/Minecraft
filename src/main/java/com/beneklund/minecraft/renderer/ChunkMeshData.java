@@ -1,3 +1,3 @@
 package com.beneklund.minecraft.renderer;
 
-public class ChunkMeshData {}
+public record ChunkMeshData(float[] vertices, int[] indices, int vertexCount) {}
