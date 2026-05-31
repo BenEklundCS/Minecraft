@@ -40,8 +40,4 @@ public class Chunk {
         } while (!state.compareAndSet(current, next));
         return true;
     }
-
-    public boolean tryMarkDirty() {
-        return tryTransition(ChunkState.DIRTY);
-    }
 }
