@@ -21,6 +21,7 @@ import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.util.Direction;
 import com.beneklund.minecraft.world.World;
 import java.io.IOException;
+import java.util.concurrent.ConcurrentHashMap;
 import org.joml.Vector3f;
 
 public class GameContainer {
@@ -59,7 +60,7 @@ public class GameContainer {
         localConfig.startupDisc().ifPresent(music::play);
 
         // 7. Game logic - depends on input and the GL renderer being ready.
-        World world = new World(handler);
+        World world = new World(new ConcurrentHashMap<>(), handler);
         new Game(window, renderer, camera, world, delta, mapper).run();
 
         // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).
