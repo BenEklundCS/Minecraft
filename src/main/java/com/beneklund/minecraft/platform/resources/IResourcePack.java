@@ -3,7 +3,7 @@ package com.beneklund.minecraft.platform.resources;
 import com.beneklund.minecraft.platform.images.ImageData;
 import java.util.Map;
 
-public interface ResourcePack {
+public interface IResourcePack {
     String getName();
 
     String getAuthor();

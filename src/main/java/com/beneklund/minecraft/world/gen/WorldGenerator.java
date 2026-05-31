@@ -31,33 +31,33 @@ public class WorldGenerator implements IWorldGenerator {
     private final BlockRegistry registry;
     private final NoiseHelper noiseHelper;
     private final TreePlacer treePlacer;
-    private final List<GenerationSpec.OreSpec> oreSpecs;
-    private final GenerationSpec.TreeSpec treeSpec;
-    private final GenerationSpec.CaveSpec caveSpec;
-    private final GenerationSpec.NoiseLayersSpec noiseLayers;
-    private final GenerationSpec.BiomeSpec biomeSpec;
+    private final List<IGenerationSpec.OreSpecI> oreSpecs;
+    private final IGenerationSpec.TreeSpecI treeSpec;
+    private final IGenerationSpec.CaveSpecI caveSpec;
+    private final IGenerationSpec.NoiseLayersSpecI noiseLayers;
+    private final IGenerationSpec.BiomeSpecI biomeSpec;
 
     // Convenience constructor for tests, uses vanilla-defaults.
     public WorldGenerator(BlockRegistry registry) {
-        this(registry, GenerationSpec.DEFAULT_WORLD_GENERATION);
+        this(registry, IGenerationSpec.DEFAULT_WORLD_GENERATION);
     }
 
-    public WorldGenerator(BlockRegistry registry, List<GenerationSpec> specs) {
+    public WorldGenerator(BlockRegistry registry, List<IGenerationSpec> specs) {
         this.registry = registry;
         this.noiseHelper = new NoiseHelper();
         this.treePlacer = new TreePlacer();
 
-        List<GenerationSpec.OreSpec> ores = new ArrayList<>();
-        GenerationSpec.NoiseLayersSpec layers = null;
-        GenerationSpec.TreeSpec tree = null;
-        GenerationSpec.CaveSpec cave = null;
-        GenerationSpec.BiomeSpec biome = null;
-        for (GenerationSpec spec : specs) {
-            if (spec instanceof GenerationSpec.OreSpec ore) ores.add(ore);
-            else if (spec instanceof GenerationSpec.NoiseLayersSpec n) layers = n;
-            else if (spec instanceof GenerationSpec.TreeSpec t) tree = t;
-            else if (spec instanceof GenerationSpec.CaveSpec c) cave = c;
-            else if (spec instanceof GenerationSpec.BiomeSpec b) biome = b;
+        List<IGenerationSpec.OreSpecI> ores = new ArrayList<>();
+        IGenerationSpec.NoiseLayersSpecI layers = null;
+        IGenerationSpec.TreeSpecI tree = null;
+        IGenerationSpec.CaveSpecI cave = null;
+        IGenerationSpec.BiomeSpecI biome = null;
+        for (IGenerationSpec spec : specs) {
+            if (spec instanceof IGenerationSpec.OreSpecI ore) ores.add(ore);
+            else if (spec instanceof IGenerationSpec.NoiseLayersSpecI n) layers = n;
+            else if (spec instanceof IGenerationSpec.TreeSpecI t) tree = t;
+            else if (spec instanceof IGenerationSpec.CaveSpecI c) cave = c;
+            else if (spec instanceof IGenerationSpec.BiomeSpecI b) biome = b;
         }
         this.oreSpecs = ores;
         this.noiseLayers = layers;
@@ -67,8 +67,7 @@ public class WorldGenerator implements IWorldGenerator {
     }
 
     @Override
-    public Chunk generate(ChunkPos pos, long seed) {
-        Chunk chunk = new Chunk(new byte[Chunk.SIZE_XZ * Chunk.SIZE_XZ * Chunk.SIZE_Y]);
+    public void generate(ChunkPos pos, long seed, Chunk chunk) {
         int[] surfaceHeights = new int[Chunk.SIZE_XZ * Chunk.SIZE_XZ];
 
         for (int localX = 0; localX < Chunk.SIZE_XZ; localX++) {
@@ -85,8 +84,6 @@ public class WorldGenerator implements IWorldGenerator {
 
         placeTrees(chunk, seed, pos, surfaceHeights);
         carveCaves(chunk, seed, pos);
-
-        return chunk;
     }
 
     private int computeSurfaceY(long seed, int worldX, int worldZ) {
@@ -105,12 +102,12 @@ public class WorldGenerator implements IWorldGenerator {
         return biomes[index];
     }
 
-    private double sampleLayer(long seed, int x, int z, GenerationSpec.NoiseLayerSpec layer) {
+    private double sampleLayer(long seed, int x, int z, IGenerationSpec.NoiseLayerSpec layer) {
         return noiseHelper.noise2(seed + layer.seedOffset(), x, z, layer.octaves(), layer.persistence(), layer.scale())
                 * layer.weight();
     }
 
-    private double sampleSpec(long seed, int x, int z, GenerationSpec.BiomeSpec spec) {
+    private double sampleSpec(long seed, int x, int z, IGenerationSpec.BiomeSpecI spec) {
         return noiseHelper.noise2(seed + spec.seedOffset(), x, z, spec.octaves(), spec.persistence(), spec.scale());
     }
 
@@ -144,7 +141,7 @@ public class WorldGenerator implements IWorldGenerator {
         long colSeed = seed ^ ((long) worldX * COL_SEED_PRIME_X) ^ ((long) worldZ * COL_SEED_PRIME_Z);
         Random colRng = new Random(colSeed);
 
-        for (GenerationSpec.OreSpec ore : oreSpecs) {
+        for (IGenerationSpec.OreSpecI ore : oreSpecs) {
             for (int y = ore.minY(); y <= ore.maxY(); y++) {
                 if (chunk.getBlock(localX, y, localZ) == Block.STONE && colRng.nextFloat() < ore.chance()) {
                     chunk.setBlock(localX, y, localZ, ore.blockId());

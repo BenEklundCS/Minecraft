@@ -24,13 +24,13 @@ import org.lwjgl.openal.ALCapabilities;
  * Lifecycle: play() -> shutdown() on app exit. shutdown() is a no-op if play() was never called.
  */
 public class AudioPlayer {
-    private final AudioLoader loader;
+    private final IAudioLoader loader;
     private long device;
     private long context;
     private int source;
     private int buffer;
 
-    public AudioPlayer(AudioLoader loader) {
+    public AudioPlayer(IAudioLoader loader) {
         this.loader = loader;
     }
 

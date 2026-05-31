@@ -7,15 +7,15 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 // Bridge between the GLFW callback thread (offers) and the game-update thread (drains).
 // ConcurrentLinkedQueue is lock-free, so the callback never blocks the main thread.
 public class InputEventQueue {
-    private final ConcurrentLinkedQueue<RawInputEvent> queue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<IRawInputEvent> queue = new ConcurrentLinkedQueue<>();
 
-    public void offer(RawInputEvent event) {
+    public void offer(IRawInputEvent event) {
         this.queue.offer(event);
     }
 
-    public List<RawInputEvent> drain() {
-        List<RawInputEvent> batch = new ArrayList<>();
-        RawInputEvent e;
+    public List<IRawInputEvent> drain() {
+        List<IRawInputEvent> batch = new ArrayList<>();
+        IRawInputEvent e;
         while ((e = this.queue.poll()) != null) batch.add(e);
         return batch;
     }

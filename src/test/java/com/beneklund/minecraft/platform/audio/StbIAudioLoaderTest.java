@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
-class StbAudioLoaderTest {
-    private final StbAudioLoader loader = new StbAudioLoader();
+class StbIAudioLoaderTest {
+    private final StbIAudioLoader loader = new StbIAudioLoader();
 
     @Test
     void load_validOgg_returnsDecodedPcmWithSaneMetadata() {

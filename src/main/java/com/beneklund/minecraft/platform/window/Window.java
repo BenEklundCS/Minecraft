@@ -10,7 +10,7 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 
 import com.beneklund.minecraft.container.WindowConfig;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
-import com.beneklund.minecraft.platform.input.RawInputEvent;
+import com.beneklund.minecraft.platform.input.IRawInputEvent;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -153,10 +153,10 @@ public class Window {
     }
 
     private void initCallbacks() {
-        glfwSetKeyCallback(this.window, RawInputEvent.KeyEvent.callback(this.queue));
-        glfwSetMouseButtonCallback(this.window, RawInputEvent.MouseButtonEvent.callback(this.queue));
-        glfwSetCursorPosCallback(this.window, RawInputEvent.MouseMoveEvent.callback(this.queue));
-        glfwSetScrollCallback(this.window, RawInputEvent.ScrollEvent.callback(this.queue));
+        glfwSetKeyCallback(this.window, IRawInputEvent.KeyEventI.callback(this.queue));
+        glfwSetMouseButtonCallback(this.window, IRawInputEvent.MouseButtonEventI.callback(this.queue));
+        glfwSetCursorPosCallback(this.window, IRawInputEvent.MouseMoveEventI.callback(this.queue));
+        glfwSetScrollCallback(this.window, IRawInputEvent.ScrollEventI.callback(this.queue));
         glfwSetFramebufferSizeCallback(this.window, resizeCallback());
     }
 

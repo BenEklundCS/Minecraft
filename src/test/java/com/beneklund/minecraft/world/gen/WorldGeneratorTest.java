@@ -17,8 +17,8 @@ class WorldGeneratorTest {
     // same inputs always produce identical block data — generator has no mutable state
     @Test
     void generate_sameInputsTwice_identicalChunks() {
-        Chunk a = generator.generate(origin, seed);
-        Chunk b = generator.generate(origin, seed);
+        Chunk a = new Chunk(); generator.generate(origin, seed, a);
+        Chunk b = new Chunk(); generator.generate(origin, seed, b);
         for (int x = 0; x < Chunk.SIZE_XZ; x++) {
             for (int z = 0; z < Chunk.SIZE_XZ; z++) {
                 for (int y = 0; y < Chunk.SIZE_Y; y++) {
@@ -34,7 +34,7 @@ class WorldGeneratorTest {
     // y=0 is always bedrock — no biome or noise value can override it
     @Test
     void generate_bedrock_atYZeroForAllColumns() {
-        Chunk chunk = generator.generate(origin, seed);
+        Chunk chunk = new Chunk(); generator.generate(origin, seed, chunk);
         for (int x = 0; x < Chunk.SIZE_XZ; x++) {
             for (int z = 0; z < Chunk.SIZE_XZ; z++) {
                 assertEquals(Block.BEDROCK, chunk.getBlock(x, 0, z), "expected BEDROCK at (" + x + ",0," + z + ")");
@@ -46,7 +46,7 @@ class WorldGeneratorTest {
     // so y=255 (HEIGHT-1) must always be AIR
     @Test
     void generate_topLayer_isAlwaysAir() {
-        Chunk chunk = generator.generate(origin, seed);
+        Chunk chunk = new Chunk(); generator.generate(origin, seed, chunk);
         int top = Chunk.SIZE_Y - 1;
         for (int x = 0; x < Chunk.SIZE_XZ; x++) {
             for (int z = 0; z < Chunk.SIZE_XZ; z++) {

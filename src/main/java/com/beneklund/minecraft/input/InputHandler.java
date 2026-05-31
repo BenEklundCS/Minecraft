@@ -19,22 +19,22 @@ public class InputHandler {
         this.camera = camera;
     }
 
-    public void handle(List<InputAction> actions) {
+    public void handle(List<IInputAction> actions) {
         for (var action : actions) {
             switch (action) {
-                case InputAction.Simple.JUMP -> LOGGER.debug("JUMP");
-                case InputAction.Simple.BREAK_BLOCK -> LOGGER.debug("BREAK_BLOCK");
-                case InputAction.Simple.PLACE_BLOCK -> LOGGER.debug("PLACE_BLOCK");
-                case InputAction.Simple.SLOT_NEXT -> LOGGER.debug("SLOT_NEXT");
-                case InputAction.Simple.SLOT_PREV -> LOGGER.debug("SLOT_PREV");
-                case InputAction.Simple.PAUSE -> LOGGER.debug("PAUSE");
-                case InputAction.Simple.DEBUG_OVERLAY -> LOGGER.debug("DEBUG_OVERLAY");
-                case InputAction.Simple.INVENTORY -> LOGGER.debug("INVENTORY");
-                case InputAction.HotbarAction.Select h -> LOGGER.debug("SLOT_{}", h.slot() + 1);
-                case InputAction.Simple.EXIT -> this.window.close();
-                case InputAction.MoveAction m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
-                case InputAction.LookAction l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
-                case InputAction.ScrollAction s -> {
+                case IInputAction.Simple.JUMP -> LOGGER.debug("JUMP");
+                case IInputAction.Simple.BREAK_BLOCK -> LOGGER.debug("BREAK_BLOCK");
+                case IInputAction.Simple.PLACE_BLOCK -> LOGGER.debug("PLACE_BLOCK");
+                case IInputAction.Simple.SLOT_NEXT -> LOGGER.debug("SLOT_NEXT");
+                case IInputAction.Simple.SLOT_PREV -> LOGGER.debug("SLOT_PREV");
+                case IInputAction.Simple.PAUSE -> LOGGER.debug("PAUSE");
+                case IInputAction.Simple.DEBUG_OVERLAY -> LOGGER.debug("DEBUG_OVERLAY");
+                case IInputAction.Simple.INVENTORY -> LOGGER.debug("INVENTORY");
+                case IInputAction.HotbarActionI.Select h -> LOGGER.debug("SLOT_{}", h.slot() + 1);
+                case IInputAction.Simple.EXIT -> this.window.close();
+                case IInputAction.MoveActionI m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
+                case IInputAction.LookActionI l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
+                case IInputAction.ScrollActionI s -> {
                     LOGGER.debug("SCROLL delta={}", s.delta());
                     handleScroll(s);
                 }
@@ -43,7 +43,7 @@ public class InputHandler {
         }
     }
 
-    private void handleScroll(InputAction.ScrollAction scrollAction) {
+    private void handleScroll(IInputAction.ScrollActionI scrollAction) {
         // Scroll zooms by adjusting FOV. 45° is the normal Minecraft FOV; clamped so
         // it never goes fisheye or collapses to a point.
         float fov = this.camera.getFov() - scrollAction.delta();

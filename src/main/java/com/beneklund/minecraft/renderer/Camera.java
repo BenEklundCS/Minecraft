@@ -1,61 +1,44 @@
 package com.beneklund.minecraft.renderer;
 
-import com.beneklund.minecraft.container.PlayerConfig;
 import com.beneklund.minecraft.container.WindowConfig;
+import com.beneklund.minecraft.player.Player;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
-import org.joml.Vector3f;
 
+// Pure view/projection calculator. Reads player position and orientation each frame;
+// owns no simulation state — Player drives everything.
 public class Camera {
     private static final float NEAR_PLANE = 0.1f;
     private static final float FAR_PLANE = 1000.0f;
-    private static final float MAX_PITCH = 89.0f;
 
     private final Vector2f windowSize;
-    private final Vector3f position;
-    // private final Vector3f target;
-    private final Vector3f up;
-
-    private float yaw;
-    private float pitch;
+    private final Player player;
     private float fov;
-    private final PlayerConfig playerConfig;
 
-    // Convenience constructor for tests — uses default movement speed.
-    public Camera(WindowConfig config, Vector3f position, float fov) {
-        this(config, position, fov, new PlayerConfig(5.0f));
-    }
-
-    public Camera(WindowConfig config, Vector3f position, float fov, PlayerConfig playerConfig) {
+    public Camera(WindowConfig config, Player player, float fov) {
         this.windowSize = new Vector2f(config.width(), config.height());
-        this.position = position;
-        // this.target = new Vector3f(0.0f, 0.0f, 0.0f);
-        this.up = new Vector3f(0.0f, 1.0f, 0.0f);
+        this.player = player;
         this.fov = fov;
-        this.playerConfig = playerConfig;
     }
 
+    // Builds view matrix from player's current position and look direction.
     public Matrix4f getViewMatrix() {
-        return new Matrix4f().lookAt(this.position, new Vector3f(this.position).add(getLookDirection()), this.up);
-        // orbit: return new Matrix4f().lookAt(this.position, this.target, this.up);
+        return new Matrix4f().lookAt(
+                player.getPosition(),
+                new org.joml.Vector3f(player.getPosition()).add(player.getLookDirection()),
+                new org.joml.Vector3f(0, 1, 0));
     }
 
+    // Standard perspective projection; aspect recalculated each call so setWindowSize() is always reflected.
     public Matrix4f getProjectionMatrix() {
-        return new Matrix4f()
-                .perspective(
-                        (float) Math.toRadians(this.fov), this.windowSize.x / this.windowSize.y, NEAR_PLANE, FAR_PLANE);
+        return new Matrix4f().perspective(
+                (float) Math.toRadians(this.fov),
+                this.windowSize.x / this.windowSize.y,
+                NEAR_PLANE, FAR_PLANE);
     }
 
     public float getFov() {
-        return this.fov;
-    }
-
-    public float getYaw() {
-        return this.yaw;
-    }
-
-    public float getPitch() {
-        return this.pitch;
+        return fov;
     }
 
     public void setFov(float fov) {
@@ -65,43 +48,5 @@ public class Camera {
     public void setWindowSize(float width, float height) {
         this.windowSize.x = width;
         this.windowSize.y = height;
-    }
-
-    /*
-     * Facing direction as a unit vector, from yaw/pitch (spherical -> cartesian). Yaw is measured
-     * swap getViewMatrix() over to lookAt(position, position + getLookDirection(), up) for free-look.
-     */
-    public Vector3f getLookDirection() {
-        double y = Math.toRadians(this.yaw);
-        double p = Math.toRadians(this.pitch);
-        return new Vector3f(
-                        (float) (Math.cos(p) * Math.sin(y)), (float) Math.sin(p), (float) (Math.cos(p) * Math.cos(y)))
-                .normalize();
-    }
-
-    // Right vector for strafing: perpendicular to look and up, from their cross product.
-    public Vector3f getRight() {
-        return getLookDirection().cross(this.up).normalize();
-    }
-
-    /*
-     * Apply a frame of mouse movement (already scaled by sensitivity). -dy so mouse-up looks up.
-     * Clamp pitch short of vertical (±89) or look aligns with up, getRight() collapses, and the
-     * view flips.
-     */
-    public void look(float dxDegrees, float dyDegrees) {
-        this.yaw -= dxDegrees; // subtract so mouse-right turns right (yaw grows clockwise toward -Z)
-        this.pitch -= dyDegrees;
-        this.pitch = Math.clamp(this.pitch, -MAX_PITCH, MAX_PITCH);
-    }
-
-    /*
-     * Free-fly: move along look (forward/back) and right (strafe), scaled by speed and dt.
-     */
-    public void moveRelative(float forward, float right, float dt) {
-        float speed = playerConfig.movementSpeed();
-        // fma(s, v) does position += s*v in place.
-        this.position.fma(forward * speed * dt, getLookDirection());
-        this.position.fma(right * speed * dt, getRight());
     }
 }

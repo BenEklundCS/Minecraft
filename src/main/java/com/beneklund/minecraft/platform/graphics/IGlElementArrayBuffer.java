@@ -17,10 +17,10 @@ import static org.lwjgl.opengl.GL15.*;
  *
  * Lifecycle: new -> upload() once -> bind() at draw time -> delete() on shutdown.
  */
-public class GlElementArrayBuffer implements GlBuffer {
+public class IGlElementArrayBuffer implements IGlBuffer {
     private final int buffer;
 
-    public GlElementArrayBuffer() {
+    public IGlElementArrayBuffer() {
         this.buffer = glGenBuffers();
     }
 

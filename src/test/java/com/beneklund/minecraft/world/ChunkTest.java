@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 class ChunkTest {
     private Chunk emptyChunk() {
-        return new Chunk(new byte[Chunk.SIZE_XZ * Chunk.SIZE_XZ * Chunk.SIZE_Y]);
+        return new Chunk();
     }
 
     // setBlock then getBlock at the same spot round-trips the id

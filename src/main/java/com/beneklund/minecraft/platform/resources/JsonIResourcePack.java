@@ -1,7 +1,7 @@
 package com.beneklund.minecraft.platform.resources;
 
 import com.beneklund.minecraft.platform.images.ImageData;
-import com.beneklund.minecraft.platform.images.ImageLoader;
+import com.beneklund.minecraft.platform.images.IImageLoader;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
@@ -11,15 +11,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public class JsonResourcePack implements ResourcePack {
-    private final ImageLoader loader;
+public class JsonIResourcePack implements IResourcePack {
+    private final IImageLoader loader;
     private final String name;
     private final int tileSize;
     private final String author;
     private final String license;
     private final Map<String, String> tilePaths = new LinkedHashMap<>();
 
-    public JsonResourcePack(String classpathJson, ImageLoader loader) throws IOException {
+    public JsonIResourcePack(String classpathJson, IImageLoader loader) throws IOException {
         this.loader = loader;
         InputStream stream = Objects.requireNonNull(
                 getClass().getResourceAsStream(classpathJson), "pack not found: %s".formatted(classpathJson));

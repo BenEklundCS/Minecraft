@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
-class StbImageLoaderTest {
-    private final StbImageLoader loader = new StbImageLoader();
+class StbIImageLoaderTest {
+    private final StbIImageLoader loader = new StbIImageLoader();
 
     @Test
     void load_validPng_returnsImageDataWithPositiveDimensions() {

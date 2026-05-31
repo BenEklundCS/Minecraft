@@ -5,11 +5,11 @@ import java.util.concurrent.atomic.AtomicReference;
 public class Chunk {
     public static final int SIZE_XZ = 16;
     public static final int SIZE_Y = 256;
-    private byte[] blocks = new byte[SIZE_XZ * SIZE_XZ * SIZE_Y]; // 16 * 16 * 256 == 65,536
+    private final byte[] blocks = new byte[SIZE_XZ * SIZE_XZ * SIZE_Y]; // 16 * 16 * 256 == 65,536
     private final AtomicReference<ChunkState> state = new AtomicReference<>(ChunkState.UNLOADED);
 
-    public Chunk(byte[] blocks) {
-        this.blocks = blocks;
+    public Chunk() {
+
     }
 
     public byte getBlock(int x, int y, int z) {

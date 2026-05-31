@@ -1,8 +1,12 @@
 package com.beneklund.minecraft.world;
 
-import com.beneklund.minecraft.input.InputAction;
+import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.InputHandler;
+
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class World {
@@ -16,7 +20,7 @@ public class World {
         this.inputHandler = inputHandler;
     }
 
-    public void update(List<InputAction> actions, float dt) {
+    public void update(List<IInputAction> actions, float dt) {
         this.inputHandler.handle(actions);
     }
 
@@ -31,4 +35,10 @@ public class World {
     public void removeChunk(ChunkPos pos) {
         this.chunks.remove(pos);
     }
+
+    public boolean hasChunk(ChunkPos pos) { return this.chunks.containsKey(pos); }
+
+    public Set<ChunkPos> getChunkPositions() { return this.chunks.keySet(); }
+
+    public Set<Map.Entry<ChunkPos, Chunk>> getChunkEntries() { return this.chunks.entrySet(); }
 }

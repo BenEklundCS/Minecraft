@@ -13,4 +13,6 @@ public interface IWorldAuthority {
     Chunk getChunk(ChunkPos pos);
 
     List<Entity> getEntities(AABB aabb);
+
+    void markCardinalNeighborsDirty(ChunkPos pos);
 }

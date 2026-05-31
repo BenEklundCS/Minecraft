@@ -6,7 +6,7 @@ import static org.lwjgl.system.MemoryUtil.memFree;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.platform.graphics.GlTexture;
 import com.beneklund.minecraft.platform.images.ImageData;
-import com.beneklund.minecraft.platform.resources.ResourcePack;
+import com.beneklund.minecraft.platform.resources.IResourcePack;
 import com.beneklund.minecraft.util.Direction;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -16,7 +16,7 @@ public class TextureAtlas {
     private GlTexture textureAtlas;
     private final Map<String, float[]> uvCache = new HashMap<>();
 
-    public TextureAtlas(ResourcePack pack) {
+    public TextureAtlas(IResourcePack pack) {
         Map<String, ImageData> tiles = pack.loadTiles();
         int count = tiles.size(); // number of tiles in the pack
         int tileSize = pack.getTileSize(); // pixel size of each tile

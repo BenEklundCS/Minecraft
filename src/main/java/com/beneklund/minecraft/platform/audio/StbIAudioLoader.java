@@ -19,7 +19,7 @@ import org.lwjgl.stb.STBVorbisInfo;
  * Native writes via STBVorbis do not advance the Java buffer position, so the ShortBuffer
  * is returned as-is (position=0, limit=capacity) - do not flip before passing to OpenAL.
  */
-public class StbAudioLoader implements AudioLoader {
+public class StbIAudioLoader implements IAudioLoader {
 
     @Override
     public AudioData load(String classpathOgg) {

@@ -6,6 +6,7 @@ import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.Direction;
 import com.beneklund.minecraft.world.Chunk;
+import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.gen.Biome;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,7 +86,7 @@ public class ChunkMesher {
 
     // Transforms a chunk's block data into renderable geometry.
     // Safe to call from any worker thread — no GL calls, no shared mutable state.
-    public ChunkMeshData mesh(Chunk chunk) {
+    public ChunkMeshData mesh(ChunkPos pos, Chunk chunk) {
         List<Float> verts = new ArrayList<>();
         List<Integer> idxs = new ArrayList<>();
         int vertCount = 0;
@@ -109,7 +110,7 @@ public class ChunkMesher {
             }
         }
 
-        return new ChunkMeshData(toFloatArray(verts), toIntArray(idxs), vertCount);
+        return new ChunkMeshData(pos, toFloatArray(verts), toIntArray(idxs), vertCount);
     }
 
     // A face is culled if its in-chunk neighbor is solid.

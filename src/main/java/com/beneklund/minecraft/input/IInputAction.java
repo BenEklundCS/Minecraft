@@ -2,21 +2,21 @@ package com.beneklund.minecraft.input;
 
 // Domain-level input intent. InputMapper translates raw GLFW events into these types
 // so game logic never touches GLFW key codes directly.
-public sealed interface InputAction {
+public sealed interface IInputAction {
     // dx/dz are un-normalized direction components; InputMapper sets them to ±1.
-    record MoveAction(float dx, float dz) implements InputAction {}
+    record MoveActionI(float dx, float dz) implements IInputAction {}
 
     // Raw pixel delta from the previous cursor position, before sensitivity scaling.
-    record LookAction(float dx, float dy) implements InputAction {}
+    record LookActionI(float dx, float dy) implements IInputAction {}
 
-    record ScrollAction(float delta) implements InputAction {}
+    record ScrollActionI(float delta) implements IInputAction {}
 
     // slot is 0-indexed: slot 0 = hotbar key '1', slot 8 = hotbar key '9'.
-    sealed interface HotbarAction extends InputAction {
-        record Select(int slot) implements HotbarAction {}
+    sealed interface HotbarActionI extends IInputAction {
+        record Select(int slot) implements HotbarActionI {}
     }
 
-    enum Simple implements InputAction {
+    enum Simple implements IInputAction {
         JUMP,
         BREAK_BLOCK,
         PLACE_BLOCK,

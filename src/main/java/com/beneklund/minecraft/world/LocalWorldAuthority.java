@@ -5,7 +5,10 @@ import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.util.AABB;
+
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class LocalWorldAuthority implements IWorldAuthority {
     private record ChunkCoordinates(int x, int z) {}
@@ -31,12 +34,24 @@ public class LocalWorldAuthority implements IWorldAuthority {
     public void setBlock(int x, int y, int z, byte id) {
         if (y < 0 || y >= Chunk.SIZE_Y) return;
         Chunk chunk = getChunk(x, z);
+        ChunkPos pos = getChunkPos(x, z);
         if (chunk == null) return;
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
         chunk.setBlock(chunkCoordinates.x, y, chunkCoordinates.z, id);
         chunk.tryTransition(ChunkState.DIRTY);
-        // TODO: an edit on a chunk border (local x/z == 0 or 15) leaves the neighbor chunk's
-        // meshed faces stale - also markDirty the adjacent chunk(s) once meshing is wired up.
+        // edit occured on border, mark cardinals dirty if they're uploaded
+        if (atChunkBorder(chunkCoordinates)) {
+            markCardinalNeighborsDirty(pos);
+        }
+    }
+
+    public void markCardinalNeighborsDirty(ChunkPos pos) {
+        List<Chunk> cardinalNeighbors = getCardinalNeighbors(pos);
+        for (Chunk neighbor : cardinalNeighbors) {
+            if (neighbor.getState() == ChunkState.UPLOADED) {
+                if (!neighbor.tryTransition(ChunkState.DIRTY)) continue;
+            }
+        }
     }
 
     @Override
@@ -50,9 +65,13 @@ public class LocalWorldAuthority implements IWorldAuthority {
     }
 
     private Chunk getChunk(int x, int z) {
-        // floorDiv, not /, so negative world coords map to the right chunk (e.g. x=-1 → chunk -1, not 0).
-        ChunkPos pos = new ChunkPos(Math.floorDiv(x, Chunk.SIZE_XZ), Math.floorDiv(z, Chunk.SIZE_XZ));
+        ChunkPos pos = getChunkPos(x, z);
         return this.world.getChunk(pos);
+    }
+
+    private ChunkPos getChunkPos(int x, int z) {
+        // floorDiv, not /, so negative world coords map to the right chunk (e.g. x=-1 → chunk -1, not 0).
+        return new ChunkPos(Math.floorDiv(x, Chunk.SIZE_XZ), Math.floorDiv(z, Chunk.SIZE_XZ));
     }
 
     private ChunkCoordinates getChunkCoordinates(int worldX, int worldZ) {
@@ -60,5 +79,19 @@ public class LocalWorldAuthority implements IWorldAuthority {
         int chunkX = Math.floorMod(worldX, Chunk.SIZE_XZ);
         int chunkZ = Math.floorMod(worldZ, Chunk.SIZE_XZ);
         return new ChunkCoordinates(chunkX, chunkZ);
+    }
+
+    private List<Chunk> getCardinalNeighbors(ChunkPos pos) {
+        List<Chunk> cardinalNeighbors = new ArrayList<>();
+        cardinalNeighbors.add(getChunk(pos.x() + 1, pos.z()));
+        cardinalNeighbors.add(getChunk(pos.x() - 1, pos.z()));
+        cardinalNeighbors.add(getChunk(pos.x(), pos.z() + 1));
+        cardinalNeighbors.add(getChunk(pos.x(), pos.z() - 1));
+        cardinalNeighbors.removeIf(Objects::isNull);
+        return cardinalNeighbors;
+    }
+
+    private boolean atChunkBorder(ChunkCoordinates coords) {
+        return (coords.x == 0 || coords.x == Chunk.SIZE_XZ - 1) || (coords.z == 0 || coords.z == Chunk.SIZE_XZ - 1);
     }
 }

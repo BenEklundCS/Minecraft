@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.world.Chunk;
+import com.beneklund.minecraft.world.ChunkPos;
 import org.junit.jupiter.api.Test;
 
 class ChunkMesherTest {
@@ -13,7 +14,7 @@ class ChunkMesherTest {
     private final ChunkMesher mesher = new ChunkMesher(BlockRegistry.createDefault(), null);
 
     private Chunk emptyChunk() {
-        return new Chunk(new byte[Chunk.SIZE_XZ * Chunk.SIZE_XZ * Chunk.SIZE_Y]);
+        return new Chunk();
     }
 
     // a single isolated block has no solid neighbors → all 6 faces emitted
@@ -22,7 +23,7 @@ class ChunkMesherTest {
         Chunk chunk = emptyChunk();
         chunk.setBlock(0, 64, 0, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(chunk);
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
         assertEquals(24 * 10, data.vertices().length, "24 vertices × 10 floats");
@@ -36,7 +37,7 @@ class ChunkMesherTest {
         chunk.setBlock(0, 64, 0, Block.STONE);
         chunk.setBlock(1, 64, 0, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(chunk);
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
 
         assertEquals(40, data.vertexCount(), "10 quads × 4 vertices");
         assertEquals(60, data.indices().length, "10 quads × 6 indices");
@@ -45,7 +46,7 @@ class ChunkMesherTest {
     // all-air chunk produces no geometry
     @Test
     void allAirChunk_producesEmptyMesh() {
-        ChunkMeshData data = mesher.mesh(emptyChunk());
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), emptyChunk());
 
         assertEquals(0, data.vertexCount());
         assertEquals(0, data.vertices().length);
@@ -61,7 +62,7 @@ class ChunkMesherTest {
             for (int y = 0; y < Chunk.SIZE_Y; y++)
                 for (int z = 0; z < Chunk.SIZE_XZ; z++) chunk.setBlock(x, y, z, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(chunk);
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
 
         // outer shell: 2 caps (16×16 each) + 4 sides (16×256 each)
         int expectedFaces = 2 * (16 * 16) + 4 * (16 * 256); // = 16896

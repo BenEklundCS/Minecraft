@@ -3,8 +3,8 @@ package com.beneklund.minecraft.platform.input;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.lwjgl.glfw.GLFW.*;
 
-import com.beneklund.minecraft.input.InputAction;
-import com.beneklund.minecraft.input.InputAction.Simple;
+import com.beneklund.minecraft.input.IInputAction;
+import com.beneklund.minecraft.input.IInputAction.Simple;
 import java.util.HashSet;
 import java.util.List;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,12 +29,12 @@ class InputMapperTest {
     void keyPress_returnsMoveActionWithCorrectDxDz(WasdCase tc) {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
-        queue.offer(new RawInputEvent.KeyEvent(tc.key(), 0, GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_PRESS, 0));
 
-        List<InputAction> actions = mapper.drain();
+        List<IInputAction> actions = mapper.drain();
 
         assertEquals(1, actions.size());
-        assertEquals(new InputAction.MoveAction(tc.expectedDx(), tc.expectedDz()), actions.getFirst());
+        assertEquals(new IInputAction.MoveActionI(tc.expectedDx(), tc.expectedDz()), actions.getFirst());
     }
 
     // --- Simple key actions (fire on release) ---
@@ -73,12 +73,12 @@ class InputMapperTest {
     void keyRelease_returnsHotbarSelect(HotbarCase tc) {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
-        queue.offer(new RawInputEvent.KeyEvent(tc.key(), 0, GLFW_RELEASE, 0));
+        queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_RELEASE, 0));
 
-        List<InputAction> actions = mapper.drain();
+        List<IInputAction> actions = mapper.drain();
 
         assertEquals(1, actions.size());
-        assertEquals(new InputAction.HotbarAction.Select(tc.expectedSlot()), actions.getFirst());
+        assertEquals(new IInputAction.HotbarActionI.Select(tc.expectedSlot()), actions.getFirst());
     }
 
     @ParameterizedTest
@@ -86,9 +86,9 @@ class InputMapperTest {
     void keyRelease_returnsSimpleAction(SimpleKeyCase tc) {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
-        queue.offer(new RawInputEvent.KeyEvent(tc.key(), 0, GLFW_RELEASE, 0));
+        queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_RELEASE, 0));
 
-        List<InputAction> actions = mapper.drain();
+        List<IInputAction> actions = mapper.drain();
 
         assertEquals(1, actions.size());
         assertEquals(tc.expected(), actions.getFirst());
@@ -109,9 +109,9 @@ class InputMapperTest {
     void mouseButtonRelease_returnsSimpleAction(SimpleMouseCase tc) {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
-        queue.offer(new RawInputEvent.MouseButtonEvent(tc.button(), GLFW_RELEASE, 0));
+        queue.offer(new IRawInputEvent.MouseButtonEventI(tc.button(), GLFW_RELEASE, 0));
 
-        List<InputAction> actions = mapper.drain();
+        List<IInputAction> actions = mapper.drain();
 
         assertEquals(1, actions.size());
         assertEquals(tc.expected(), actions.getFirst());
