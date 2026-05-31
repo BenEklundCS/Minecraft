@@ -2,6 +2,7 @@
 in vec2  vUV;
 in float vAO;
 in float vFaceId;
+in vec3  vTint;
 
 uniform sampler2D uAtlas;
 
@@ -16,5 +17,5 @@ void main() {
     float faceBrightness = (vFaceId < 0.5) ? 1.0
                          : (vFaceId < 2.5) ? 0.8 : 0.6;
 
-    FragColor = vec4(texColor.rgb * vAO * faceBrightness, texColor.a);
+    FragColor = vec4(texColor.rgb * vAO * faceBrightness * vTint, texColor.a);
 }

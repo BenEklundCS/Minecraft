@@ -40,6 +40,26 @@ public class ChunkMesher {
 
     private static final float[] DEFAULT_UV = {0f, 0f, 1f, 1f};
 
+    // Per-face UV fractions: [u0,v0, u1,v1, u2,v2, u3,v3] where 0=min, 1=max.
+    // Side faces need V=max at the bottom vertex and V=min at the top vertex so the
+    // texture isn't rotated 90°. (STB loads images top-first; OpenGL treats the first
+    // buffer bytes as the bottom row, flipping the V axis relative to the image file.)
+    private static final float[][] FACE_UV_FRACS = {
+        {0, 0, 0, 1, 1, 1, 1, 0}, // UP:    U→+X, V→+Z
+        {0, 0, 0, 1, 1, 1, 1, 0}, // DOWN:  dirt — symmetric, orientation irrelevant
+        {1, 1, 0, 1, 0, 0, 1, 0}, // NORTH: U→-X, bottom=vMax, top=vMin
+        {0, 1, 1, 1, 1, 0, 0, 0}, // SOUTH: U→+X, bottom=vMax, top=vMin
+        {0, 1, 1, 1, 1, 0, 0, 0}, // EAST:  U→-Z, bottom=vMax, top=vMin
+        {0, 1, 1, 1, 1, 0, 0, 0}, // WEST:  U→+Z, bottom=vMax, top=vMin
+    };
+
+    // Tints for blocks whose textures are stored as greyscale in the pack.
+    // Faithful (like vanilla) stores grass_top and leaves as greyscale — the game
+    // supplies the biome color. These are hardcoded plains-biome values for now.
+    private static final float[] WHITE = {1.00f, 1.00f, 1.00f};
+    private static final float[] GRASS_TINT = {0.57f, 0.74f, 0.35f};
+    private static final float[] FOLIAGE_TINT = {0.38f, 0.60f, 0.20f};
+
     private final BlockRegistry registry;
     private final TextureAtlas atlas; // null-safe — tests pass null
 
@@ -67,7 +87,8 @@ public class ChunkMesher {
                         if (isCulled(chunk, x, y, z, dir)) continue;
 
                         float[] uvs = getUVs(def, dir);
-                        vertCount = emitQuad(verts, idxs, x, y, z, dir, uvs, vertCount);
+                        float[] tint = getTint(blockId, dir);
+                        vertCount = emitQuad(verts, idxs, x, y, z, dir, uvs, tint, vertCount);
                     }
                 }
             }
@@ -90,29 +111,36 @@ public class ChunkMesher {
         return registry.get(chunk.getBlock(nx, ny, nz)).solid();
     }
 
-    // Writes 4 vertices (28 floats) and 6 indices for one quad into the output lists.
-    // Vertex format: x, y, z, u, v, ao, faceId  (7 floats per vertex).
+    // Writes 4 vertices (40 floats) and 6 indices for one quad into the output lists.
+    // Vertex format: x, y, z, u, v, ao, faceId, r, g, b  (10 floats per vertex).
     // Returns the next free vertex base index.
     private int emitQuad(
-            List<Float> vertices, List<Integer> indices, int bx, int by, int bz, Direction dir, float[] uvs, int base) {
+            List<Float> vertices,
+            List<Integer> indices,
+            int bx,
+            int by,
+            int bz,
+            Direction dir,
+            float[] uvs,
+            float[] tint,
+            int base) {
         float[][] corners = FACE_VERTICES[dir.ordinal()];
         float faceId = faceIdFor(dir);
         float uMin = uvs[0], vMin = uvs[1], uMax = uvs[2], vMax = uvs[3];
-
-        // UV corner assignment matches vertex order in FACE_VERTICES:
-        //   v0 → (uMin,vMin),  v1 → (uMin,vMax),  v2 → (uMax,vMax),  v3 → (uMax,vMin)
-        float[] us = {uMin, uMin, uMax, uMax};
-        float[] vs = {vMin, vMax, vMax, vMin};
+        float[] fracs = FACE_UV_FRACS[dir.ordinal()];
 
         for (int i = 0; i < 4; i++) {
             float[] c = corners[i];
             vertices.add(bx + c[0]);
             vertices.add(by + c[1]);
             vertices.add(bz + c[2]);
-            vertices.add(us[i]);
-            vertices.add(vs[i]);
+            vertices.add(fracs[i * 2] == 0 ? uMin : uMax);
+            vertices.add(fracs[i * 2 + 1] == 0 ? vMin : vMax);
             vertices.add(1.0f); // ao — placeholder; always fully lit until Phase 20
             vertices.add(faceId);
+            vertices.add(tint[0]);
+            vertices.add(tint[1]);
+            vertices.add(tint[2]);
         }
 
         // Two triangles sharing the diagonal: 0-1-2 and 2-3-0
@@ -132,6 +160,14 @@ public class ChunkMesher {
             case DOWN -> FACE_ID_DOWN;
             default -> FACE_ID_SIDE;
         };
+    }
+
+    // Grass top and all leaf blocks store greyscale textures in the faithful pack —
+    // they need a biome color multiplied in. Everything else is white (no tint).
+    private static float[] getTint(byte blockId, Direction dir) {
+        if (blockId == Block.OAK_LEAF) return FOLIAGE_TINT;
+        if (blockId == Block.GRASS && dir == Direction.UP) return GRASS_TINT;
+        return WHITE;
     }
 
     private float[] getUVs(BlockDef def, Direction dir) {

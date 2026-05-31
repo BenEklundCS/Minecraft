@@ -25,7 +25,7 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(chunk);
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
-        assertEquals(24 * 7, data.vertices().length, "24 vertices × 7 floats");
+        assertEquals(24 * 10, data.vertices().length, "24 vertices × 10 floats");
         assertEquals(36, data.indices().length, "6 quads × 6 indices");
     }
 

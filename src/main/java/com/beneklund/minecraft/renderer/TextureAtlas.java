@@ -74,10 +74,14 @@ public class TextureAtlas {
     // vMin/vMax same pattern with row and atlasH.
     // Return float[]{uMin, vMin, uMax, vMax} - renderer unpacks the 4 corners per-vertex.
     private float[] computeUVs(int col, int row, int tileSize, int atlasW, int atlasH) {
-        float uMin = (col * tileSize) / (float) atlasW;
-        float uMax = ((col + 1) * tileSize) / (float) atlasW;
-        float vMin = (row * tileSize) / (float) atlasH;
-        float vMax = ((row + 1) * tileSize) / (float) atlasH;
+        // Inset by half a texel on each edge so GL_NEAREST never rounds across a tile boundary
+        // and samples a pixel from an adjacent tile in the atlas.
+        float halfU = 0.5f / atlasW;
+        float halfV = 0.5f / atlasH;
+        float uMin = (col * tileSize) / (float) atlasW + halfU;
+        float uMax = ((col + 1) * tileSize) / (float) atlasW - halfU;
+        float vMin = (row * tileSize) / (float) atlasH + halfV;
+        float vMax = ((row + 1) * tileSize) / (float) atlasH - halfV;
 
         return new float[] {uMin, vMin, uMax, vMax};
     }
