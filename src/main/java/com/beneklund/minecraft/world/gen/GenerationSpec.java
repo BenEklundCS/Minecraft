@@ -1,6 +1,19 @@
 package com.beneklund.minecraft.world.gen;
 
+import com.beneklund.minecraft.block.Block;
+import java.util.List;
+
 public sealed interface GenerationSpec {
+    public static List<GenerationSpec> DEFAULT_WORLD_GENERATION = List.of(
+            new GenerationSpec.NoiseLayersSpec(
+                    new GenerationSpec.NoiseLayerSpec(4, 0.002, 0.5, 0.5, 0),
+                    new GenerationSpec.NoiseLayerSpec(3, 0.008, 0.5, 0.3, 100),
+                    new GenerationSpec.NoiseLayerSpec(2, 0.04, 0.5, 0.2, 200)),
+            new GenerationSpec.OreSpec(Block.COAL_ORE, 5, 50, 0.01f),
+            new GenerationSpec.OreSpec(Block.IRON_ORE, 5, 30, 0.005f),
+            new GenerationSpec.TreeSpec(0.05f, 8),
+            new GenerationSpec.CaveSpec(0.6, 2, 0.04, 0.5, 5));
+
     // Component type — used inside NoiseLayersSpec, not a spec on its own.
     record NoiseLayerSpec(int octaves, double scale, double persistence, double weight, long seedOffset) {}
 

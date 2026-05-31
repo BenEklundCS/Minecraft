@@ -28,12 +28,20 @@ public class Chunk {
         return state.get(); // volatile read - always sees the latest write
     }
 
-    public boolean tryMarkDirty() {
+    // Attempt to advance to `next` from whatever state is currently set.
+    // Returns false immediately if the current state doesn't allow the transition.
+    // Loops on CAS failure — that means another thread just changed the state,
+    // so we re-read and re-check rather than blindly retrying with a stale value.
+    public boolean tryTransition(ChunkState next) {
         ChunkState current;
         do {
             current = state.get();
-            if (!current.canTransitionTo(ChunkState.DIRTY)) return false;
-        } while (!state.compareAndSet(current, ChunkState.DIRTY));
+            if (!current.canTransitionTo(next)) return false;
+        } while (!state.compareAndSet(current, next));
         return true;
+    }
+
+    public boolean tryMarkDirty() {
+        return tryTransition(ChunkState.DIRTY);
     }
 }

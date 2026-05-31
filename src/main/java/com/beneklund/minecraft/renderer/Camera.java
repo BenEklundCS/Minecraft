@@ -62,17 +62,6 @@ public class Camera {
         this.windowSize.y = height;
     }
 
-    // Orbit just moves the position each frame; getViewMatrix() keeps looking at the fixed target.
-    public void setPosition(float x, float y, float z) {
-        this.position.set(x, y, z);
-    }
-
-    public void setPosition(Vector3f position) {
-        this.position.x = position.x;
-        this.position.y = position.y;
-        this.position.z = position.z;
-    }
-
     /*
      * Facing direction as a unit vector, from yaw/pitch (spherical -> cartesian). Yaw is measured
      * swap getViewMatrix() over to lookAt(position, position + getLookDirection(), up) for free-look.
