@@ -10,21 +10,17 @@ import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.util.AABB;
 import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.IWorldGenerator;
-import org.junit.jupiter.api.Test;
-
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.junit.jupiter.api.Test;
 
 class ChunkManagerTest {
 
     // States that count as "pipeline complete" — anything at or past READY_TO_UPLOAD.
-    private static final Set<ChunkState> DONE_STATES = EnumSet.of(
-            ChunkState.READY_TO_UPLOAD,
-            ChunkState.UPLOADED,
-            ChunkState.DIRTY
-    );
+    private static final Set<ChunkState> DONE_STATES =
+            EnumSet.of(ChunkState.READY_TO_UPLOAD, ChunkState.UPLOADED, ChunkState.DIRTY);
 
     @Test
     void allChunksReachReadyToUpload_after_shutdown() throws InterruptedException {
@@ -33,11 +29,26 @@ class ChunkManagerTest {
 
         // Stub authority — no neighbor dirtying needed for this test.
         IWorldAuthority stubAuthority = new IWorldAuthority() {
-            @Override public BlockDef getBlock(int x, int y, int z) { return null; }
-            @Override public void setBlock(int x, int y, int z, byte id) {}
-            @Override public Chunk getChunk(ChunkPos pos) { return null; }
-            @Override public List<Entity> getEntities(AABB aabb) { return List.of(); }
-            @Override public void markCardinalNeighborsDirty(ChunkPos pos) {}
+            @Override
+            public BlockDef getBlock(int x, int y, int z) {
+                return null;
+            }
+
+            @Override
+            public void setBlock(int x, int y, int z, byte id) {}
+
+            @Override
+            public Chunk getChunk(ChunkPos pos) {
+                return null;
+            }
+
+            @Override
+            public List<Entity> getEntities(AABB aabb) {
+                return List.of();
+            }
+
+            @Override
+            public void markCardinalNeighborsDirty(ChunkPos pos) {}
         };
 
         // Stub mesher — returns an empty but valid ChunkMeshData so the upload queue receives an item.
@@ -67,9 +78,7 @@ class ChunkManagerTest {
             Chunk chunk = world.getChunk(pos);
             assertNotNull(chunk, "chunk at " + pos + " must still be in world");
             assertTrue(
-                    DONE_STATES.contains(chunk.getState()),
-                    "chunk at " + pos + " stuck in state " + chunk.getState()
-            );
+                    DONE_STATES.contains(chunk.getState()), "chunk at " + pos + " stuck in state " + chunk.getState());
         }
     }
 }

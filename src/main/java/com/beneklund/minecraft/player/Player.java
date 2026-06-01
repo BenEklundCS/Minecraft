@@ -34,7 +34,8 @@ public class Player implements IPhysicsBody {
 
     // Converts world position to chunk grid coordinates using floor division so negative coords map correctly.
     public ChunkPos getChunkPos() {
-        return new ChunkPos(Math.floorDiv((int) position.x, Chunk.SIZE_XZ), Math.floorDiv((int) position.z, Chunk.SIZE_XZ));
+        return new ChunkPos(
+                Math.floorDiv((int) position.x, Chunk.SIZE_XZ), Math.floorDiv((int) position.z, Chunk.SIZE_XZ));
     }
 
     // Spherical -> cartesian from yaw/pitch. Yaw=0 faces +Z; yaw grows clockwise.
@@ -42,10 +43,8 @@ public class Player implements IPhysicsBody {
         double y = Math.toRadians(this.yaw);
         double p = Math.toRadians(this.pitch);
         return new Vector3f(
-                (float) (Math.cos(p) * Math.sin(y)),
-                (float) Math.sin(p),
-                (float) (Math.cos(p) * Math.cos(y))
-        ).normalize();
+                        (float) (Math.cos(p) * Math.sin(y)), (float) Math.sin(p), (float) (Math.cos(p) * Math.cos(y)))
+                .normalize();
     }
 
     // Right vector for strafing: cross(look, up), normalized.

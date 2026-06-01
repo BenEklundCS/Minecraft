@@ -31,10 +31,7 @@ public class ChunkRenderer {
         for (var entry : renderWorld.getEntries()) {
             ChunkPos pos = entry.getKey();
             GpuMesh mesh = entry.getValue();
-            Matrix4f model = new Matrix4f().translation(
-                    pos.x() * Chunk.SIZE_XZ,
-                    0,
-                    pos.z() * Chunk.SIZE_XZ);
+            Matrix4f model = new Matrix4f().translation(pos.x() * Chunk.SIZE_XZ, 0, pos.z() * Chunk.SIZE_XZ);
             shader.setUniformMat4("uModel", model);
             mesh.render();
         }

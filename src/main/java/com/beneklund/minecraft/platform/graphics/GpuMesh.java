@@ -16,7 +16,8 @@ public class GpuMesh {
     // Vertex format: 10 floats per vertex — x, y, z, u, v, ao, faceId, r, g, b. Stride = 40 bytes.
     public GpuMesh(float[] vertices, int[] indices) {
         if (!Thread.currentThread().getName().equals("main"))
-            throw new IllegalStateException("GpuMesh must be created on the main thread, was: " + Thread.currentThread().getName());
+            throw new IllegalStateException("GpuMesh must be created on the main thread, was: "
+                    + Thread.currentThread().getName());
         this.vao = new GlVertexArray();
         this.vbo = new IGlVertexArrayBuffer();
         this.ebo = new IGlElementArrayBuffer();

@@ -4,7 +4,6 @@ import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.IWorldGenerator;
-
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
@@ -30,7 +29,8 @@ public class ChunkManager {
     private final Consumer<GenJobInput> genJob;
     private final Consumer<MeshJobInput> meshJob;
 
-    public ChunkManager(WorldConfig config, World world, IWorldGenerator generator, ChunkMesher mesher, IWorldAuthority authority) {
+    public ChunkManager(
+            WorldConfig config, World world, IWorldGenerator generator, ChunkMesher mesher, IWorldAuthority authority) {
         this.world = world;
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
         this.generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
@@ -117,21 +117,21 @@ public class ChunkManager {
 
     private record MeshJobInput(Chunk chunk, ChunkPos pos) {}
 
-//    # Source - https://stackoverflow.com/a/398302
-//    # Posted by Can Berk Güder, modified by community. See post 'Timeline' for change history
-//    # Retrieved 2026-05-31, License - CC BY-SA 3.0
-//
-//    def spiral(X, Y):
-//    x = y = 0
-//    dx = 0
-//    dy = -1
-//            for i in range(max(X, Y)**2):
-//            if (-X/2 < x <= X/2) and (-Y/2 < y <= Y/2):
-//    print (x, y)
-//            # DO STUFF...
-//            if x == y or (x < 0 and x == -y) or (x > 0 and x == 1-y):
-//    dx, dy = -dy, dx
-//    x, y = x+dx, y+dy
+    //    # Source - https://stackoverflow.com/a/398302
+    //    # Posted by Can Berk Güder, modified by community. See post 'Timeline' for change history
+    //    # Retrieved 2026-05-31, License - CC BY-SA 3.0
+    //
+    //    def spiral(X, Y):
+    //    x = y = 0
+    //    dx = 0
+    //    dy = -1
+    //            for i in range(max(X, Y)**2):
+    //            if (-X/2 < x <= X/2) and (-Y/2 < y <= Y/2):
+    //    print (x, y)
+    //            # DO STUFF...
+    //            if x == y or (x < 0 and x == -y) or (x > 0 and x == 1-y):
+    //    dx, dy = -dy, dx
+    //    x, y = x+dx, y+dy
 
     private List<ChunkPos> getChunksInRadius(ChunkPos pos, int radius) {
         List<ChunkPos> result = new ArrayList<>();

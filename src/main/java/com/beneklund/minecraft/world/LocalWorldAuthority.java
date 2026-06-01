@@ -5,7 +5,6 @@ import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.util.AABB;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

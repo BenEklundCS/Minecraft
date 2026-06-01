@@ -1,7 +1,7 @@
 package com.beneklund.minecraft.platform.resources;
 
-import com.beneklund.minecraft.platform.images.ImageData;
 import com.beneklund.minecraft.platform.images.IImageLoader;
+import com.beneklund.minecraft.platform.images.ImageData;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;

@@ -2,8 +2,8 @@ package com.beneklund.minecraft.platform.graphics;
 
 import static org.lwjgl.opengl.GL11.*;
 
-import com.beneklund.minecraft.platform.images.ImageData;
 import com.beneklund.minecraft.platform.images.IImageLoader;
+import com.beneklund.minecraft.platform.images.ImageData;
 import com.beneklund.minecraft.platform.images.StbIImageLoader;
 import java.nio.ByteBuffer;
 

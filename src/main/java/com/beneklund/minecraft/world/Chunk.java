@@ -8,9 +8,7 @@ public class Chunk {
     private final byte[] blocks = new byte[SIZE_XZ * SIZE_XZ * SIZE_Y]; // 16 * 16 * 256 == 65,536
     private final AtomicReference<ChunkState> state = new AtomicReference<>(ChunkState.UNLOADED);
 
-    public Chunk() {
-
-    }
+    public Chunk() {}
 
     public byte getBlock(int x, int y, int z) {
         return this.blocks[index(x, y, z)];

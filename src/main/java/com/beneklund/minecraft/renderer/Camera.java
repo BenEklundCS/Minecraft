@@ -23,18 +23,18 @@ public class Camera {
 
     // Builds view matrix from player's current position and look direction.
     public Matrix4f getViewMatrix() {
-        return new Matrix4f().lookAt(
-                player.getPosition(),
-                new org.joml.Vector3f(player.getPosition()).add(player.getLookDirection()),
-                new org.joml.Vector3f(0, 1, 0));
+        return new Matrix4f()
+                .lookAt(
+                        player.getPosition(),
+                        new org.joml.Vector3f(player.getPosition()).add(player.getLookDirection()),
+                        new org.joml.Vector3f(0, 1, 0));
     }
 
     // Standard perspective projection; aspect recalculated each call so setWindowSize() is always reflected.
     public Matrix4f getProjectionMatrix() {
-        return new Matrix4f().perspective(
-                (float) Math.toRadians(this.fov),
-                this.windowSize.x / this.windowSize.y,
-                NEAR_PLANE, FAR_PLANE);
+        return new Matrix4f()
+                .perspective(
+                        (float) Math.toRadians(this.fov), this.windowSize.x / this.windowSize.y, NEAR_PLANE, FAR_PLANE);
     }
 
     public float getFov() {

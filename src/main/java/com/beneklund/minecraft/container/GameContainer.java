@@ -24,7 +24,6 @@ import com.beneklund.minecraft.world.World;
 import com.beneklund.minecraft.world.WorldConfig;
 import com.beneklund.minecraft.world.gen.IGenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;

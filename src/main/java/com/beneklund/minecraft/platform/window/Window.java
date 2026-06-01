@@ -9,8 +9,8 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
 import com.beneklund.minecraft.container.WindowConfig;
-import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.IRawInputEvent;
+import com.beneklund.minecraft.platform.input.InputEventQueue;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;

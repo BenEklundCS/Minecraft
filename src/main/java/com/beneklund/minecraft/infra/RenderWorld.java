@@ -2,7 +2,6 @@ package com.beneklund.minecraft.infra;
 
 import com.beneklund.minecraft.platform.graphics.GpuMesh;
 import com.beneklund.minecraft.world.ChunkPos;
-
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;

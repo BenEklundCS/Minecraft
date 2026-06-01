@@ -2,8 +2,6 @@ package com.beneklund.minecraft.world;
 
 import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.InputHandler;
-
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,9 +34,15 @@ public class World {
         this.chunks.remove(pos);
     }
 
-    public boolean hasChunk(ChunkPos pos) { return this.chunks.containsKey(pos); }
+    public boolean hasChunk(ChunkPos pos) {
+        return this.chunks.containsKey(pos);
+    }
 
-    public Set<ChunkPos> getChunkPositions() { return this.chunks.keySet(); }
+    public Set<ChunkPos> getChunkPositions() {
+        return this.chunks.keySet();
+    }
 
-    public Set<Map.Entry<ChunkPos, Chunk>> getChunkEntries() { return this.chunks.entrySet(); }
+    public Set<Map.Entry<ChunkPos, Chunk>> getChunkEntries() {
+        return this.chunks.entrySet();
+    }
 }
