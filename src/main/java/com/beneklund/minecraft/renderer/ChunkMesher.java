@@ -110,7 +110,7 @@ public class ChunkMesher {
             }
         }
 
-        return new ChunkMeshData(pos, toFloatArray(verts), toIntArray(idxs), vertCount);
+        return new ChunkMeshData(pos, toFloatArray(verts), toIntArray(idxs), vertCount, chunk);
     }
 
     // A face is culled if its in-chunk neighbor is solid.

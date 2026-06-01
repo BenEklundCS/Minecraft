@@ -95,10 +95,11 @@ public class InputMapper {
     private void processHeldActions(List<IInputAction> actions) {
         float dx = 0f;
         float dz = 0f;
-        if (this.heldKeys.contains(GLFW_KEY_W)) dz += 1f;
-        if (this.heldKeys.contains(GLFW_KEY_S)) dz -= 1f;
-        if (this.heldKeys.contains(GLFW_KEY_A)) dx -= 1f;
-        if (this.heldKeys.contains(GLFW_KEY_D)) dx += 1f;
+        float MOVE_SPEED = 10.0f;
+        if (this.heldKeys.contains(GLFW_KEY_W)) dz += MOVE_SPEED;
+        if (this.heldKeys.contains(GLFW_KEY_S)) dz -= MOVE_SPEED;
+        if (this.heldKeys.contains(GLFW_KEY_A)) dx -= MOVE_SPEED;
+        if (this.heldKeys.contains(GLFW_KEY_D)) dx += MOVE_SPEED;
         if (dx != 0f || dz != 0f) actions.add(new IInputAction.MoveActionI(dx, dz));
     }
 }

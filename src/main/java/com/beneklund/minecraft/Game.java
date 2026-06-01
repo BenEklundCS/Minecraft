@@ -11,8 +11,8 @@ import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.ChunkRenderer;
 import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.world.ChunkState;
 import com.beneklund.minecraft.world.World;
-
 import java.util.List;
 import org.joml.Matrix4f;
 
@@ -87,6 +87,7 @@ public class Game {
             for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {
                 GpuMesh mesh = new GpuMesh(data.vertices(), data.indices());
                 renderWorld.add(data.pos(), mesh);
+                data.chunk().tryTransition(ChunkState.UPLOADED);
             }
 
             // Free GL buffers for chunks that left the load radius.
