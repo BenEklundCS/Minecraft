@@ -9,6 +9,7 @@ import java.util.Properties;
 // The file is intentionally not on the classpath — it's a per-machine dev tool, not a
 // shipped config. Missing file is normal; all getters just return Optional.empty().
 public class LocalConfig {
+    private static final boolean DEFAULT_DEBUG_MODE = false;
     private final Properties props = new Properties();
 
     public LocalConfig() {
@@ -22,5 +23,16 @@ public class LocalConfig {
     // e.g. "music/c418/disc_cat.ogg" — plays on startup if set.
     public Optional<String> startupDisc() {
         return Optional.ofNullable(this.props.getProperty("startup.disc"));
+    }
+
+    public boolean debugEnabled() {
+        Optional<String> prop = Optional.ofNullable(this.props.getProperty("debug.enabled"));
+        if (prop.isPresent()) {
+            String propValue = prop.get();
+            if (propValue.equals("true") || propValue.equals("false")) {
+                return propValue.equals("true");
+            }
+        }
+        return DEFAULT_DEBUG_MODE;
     }
 }

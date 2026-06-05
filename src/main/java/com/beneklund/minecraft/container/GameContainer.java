@@ -3,6 +3,7 @@ package com.beneklund.minecraft.container;
 import com.beneklund.minecraft.Game;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.ChunkManager;
+import com.beneklund.minecraft.infra.ChunkRenderable;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
@@ -15,7 +16,7 @@ import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.ChunkMesher;
-import com.beneklund.minecraft.renderer.ChunkRenderer;
+import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.renderer.TextureAtlas;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.DeltaTracker;
@@ -35,18 +36,18 @@ public class GameContainer {
     public void run() throws IOException {
         // 1. Config - pure data, no platform deps.
         LocalConfig localConfig = new LocalConfig();
-        WindowConfig config = new WindowConfig("Minecraft", 1920, 1080, false, Color.SKY);
+        WindowConfig config = new WindowConfig("Minecraft", 1200, 800, false, Color.SKY, localConfig.debugEnabled());
 
         // 2. Input plumbing - pure Java, no GLFW/GL yet.
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = new InputMapper(queue);
 
         // 3. Pre-init platform objects - constructed but not yet active.
-        CameraConfig cameraConfig = new CameraConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 70.0f);
-        PlayerConfig playerConfig = new PlayerConfig(5.0f);
-        Player player = new Player(cameraConfig.startPosition(), playerConfig.movementSpeed());
-        player.look(0, cameraConfig.startPitch());
-        Camera camera = new Camera(config, player, cameraConfig.fov());
+        CameraConfig cameraConfig = new CameraConfig(70.0f);
+        PlayerConfig playerConfig = new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 5.0f);
+        Camera camera = new Camera(config, cameraConfig);
+        Player player = new Player(playerConfig.startPosition(), playerConfig.movementSpeed(), camera);
+        player.look(0, playerConfig.startPitch());
         Window window = new Window(config, queue);
         InputHandler handler = new InputHandler(window, camera);
         DeltaTracker delta = new DeltaTracker(window::getTime);
@@ -60,8 +61,9 @@ public class GameContainer {
         JsonIResourcePack resourcePack = new JsonIResourcePack("/packs/faithful/pack.json", new StbIImageLoader());
         TextureAtlas atlas = new TextureAtlas(resourcePack);
         BlockRegistry registry = BlockRegistry.createDefault();
-        ChunkRenderer chunkRenderer = new ChunkRenderer(atlas);
         RenderWorld renderWorld = new RenderWorld();
+        ChunkRenderable chunkRenderable = new ChunkRenderable(renderWorld, atlas);
+        Renderer renderer = new Renderer(List.of(chunkRenderable));
 
         // 6. Audio - OpenAL is lazy-initialized on first play(), but construct after GL
         //    so the window is confirmed healthy before we open the audio device.
@@ -76,11 +78,11 @@ public class GameContainer {
         WorldGenerator worldGen = new WorldGenerator(registry, generationSpecs);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         ChunkManager chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority);
-        new Game(window, chunkRenderer, chunkManager, renderWorld, camera, player, world, delta, mapper).run();
+        new Game(window, renderer, chunkManager, renderWorld, camera, player, world, delta, mapper).run();
 
         // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).
         music.shutdown();
-        chunkRenderer.delete();
+        renderer.delete();
         atlas.delete();
         window.shutdown();
     }

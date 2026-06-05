@@ -26,8 +26,8 @@ public class ChunkManager {
     private final ConcurrentLinkedQueue<ChunkMeshData> uploadQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<ChunkPos> unloadQueue = new ConcurrentLinkedQueue<>();
 
-    private final Consumer<GenJobInput> genJob;
-    private final Consumer<MeshJobInput> meshJob;
+    private final Consumer<JobInput> genJob;
+    private final Consumer<JobInput> meshJob;
 
     public ChunkManager(
             WorldConfig config, World world, IWorldGenerator generator, ChunkMesher mesher, IWorldAuthority authority) {
@@ -35,18 +35,18 @@ public class ChunkManager {
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
         this.generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
         this.meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
-        this.meshJob = (MeshJobInput input) -> {
+        this.meshJob = (JobInput input) -> {
             if (!input.chunk.tryTransition(ChunkState.MESHING)) return;
             ChunkMeshData meshData = mesher.mesh(input.pos, input.chunk);
             if (!input.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
             uploadQueue.add(meshData);
         };
-        this.genJob = (GenJobInput genJobInput) -> {
+        this.genJob = (JobInput genJobInput) -> {
             if (!genJobInput.chunk.tryTransition(ChunkState.GENERATING)) return;
             generator.generate(genJobInput.pos, config.seed(), genJobInput.chunk);
             authority.markCardinalNeighborsDirty(genJobInput.pos);
             if (!genJobInput.chunk.tryTransition(ChunkState.QUEUED_MESH)) return;
-            meshingPool.submit(() -> meshJob.accept(new MeshJobInput(genJobInput.chunk, genJobInput.pos)));
+            meshingPool.submit(() -> meshJob.accept(new JobInput(genJobInput.chunk, genJobInput.pos)));
         };
     }
 
@@ -71,7 +71,7 @@ public class ChunkManager {
                 Chunk chunk = new Chunk();
                 this.world.addChunk(chunkPos, chunk);
                 if (!chunk.tryTransition(ChunkState.QUEUED_GEN)) continue;
-                this.generationPool.submit(() -> genJob.accept(new GenJobInput(chunk, chunkPos)));
+                this.generationPool.submit(() -> genJob.accept(new JobInput(chunk, chunkPos)));
             }
         }
         // DIRTY
@@ -80,7 +80,7 @@ public class ChunkManager {
             ChunkPos pos = entry.getKey();
             if (chunk.getState() == ChunkState.DIRTY) {
                 if (chunk.tryTransition(ChunkState.QUEUED_MESH)) {
-                    this.meshingPool.submit(() -> meshJob.accept(new MeshJobInput(chunk, pos)));
+                    this.meshingPool.submit(() -> meshJob.accept(new JobInput(chunk, pos)));
                 }
             }
         }
@@ -113,9 +113,7 @@ public class ChunkManager {
         return batch;
     }
 
-    private record GenJobInput(Chunk chunk, ChunkPos pos) {}
-
-    private record MeshJobInput(Chunk chunk, ChunkPos pos) {}
+    private record JobInput(Chunk chunk, ChunkPos pos) {}
 
     //    # Source - https://stackoverflow.com/a/398302
     //    # Posted by Can Berk Güder, modified by community. See post 'Timeline' for change history

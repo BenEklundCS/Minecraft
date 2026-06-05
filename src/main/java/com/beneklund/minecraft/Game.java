@@ -9,23 +9,20 @@ import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
-import com.beneklund.minecraft.renderer.ChunkRenderer;
+import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.world.ChunkState;
 import com.beneklund.minecraft.world.World;
 import java.util.List;
-import org.joml.Matrix4f;
 
 // Per-frame update/render loop. Drives player input, chunk streaming, GPU uploads, and rendering.
 public class Game {
 
-    // Scales raw mouse pixel delta to degrees. Lives here — Camera shouldn't know the input device.
-    private static final float MOUSE_SENSITIVITY = 0.15f;
     // Cap chunk uploads per frame to avoid hitching when many chunks arrive at once.
     private static final int MAX_UPLOADS_PER_FRAME = 4;
 
     private final Window window;
-    private final ChunkRenderer chunkRenderer;
+    private final Renderer renderer;
     private final ChunkManager chunkManager;
     private final RenderWorld renderWorld;
     private final Camera camera;
@@ -36,7 +33,7 @@ public class Game {
 
     public Game(
             Window window,
-            ChunkRenderer chunkRenderer,
+            Renderer renderer,
             ChunkManager chunkManager,
             RenderWorld renderWorld,
             Camera camera,
@@ -45,7 +42,7 @@ public class Game {
             DeltaTracker delta,
             InputMapper mapper) {
         this.window = window;
-        this.chunkRenderer = chunkRenderer;
+        this.renderer = renderer;
         this.chunkManager = chunkManager;
         this.renderWorld = renderWorld;
         this.camera = camera;
@@ -72,16 +69,7 @@ public class Game {
 
             world.update(actions, delta.getDelta());
             chunkManager.tick(player.getChunkPos());
-
-            for (var action : actions) {
-                switch (action) {
-                    case IInputAction.MoveActionI(float dx, float dz) ->
-                        player.moveRelative(dz, dx, (float) delta.getDelta());
-                    case IInputAction.LookActionI(float dx, float dy) ->
-                        player.look(dx * MOUSE_SENSITIVITY, dy * MOUSE_SENSITIVITY);
-                    default -> {}
-                }
-            }
+            player.tick(actions, delta.getDelta());
 
             // Upload at most MAX_UPLOADS_PER_FRAME new meshes — GpuMesh asserts main thread.
             for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {
@@ -96,11 +84,8 @@ public class Game {
                 if (mesh != null) mesh.delete();
             }
 
-            Matrix4f view = camera.getViewMatrix();
-            Matrix4f projection = camera.getProjectionMatrix();
-
             window.beginFrame();
-            chunkRenderer.render(renderWorld, view, projection);
+            renderer.draw(camera);
             window.endFrame();
         }
     }

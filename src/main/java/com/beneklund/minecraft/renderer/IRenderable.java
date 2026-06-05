@@ -1,4 +1,9 @@
 package com.beneklund.minecraft.renderer;
 
-// Phase 13 stub — things that can produce a DrawCall will implement this.
-public interface IRenderable {}
+import java.util.List;
+
+public interface IRenderable {
+    List<DrawCall> getDrawCalls(Camera camera);
+
+    default void delete() {}
+}

@@ -1,4 +1,6 @@
 package com.beneklund.minecraft.renderer;
 
-// Phase 13 stub — will carry a GpuMesh reference and shader/texture bindings for the draw pipeline.
-public record DrawCall() {}
+import com.beneklund.minecraft.platform.graphics.GpuMesh;
+import org.joml.Matrix4f;
+
+public record DrawCall(GpuMesh mesh, Matrix4f transform, ShaderProgram shader) {}

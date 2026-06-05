@@ -142,13 +142,16 @@ public class Window {
         glfwMakeContextCurrent(this.window);
         glfwSwapInterval(this.config.vsync() ? 1 : 0);
         GL.createCapabilities();
-        GLUtil.setupDebugMessageCallback();
+        if (config.debugEnabled()) {
+            GLUtil.setupDebugMessageCallback();
+        }
         glClearColor(
                 this.config.clearColor().red(),
                 this.config.clearColor().green(),
                 this.config.clearColor().blue(),
                 this.config.clearColor().alpha());
         glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
         glEnable(GL_CULL_FACE);
     }
 
