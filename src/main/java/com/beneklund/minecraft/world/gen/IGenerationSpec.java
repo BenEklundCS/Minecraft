@@ -13,7 +13,8 @@ public sealed interface IGenerationSpec {
             new OreSpecI(Block.IRON_ORE, 5, 30, 0.005f),
             new TreeSpecI(0.05f, 8),
             new CaveSpecI(0.6, 2, 0.04, 0.5, 5, 400),
-            new BiomeSpecI(1, 0.0005, 0.5, 300));
+            new BiomeSpecI(1, 0.0005, 0.5, 300), // temperature
+            new BiomeSpecI(1, 0.0005, 0.5, 700)); // humidity
 
     // Component type — used inside NoiseLayersSpec, not a spec on its own.
     record NoiseLayerSpec(int octaves, double scale, double persistence, double weight, long seedOffset) {}

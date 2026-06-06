@@ -7,9 +7,8 @@ import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+
+import java.util.*;
 
 // Pure factory: same (ChunkPos, seed) always produces the same Chunk.
 // No mutable state — safe to call from multiple worker threads in parallel.
@@ -28,6 +27,7 @@ public class WorldGenerator implements IWorldGenerator {
     private static final int MIN_SURFACE_Y = 4;
     private static final int MAX_SURFACE_Y = 250;
     private static final int DIRT_DEPTH = 2;
+    private static final int SNOW_LINE = 95;
     private static final long COL_SEED_PRIME_X = 341873128712L;
     private static final long COL_SEED_PRIME_Z = 132897987541L;
 
@@ -38,7 +38,8 @@ public class WorldGenerator implements IWorldGenerator {
     private final IGenerationSpec.TreeSpecI treeSpec;
     private final IGenerationSpec.CaveSpecI caveSpec;
     private final IGenerationSpec.NoiseLayersSpecI noiseLayers;
-    private final IGenerationSpec.BiomeSpecI biomeSpec;
+    private final IGenerationSpec.BiomeSpecI tempSpec;
+    private final IGenerationSpec.BiomeSpecI humidSpec;
 
     // Convenience constructor for tests, uses vanilla-defaults.
     public WorldGenerator(BlockRegistry registry) {
@@ -54,19 +55,20 @@ public class WorldGenerator implements IWorldGenerator {
         IGenerationSpec.NoiseLayersSpecI layers = null;
         IGenerationSpec.TreeSpecI tree = null;
         IGenerationSpec.CaveSpecI cave = null;
-        IGenerationSpec.BiomeSpecI biome = null;
+        List<IGenerationSpec.BiomeSpecI> biomeSpecs = new ArrayList<>();
         for (IGenerationSpec spec : specs) {
             if (spec instanceof IGenerationSpec.OreSpecI ore) ores.add(ore);
             else if (spec instanceof IGenerationSpec.NoiseLayersSpecI n) layers = n;
             else if (spec instanceof IGenerationSpec.TreeSpecI t) tree = t;
             else if (spec instanceof IGenerationSpec.CaveSpecI c) cave = c;
-            else if (spec instanceof IGenerationSpec.BiomeSpecI b) biome = b;
+            else if (spec instanceof IGenerationSpec.BiomeSpecI b) biomeSpecs.add(b);
         }
         this.oreSpecs = ores;
         this.noiseLayers = layers;
         this.treeSpec = tree;
         this.caveSpec = cave;
-        this.biomeSpec = biome;
+        this.tempSpec = biomeSpecs.size() > 0 ? biomeSpecs.get(0) : null;
+        this.humidSpec = biomeSpecs.size() > 1 ? biomeSpecs.get(1) : null;
     }
 
     @Override
@@ -78,9 +80,12 @@ public class WorldGenerator implements IWorldGenerator {
                 int worldX = pos.x() * Chunk.SIZE_XZ + localX;
                 int worldZ = pos.z() * Chunk.SIZE_XZ + localZ;
 
-                int surfaceY = computeSurfaceY(seed, worldX, worldZ);
+                ResolvedBiome biome = selectBiome(
+                        sampleSpec(seed, worldX, worldZ, this.tempSpec),
+                        sampleSpec(seed, worldX, worldZ, this.humidSpec));
+                int surfaceY = computeSurfaceY(seed, worldX, worldZ, biome.data());
                 surfaceHeights[localX + localZ * Chunk.SIZE_XZ] = surfaceY;
-                fillColumn(chunk, localX, localZ, surfaceY);
+                fillColumn(chunk, localX, localZ, surfaceY, biome.type());
                 placeOres(chunk, seed, worldX, worldZ, localX, localZ);
             }
         }
@@ -89,28 +94,43 @@ public class WorldGenerator implements IWorldGenerator {
         carveCaves(chunk, seed, pos);
     }
 
-    private int computeSurfaceY(long seed, int worldX, int worldZ) {
+    private int computeSurfaceY(long seed, int worldX, int worldZ, TerrainProfile biome) {
         double raw = sampleLayer(seed, worldX, worldZ, noiseLayers.continental())
                 + sampleLayer(seed, worldX, worldZ, noiseLayers.erosion())
                 + sampleLayer(seed, worldX, worldZ, noiseLayers.detail());
-        BiomeData biome = selectBiome(sampleSpec(seed, worldX, worldZ, biomeSpec));
         return Math.clamp((int) (biome.baseHeight() + raw * biome.amplitude()), MIN_SURFACE_Y, MAX_SURFACE_Y);
     }
 
     // Adjacent Biome ordinals are geographically adjacent in-world because biomeNoise
     // changes slowly — so the linear mapping produces wide, gradual transitions.
-    private BiomeData selectBiome(double noise) {
+    // dominant is whichever neighbour the noise sample falls closer to, so callers can
+    // make block-identity decisions (surface block type, tree species, etc.) on a clean enum.
+    private ResolvedBiome selectBiome(double tempNoise, double humidNoise) {
         Biome[] biomes = Biome.values();
-        double t = noiseHelper.normalize(noise) * biomes.length;
-        Biome lowerBiome = biomes[Math.min((int) Math.floor(t), biomes.length - 1)];
-        Biome upperBiome = biomes[Math.min((int) Math.ceil(t), biomes.length - 1)];
-        double blend = t - Math.floor(t);
+        double temp = noiseHelper.normalize(tempNoise);
+        double humid = noiseHelper.normalize(humidNoise);
 
-        int baseHeight = (int) lerp(lowerBiome.getBaseHeight(), upperBiome.getBaseHeight(), blend);
-        int amplitude = (int) lerp(lowerBiome.getAmplitude(), upperBiome.getAmplitude(), blend);
-        Color grassColor = Color.lerp(lowerBiome.grassColor(), upperBiome.grassColor(), blend);
-        Color foliageColor = Color.lerp(lowerBiome.foliageColor(), upperBiome.foliageColor(), blend);
-        return new BiomeData(baseHeight, amplitude, grassColor, foliageColor);
+        Biome best = biomes[0];
+        double bestDist = Double.MAX_VALUE;
+        Biome second = biomes[0];
+        double secondDist = Double.MAX_VALUE;
+        for (Biome b : biomes) {
+            double d = Math.pow(b.getTemperature() - temp, 2) + Math.pow(b.getHumidity() - humid, 2);
+            if (d < bestDist) {
+                second = best; secondDist = bestDist;
+                best = b; bestDist = d;
+            } else if (d < secondDist) {
+                second = b; secondDist = d;
+            }
+        }
+
+        // t=0 means fully best, t=0.5 means equidistant between the two closest biomes
+        double t = bestDist / (bestDist + secondDist);
+        int baseHeight = (int) lerp(best.getBaseHeight(), second.getBaseHeight(), t);
+        int amplitude = (int) lerp(best.getAmplitude(), second.getAmplitude(), t);
+        Color grassColor = Color.lerp(best.grassColor(), second.grassColor(), t);
+        Color foliageColor = Color.lerp(best.foliageColor(), second.foliageColor(), t);
+        return new ResolvedBiome(best, new TerrainProfile(baseHeight, amplitude, grassColor, foliageColor));
     }
 
     private double sampleLayer(long seed, int x, int z, IGenerationSpec.NoiseLayerSpec layer) {
@@ -122,26 +142,35 @@ public class WorldGenerator implements IWorldGenerator {
         return noiseHelper.noise2(seed + spec.seedOffset(), x, z, spec.octaves(), spec.persistence(), spec.scale());
     }
 
-    private void fillColumn(Chunk chunk, int localX, int localZ, int surfaceY) {
+    private record BiomeColumnBlocks(byte surface, byte subsurface, byte depth) {}
+
+    private static final Map<Biome, BiomeColumnBlocks> BIOME_BLOCKS = Map.of(
+            Biome.PLAINS,    new BiomeColumnBlocks(Block.GRASS, Block.DIRT,      Block.STONE),
+            Biome.FOREST,    new BiomeColumnBlocks(Block.GRASS, Block.DIRT,      Block.STONE),
+            Biome.MOUNTAINS, new BiomeColumnBlocks(Block.STONE, Block.STONE,     Block.STONE),
+            Biome.DESERT,    new BiomeColumnBlocks(Block.SAND,  Block.SANDSTONE, Block.STONE),
+            Biome.OCEAN,     new BiomeColumnBlocks(Block.SAND,  Block.GRAVEL,    Block.STONE));
+
+    private void fillColumn(Chunk chunk, int localX, int localZ, int surfaceY, Biome biome) {
+        BiomeColumnBlocks blocks = BIOME_BLOCKS.get(biome);
         int stoneTop = surfaceY - DIRT_DEPTH - 1;
-        int dirtBottom = surfaceY - DIRT_DEPTH;
-        int dirtTop = surfaceY - 1;
         int waterStart = surfaceY + 1;
-        byte surfaceBlock = surfaceY > SEA_LEVEL ? Block.GRASS : Block.SAND;
 
         chunk.setBlock(localX, 0, localZ, Block.BEDROCK);
+        for (int y = 1; y <= stoneTop; y++) chunk.setBlock(localX, y, localZ, blocks.depth());
+        chunk.setBlock(localX, surfaceY - DIRT_DEPTH, localZ, blocks.subsurface());
+        chunk.setBlock(localX, surfaceY - 1, localZ, blocks.subsurface());
+        chunk.setBlock(localX, surfaceY, localZ, chooseSurface(surfaceY, biome, blocks));
+        for (int y = waterStart; y <= SEA_LEVEL; y++) chunk.setBlock(localX, y, localZ, Block.WATER);
+    }
 
-        for (int y = 1; y <= stoneTop; y++) {
-            chunk.setBlock(localX, y, localZ, Block.STONE);
+    // Mountains: always stone, snow above SNOW_LINE - height determines surface, not sea level.
+    // Everything else: use biome surface above sea level; sand below (flooded terrain floor).
+    private static byte chooseSurface(int surfaceY, Biome biome, BiomeColumnBlocks blocks) {
+        if (biome == Biome.MOUNTAINS) {
+            return surfaceY >= SNOW_LINE ? Block.SNOW : blocks.surface();
         }
-
-        chunk.setBlock(localX, dirtBottom, localZ, Block.DIRT);
-        chunk.setBlock(localX, dirtTop, localZ, Block.DIRT);
-        chunk.setBlock(localX, surfaceY, localZ, surfaceBlock);
-
-        for (int y = waterStart; y <= SEA_LEVEL; y++) {
-            chunk.setBlock(localX, y, localZ, Block.WATER);
-        }
+        return surfaceY > SEA_LEVEL ? blocks.surface() : Block.SAND;
     }
 
     // Per-column seed derived by XOR-mixing world seed with world coords using large primes.

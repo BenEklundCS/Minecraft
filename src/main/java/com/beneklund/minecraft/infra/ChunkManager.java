@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 // load/unload work. Sits between the game loop and ChunkStore so the loop
 // never blocks on I/O or generation.
 public class ChunkManager {
-    private static final int CHUNK_LOAD_RADIUS = 20;
+    private static final int CHUNK_LOAD_RADIUS = 10;
     // Cap how many new chunks we kick off per tick so a large radius fills in over several
     // frames instead of allocating + queueing the whole square at once. Spiral order means
     // the nearest missing chunks always win the budget first. Real backpressure (bounded

@@ -110,13 +110,154 @@ public class BlockRegistry {
                 Map.entry(
                         Block.SNOW,
                         BlockDef.build(
-                                true,
-                                false,
-                                "snow_top",
-                                "snow_top",
-                                "snow_side",
-                                "snow_side",
-                                "snow_side",
-                                "snow_side"))));
+                                true, false, "snow_top", "snow_top", "snow_side", "snow_side", "snow_side",
+                                "snow_side")),
+                Map.entry(
+                        Block.LAVA,
+                        BlockDef.build(
+                                false, true, "lava_still", "lava_still", "lava_flowing", "lava_flowing",
+                                "lava_flowing", "lava_flowing")),
+                Map.entry(
+                        Block.SANDSTONE,
+                        BlockDef.build(
+                                true, false, "sandstone_top", "sandstone_bottom", "sandstone_side",
+                                "sandstone_side", "sandstone_side", "sandstone_side")),
+                Map.entry(
+                        Block.RED_SAND,
+                        BlockDef.build(true, false, "red_sand", "red_sand", "red_sand", "red_sand", "red_sand",
+                                "red_sand")),
+                Map.entry(
+                        Block.CLAY,
+                        BlockDef.build(true, false, "clay", "clay", "clay", "clay", "clay", "clay")),
+                Map.entry(
+                        Block.OBSIDIAN,
+                        BlockDef.build(true, false, "obsidian", "obsidian", "obsidian", "obsidian", "obsidian",
+                                "obsidian")),
+                Map.entry(
+                        Block.ICE,
+                        BlockDef.build(false, true, "ice", "ice", "ice", "ice", "ice", "ice")),
+                Map.entry(
+                        Block.PACKED_ICE,
+                        BlockDef.build(true, false, "packed_ice", "packed_ice", "packed_ice", "packed_ice",
+                                "packed_ice", "packed_ice")),
+                Map.entry(
+                        Block.ANDESITE,
+                        BlockDef.build(true, false, "andesite", "andesite", "andesite", "andesite", "andesite",
+                                "andesite")),
+                Map.entry(
+                        Block.DIORITE,
+                        BlockDef.build(true, false, "diorite", "diorite", "diorite", "diorite", "diorite",
+                                "diorite")),
+                Map.entry(
+                        Block.GRANITE,
+                        BlockDef.build(true, false, "granite", "granite", "granite", "granite", "granite",
+                                "granite")),
+                Map.entry(
+                        Block.GOLD_ORE,
+                        BlockDef.build(true, false, "gold_ore", "gold_ore", "gold_ore", "gold_ore", "gold_ore",
+                                "gold_ore")),
+                Map.entry(
+                        Block.DIAMOND_ORE,
+                        BlockDef.build(true, false, "diamond_ore", "diamond_ore", "diamond_ore", "diamond_ore",
+                                "diamond_ore", "diamond_ore")),
+                Map.entry(
+                        Block.REDSTONE_ORE,
+                        BlockDef.build(true, false, "redstone_ore", "redstone_ore", "redstone_ore",
+                                "redstone_ore", "redstone_ore", "redstone_ore")),
+                Map.entry(
+                        Block.LAPIS_ORE,
+                        BlockDef.build(true, false, "lapis_ore", "lapis_ore", "lapis_ore", "lapis_ore",
+                                "lapis_ore", "lapis_ore")),
+                Map.entry(
+                        Block.EMERALD_ORE,
+                        BlockDef.build(true, false, "emerald_ore", "emerald_ore", "emerald_ore", "emerald_ore",
+                                "emerald_ore", "emerald_ore")),
+                Map.entry(
+                        Block.MOSSY_COBBLE,
+                        BlockDef.build(true, false, "mossy_cobble", "mossy_cobble", "mossy_cobble",
+                                "mossy_cobble", "mossy_cobble", "mossy_cobble")),
+                Map.entry(
+                        Block.STONE_BRICK,
+                        BlockDef.build(true, false, "stone_bricks", "stone_bricks", "stone_bricks",
+                                "stone_bricks", "stone_bricks", "stone_bricks")),
+                Map.entry(
+                        Block.BRICKS,
+                        BlockDef.build(true, false, "bricks", "bricks", "bricks", "bricks", "bricks", "bricks")),
+                Map.entry(
+                        Block.BIRCH_LOG,
+                        BlockDef.build(true, false, "birch_log_top", "birch_log_top", "birch_log_side",
+                                "birch_log_side", "birch_log_side", "birch_log_side")),
+                Map.entry(
+                        Block.BIRCH_LEAF,
+                        BlockDef.build(false, true, "birch_leaves", "birch_leaves", "birch_leaves",
+                                "birch_leaves", "birch_leaves", "birch_leaves")),
+                Map.entry(
+                        Block.BIRCH_PLANK,
+                        BlockDef.build(true, false, "birch_planks", "birch_planks", "birch_planks",
+                                "birch_planks", "birch_planks", "birch_planks")),
+                Map.entry(
+                        Block.SPRUCE_LOG,
+                        BlockDef.build(true, false, "spruce_log_top", "spruce_log_top", "spruce_log_side",
+                                "spruce_log_side", "spruce_log_side", "spruce_log_side")),
+                Map.entry(
+                        Block.SPRUCE_LEAF,
+                        BlockDef.build(false, true, "spruce_leaves", "spruce_leaves", "spruce_leaves",
+                                "spruce_leaves", "spruce_leaves", "spruce_leaves")),
+                Map.entry(
+                        Block.SPRUCE_PLANK,
+                        BlockDef.build(true, false, "spruce_planks", "spruce_planks", "spruce_planks",
+                                "spruce_planks", "spruce_planks", "spruce_planks")),
+                Map.entry(
+                        Block.JUNGLE_LOG,
+                        BlockDef.build(true, false, "jungle_log_top", "jungle_log_top", "jungle_log_side",
+                                "jungle_log_side", "jungle_log_side", "jungle_log_side")),
+                Map.entry(
+                        Block.JUNGLE_LEAF,
+                        BlockDef.build(false, true, "jungle_leaves", "jungle_leaves", "jungle_leaves",
+                                "jungle_leaves", "jungle_leaves", "jungle_leaves")),
+                Map.entry(
+                        Block.JUNGLE_PLANK,
+                        BlockDef.build(true, false, "jungle_planks", "jungle_planks", "jungle_planks",
+                                "jungle_planks", "jungle_planks", "jungle_planks")),
+                Map.entry(
+                        Block.ACACIA_LOG,
+                        BlockDef.build(true, false, "acacia_log_top", "acacia_log_top", "acacia_log_side",
+                                "acacia_log_side", "acacia_log_side", "acacia_log_side")),
+                Map.entry(
+                        Block.ACACIA_LEAF,
+                        BlockDef.build(false, true, "acacia_leaves", "acacia_leaves", "acacia_leaves",
+                                "acacia_leaves", "acacia_leaves", "acacia_leaves")),
+                Map.entry(
+                        Block.ACACIA_PLANK,
+                        BlockDef.build(true, false, "acacia_planks", "acacia_planks", "acacia_planks",
+                                "acacia_planks", "acacia_planks", "acacia_planks")),
+                Map.entry(
+                        Block.DARK_OAK_LOG,
+                        BlockDef.build(true, false, "dark_oak_log_top", "dark_oak_log_top", "dark_oak_log_side",
+                                "dark_oak_log_side", "dark_oak_log_side", "dark_oak_log_side")),
+                Map.entry(
+                        Block.DARK_OAK_LEAF,
+                        BlockDef.build(false, true, "dark_oak_leaves", "dark_oak_leaves", "dark_oak_leaves",
+                                "dark_oak_leaves", "dark_oak_leaves", "dark_oak_leaves")),
+                Map.entry(
+                        Block.DARK_OAK_PLANK,
+                        BlockDef.build(true, false, "dark_oak_planks", "dark_oak_planks", "dark_oak_planks",
+                                "dark_oak_planks", "dark_oak_planks", "dark_oak_planks")),
+                Map.entry(
+                        Block.COAL_BLOCK,
+                        BlockDef.build(true, false, "coal_block", "coal_block", "coal_block", "coal_block",
+                                "coal_block", "coal_block")),
+                Map.entry(
+                        Block.IRON_BLOCK,
+                        BlockDef.build(true, false, "iron_block", "iron_block", "iron_block", "iron_block",
+                                "iron_block", "iron_block")),
+                Map.entry(
+                        Block.GOLD_BLOCK,
+                        BlockDef.build(true, false, "gold_block", "gold_block", "gold_block", "gold_block",
+                                "gold_block", "gold_block")),
+                Map.entry(
+                        Block.DIAMOND_BLOCK,
+                        BlockDef.build(true, false, "diamond_block", "diamond_block", "diamond_block",
+                                "diamond_block", "diamond_block", "diamond_block"))));
     }
 }
