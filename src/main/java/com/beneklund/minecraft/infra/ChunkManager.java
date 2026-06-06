@@ -16,7 +16,12 @@ import java.util.function.Consumer;
 // load/unload work. Sits between the game loop and ChunkStore so the loop
 // never blocks on I/O or generation.
 public class ChunkManager {
-    private static final int CHUNK_LOAD_RADIUS = 8;
+    private static final int CHUNK_LOAD_RADIUS = 20;
+    // Cap how many new chunks we kick off per tick so a large radius fills in over several
+    // frames instead of allocating + queueing the whole square at once. Spiral order means
+    // the nearest missing chunks always win the budget first. Real backpressure (bounded
+    // upload queue, in-flight cap, eviction) is a later phase.
+    private static final int MAX_LOADS_PER_TICK = 8;
 
     private final World world;
 
@@ -69,12 +74,15 @@ public class ChunkManager {
             }
         }
         // LOAD
+        int loadsThisTick = 0;
         for (ChunkPos chunkPos : chunkPositions) {
+            if (loadsThisTick >= MAX_LOADS_PER_TICK) break;
             if (!this.world.hasChunk(chunkPos)) {
                 Chunk chunk = new Chunk();
                 this.world.addChunk(chunkPos, chunk);
                 if (!chunk.tryTransition(ChunkState.QUEUED_GEN)) continue;
                 this.generationPool.submit(() -> genJob.accept(new JobInput(chunk, chunkPos)));
+                loadsThisTick++;
             }
         }
         // DIRTY
