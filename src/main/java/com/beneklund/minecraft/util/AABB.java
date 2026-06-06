@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.util;
 
+import com.beneklund.minecraft.world.World;
+import java.util.List;
 import org.joml.Vector3f;
 
 // Axis-aligned bounding box: two world-space corners with min <= max on every axis.
@@ -25,6 +27,10 @@ public class AABB {
                 bottomCenter.x + halfWidth,
                 bottomCenter.y + height,
                 bottomCenter.z + halfDepth);
+    }
+
+    public static List<Integer> getBlocksOverlapping(World world) {
+        return List.of(1);
     }
 
     public float minX() {

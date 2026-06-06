@@ -1,4 +1,5 @@
 package com.beneklund.minecraft.util;
+
 import org.joml.Math;
 
 public record Color(float red, float green, float blue, float alpha) {
@@ -18,7 +19,6 @@ public record Color(float red, float green, float blue, float alpha) {
                 (float) Math.lerp(a.red(), b.red(), t),
                 (float) Math.lerp(a.green(), b.green(), t),
                 (float) Math.lerp(a.blue(), b.blue(), t),
-                (float) Math.lerp(a.alpha(), b.alpha(), t)
-        );
+                (float) Math.lerp(a.alpha(), b.alpha(), t));
     }
 }

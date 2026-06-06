@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.world.gen;
 
+import static org.joml.Math.lerp;
+
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.util.Color;
@@ -8,8 +10,6 @@ import com.beneklund.minecraft.world.ChunkPos;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-
-import static org.joml.Math.lerp;
 
 // Pure factory: same (ChunkPos, seed) always produces the same Chunk.
 // No mutable state — safe to call from multiple worker threads in parallel.

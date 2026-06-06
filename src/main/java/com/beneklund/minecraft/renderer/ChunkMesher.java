@@ -112,8 +112,7 @@ public class ChunkMesher {
 
                         if (vertPos + VERTICES_PER_QUAD * FLOATS_PER_VERTEX > verts.length)
                             verts = Arrays.copyOf(verts, verts.length * 2);
-                        if (idxPos + INDICES_PER_QUAD > idxs.length)
-                            idxs = Arrays.copyOf(idxs, idxs.length * 2);
+                        if (idxPos + INDICES_PER_QUAD > idxs.length) idxs = Arrays.copyOf(idxs, idxs.length * 2);
 
                         float[] uvs = getUVs(def, dir);
                         Color tint = getTint(blockId, dir);

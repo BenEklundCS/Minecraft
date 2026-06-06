@@ -19,10 +19,12 @@ public class RenderWorld {
     public void add(ChunkPos pos, GpuMesh mesh) {
         float x = pos.x() * Chunk.SIZE_XZ;
         float z = pos.z() * Chunk.SIZE_XZ;
-        meshes.put(pos, new Entry(
-                mesh,
-                new Matrix4f().translation(x, 0, z),
-                new AABB(x, 0, z, x + Chunk.SIZE_XZ, Chunk.SIZE_Y, z + Chunk.SIZE_XZ)));
+        meshes.put(
+                pos,
+                new Entry(
+                        mesh,
+                        new Matrix4f().translation(x, 0, z),
+                        new AABB(x, 0, z, x + Chunk.SIZE_XZ, Chunk.SIZE_Y, z + Chunk.SIZE_XZ)));
     }
 
     // Removes and returns the entry so the caller can delete its GL buffers.
