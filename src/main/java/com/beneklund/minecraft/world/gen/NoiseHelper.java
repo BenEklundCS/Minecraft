@@ -2,6 +2,7 @@ package com.beneklund.minecraft.world.gen;
 
 import com.beneklund.minecraft.util.OpenSimplex2;
 
+// https://en.wikipedia.org/wiki/Fractional_Brownian_motion
 // Fractal (octave) noise on top of OpenSimplex2.
 //
 // One noise sample gives a smooth blobby field. "Octaves" layer multiple samples

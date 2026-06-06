@@ -29,6 +29,9 @@ public class ChunkManager {
     private final Consumer<JobInput> genJob;
     private final Consumer<JobInput> meshJob;
 
+    private ChunkPos lastChunkPosition;
+    private List<ChunkPos> lastChunksInRadius;
+
     public ChunkManager(
             WorldConfig config, World world, IWorldGenerator generator, ChunkMesher mesher, IWorldAuthority authority) {
         this.world = world;
@@ -132,6 +135,7 @@ public class ChunkManager {
     //    x, y = x+dx, y+dy
 
     private List<ChunkPos> getChunksInRadius(ChunkPos pos, int radius) {
+        if (pos == this.lastChunkPosition) return this.lastChunksInRadius;
         List<ChunkPos> result = new ArrayList<>();
         int offsetX = 0;
         int offsetZ = 0;
@@ -150,6 +154,7 @@ public class ChunkManager {
             offsetX = offsetX + stepX;
             offsetZ = offsetZ + stepZ;
         }
+        this.lastChunksInRadius = result;
         return result;
     }
 

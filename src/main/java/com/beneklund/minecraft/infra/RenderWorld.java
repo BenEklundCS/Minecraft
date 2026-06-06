@@ -1,33 +1,40 @@
 package com.beneklund.minecraft.infra;
 
 import com.beneklund.minecraft.platform.graphics.GpuMesh;
+import com.beneklund.minecraft.util.AABB;
+import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import org.joml.Matrix4f;
 
 // Main-thread-only store of uploaded chunk meshes. Workers never touch this —
 // GpuMesh creation and deletion must happen on the GL thread.
 public class RenderWorld {
-    private final HashMap<ChunkPos, GpuMesh> meshes = new HashMap<>();
+    public record Entry(GpuMesh mesh, Matrix4f model, AABB bounds) {}
 
-    // Stores an uploaded mesh keyed by chunk position. Overwrites any previous mesh at that pos.
+    private final HashMap<ChunkPos, Entry> meshes = new HashMap<>();
+
+    // Computes and stores the model matrix and bounds once at upload time.
     public void add(ChunkPos pos, GpuMesh mesh) {
-        meshes.put(pos, mesh);
+        float x = pos.x() * Chunk.SIZE_XZ;
+        float z = pos.z() * Chunk.SIZE_XZ;
+        meshes.put(pos, new Entry(
+                mesh,
+                new Matrix4f().translation(x, 0, z),
+                new AABB(x, 0, z, x + Chunk.SIZE_XZ, Chunk.SIZE_Y, z + Chunk.SIZE_XZ)));
     }
 
-    // Removes and returns the mesh so the caller can delete its GL buffers.
-    public GpuMesh remove(ChunkPos pos) {
+    // Removes and returns the entry so the caller can delete its GL buffers.
+    public Entry remove(ChunkPos pos) {
         return meshes.remove(pos);
     }
 
-    public Collection<GpuMesh> getAll() {
+    public Collection<Entry> getAll() {
         return meshes.values();
     }
 
-    // Used by ChunkRenderer to get pos alongside mesh for per-chunk model matrix.
-    public Set<Map.Entry<ChunkPos, GpuMesh>> getEntries() {
-        return meshes.entrySet();
+    public Collection<Entry> getEntries() {
+        return meshes.values();
     }
 }

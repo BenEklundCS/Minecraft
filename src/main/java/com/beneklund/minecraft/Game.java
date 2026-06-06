@@ -80,8 +80,8 @@ public class Game {
 
             // Free GL buffers for chunks that left the load radius.
             for (var pos : chunkManager.drainUnloadQueue()) {
-                GpuMesh mesh = renderWorld.remove(pos);
-                if (mesh != null) mesh.delete();
+                RenderWorld.Entry entry = renderWorld.remove(pos);
+                if (entry != null) entry.mesh().delete();
             }
 
             window.beginFrame();

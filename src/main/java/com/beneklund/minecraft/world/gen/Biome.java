@@ -18,39 +18,33 @@ public enum Biome {
     // grassColor / foliageColor are the RGB multipliers applied to greyscale grass_top
     // and leaf textures in the Faithful pack. Values are approximate vanilla equivalents
     // per biome — tune them visually as needed.
-    PLAINS(64, 15, new Color(0.57f, 0.74f, 0.35f, 1f), new Color(0.38f, 0.60f, 0.20f, 1f)),
-    FOREST(64, 20, new Color(0.45f, 0.69f, 0.26f, 1f), new Color(0.28f, 0.51f, 0.13f, 1f)),
-    MOUNTAINS(80, 50, new Color(0.60f, 0.72f, 0.42f, 1f), new Color(0.42f, 0.59f, 0.26f, 1f)),
-    DESERT(63, 12, new Color(0.75f, 0.77f, 0.42f, 1f), new Color(0.70f, 0.73f, 0.37f, 1f)),
-    OCEAN(48, 8, new Color(0.56f, 0.74f, 0.39f, 1f), new Color(0.37f, 0.61f, 0.23f, 1f));
+    PLAINS(new BiomeData(64, 15, new Color(0.57f, 0.74f, 0.35f, 1f), new Color(0.38f, 0.60f, 0.20f, 1f))),
+    FOREST(new BiomeData(64, 20, new Color(0.45f, 0.69f, 0.26f, 1f), new Color(0.28f, 0.51f, 0.13f, 1f))),
+    MOUNTAINS(new BiomeData(80, 50, new Color(0.60f, 0.72f, 0.42f, 1f), new Color(0.42f, 0.59f, 0.26f, 1f))),
+    DESERT(new BiomeData(63, 12, new Color(0.75f, 0.77f, 0.42f, 1f), new Color(0.70f, 0.73f, 0.37f, 1f))),
+    OCEAN(new BiomeData(48, 8, new Color(0.56f, 0.74f, 0.39f, 1f), new Color(0.37f, 0.61f, 0.23f, 1f)));
 
-    private final int baseHeight;
-    private final int amplitude;
-    private final Color grassColor;
-    private final Color foliageColor;
+    private final BiomeData data;
 
-    Biome(int baseHeight, int amplitude, Color grassColor, Color foliageColor) {
-        this.baseHeight = baseHeight;
-        this.amplitude = amplitude;
-        this.grassColor = grassColor;
-        this.foliageColor = foliageColor;
+    Biome(BiomeData data) {
+        this.data = data;
     }
 
     public int getAmplitude() {
-        return amplitude;
+        return data.amplitude();
     }
 
     public int getBaseHeight() {
-        return baseHeight;
+        return data.baseHeight();
     }
 
     // Used by ChunkMesher to tint greyscale grass_top and leaf textures.
     // ChunkMesher defaults to PLAINS until chunks carry per-block biome data.
     public Color grassColor() {
-        return grassColor;
+        return data.grassColor();
     }
 
     public Color foliageColor() {
-        return foliageColor;
+        return data.foliageColor();
     }
 }

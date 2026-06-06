@@ -2,11 +2,14 @@ package com.beneklund.minecraft.world.gen;
 
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
+import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+
+import static org.joml.Math.lerp;
 
 // Pure factory: same (ChunkPos, seed) always produces the same Chunk.
 // No mutable state — safe to call from multiple worker threads in parallel.
@@ -90,16 +93,24 @@ public class WorldGenerator implements IWorldGenerator {
         double raw = sampleLayer(seed, worldX, worldZ, noiseLayers.continental())
                 + sampleLayer(seed, worldX, worldZ, noiseLayers.erosion())
                 + sampleLayer(seed, worldX, worldZ, noiseLayers.detail());
-        Biome biome = selectBiome(sampleSpec(seed, worldX, worldZ, biomeSpec));
-        return Math.clamp((int) (biome.getBaseHeight() + raw * biome.getAmplitude()), MIN_SURFACE_Y, MAX_SURFACE_Y);
+        BiomeData biome = selectBiome(sampleSpec(seed, worldX, worldZ, biomeSpec));
+        return Math.clamp((int) (biome.baseHeight() + raw * biome.amplitude()), MIN_SURFACE_Y, MAX_SURFACE_Y);
     }
 
     // Adjacent Biome ordinals are geographically adjacent in-world because biomeNoise
     // changes slowly — so the linear mapping produces wide, gradual transitions.
-    private Biome selectBiome(double noise) {
+    private BiomeData selectBiome(double noise) {
         Biome[] biomes = Biome.values();
-        int index = Math.clamp((int) (noiseHelper.normalize(noise) * biomes.length), 0, biomes.length - 1);
-        return biomes[index];
+        double t = noiseHelper.normalize(noise) * biomes.length;
+        Biome lowerBiome = biomes[Math.min((int) Math.floor(t), biomes.length - 1)];
+        Biome upperBiome = biomes[Math.min((int) Math.ceil(t), biomes.length - 1)];
+        double blend = t - Math.floor(t);
+
+        int baseHeight = (int) lerp(lowerBiome.getBaseHeight(), upperBiome.getBaseHeight(), blend);
+        int amplitude = (int) lerp(lowerBiome.getAmplitude(), upperBiome.getAmplitude(), blend);
+        Color grassColor = Color.lerp(lowerBiome.grassColor(), upperBiome.grassColor(), blend);
+        Color foliageColor = Color.lerp(lowerBiome.foliageColor(), upperBiome.foliageColor(), blend);
+        return new BiomeData(baseHeight, amplitude, grassColor, foliageColor);
     }
 
     private double sampleLayer(long seed, int x, int z, IGenerationSpec.NoiseLayerSpec layer) {
