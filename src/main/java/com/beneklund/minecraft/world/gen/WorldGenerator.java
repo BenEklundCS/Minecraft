@@ -7,7 +7,6 @@ import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
-
 import java.util.*;
 
 // Pure factory: same (ChunkPos, seed) always produces the same Chunk.
@@ -117,10 +116,13 @@ public class WorldGenerator implements IWorldGenerator {
         for (Biome b : biomes) {
             double d = Math.pow(b.getTemperature() - temp, 2) + Math.pow(b.getHumidity() - humid, 2);
             if (d < bestDist) {
-                second = best; secondDist = bestDist;
-                best = b; bestDist = d;
+                second = best;
+                secondDist = bestDist;
+                best = b;
+                bestDist = d;
             } else if (d < secondDist) {
-                second = b; secondDist = d;
+                second = b;
+                secondDist = d;
             }
         }
 
@@ -145,11 +147,11 @@ public class WorldGenerator implements IWorldGenerator {
     private record BiomeColumnBlocks(byte surface, byte subsurface, byte depth) {}
 
     private static final Map<Biome, BiomeColumnBlocks> BIOME_BLOCKS = Map.of(
-            Biome.PLAINS,    new BiomeColumnBlocks(Block.GRASS, Block.DIRT,      Block.STONE),
-            Biome.FOREST,    new BiomeColumnBlocks(Block.GRASS, Block.DIRT,      Block.STONE),
-            Biome.MOUNTAINS, new BiomeColumnBlocks(Block.STONE, Block.STONE,     Block.STONE),
-            Biome.DESERT,    new BiomeColumnBlocks(Block.SAND,  Block.SANDSTONE, Block.STONE),
-            Biome.OCEAN,     new BiomeColumnBlocks(Block.SAND,  Block.GRAVEL,    Block.STONE));
+            Biome.PLAINS, new BiomeColumnBlocks(Block.GRASS, Block.DIRT, Block.STONE),
+            Biome.FOREST, new BiomeColumnBlocks(Block.GRASS, Block.DIRT, Block.STONE),
+            Biome.MOUNTAINS, new BiomeColumnBlocks(Block.STONE, Block.STONE, Block.STONE),
+            Biome.DESERT, new BiomeColumnBlocks(Block.SAND, Block.SANDSTONE, Block.STONE),
+            Biome.OCEAN, new BiomeColumnBlocks(Block.SAND, Block.GRAVEL, Block.STONE));
 
     private void fillColumn(Chunk chunk, int localX, int localZ, int surfaceY, Biome biome) {
         BiomeColumnBlocks blocks = BIOME_BLOCKS.get(biome);
