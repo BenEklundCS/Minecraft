@@ -18,6 +18,7 @@ import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.ChunkMesher;
+import com.beneklund.minecraft.renderer.DebugRenderer;
 import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.renderer.TextureAtlas;
 import com.beneklund.minecraft.util.Color;
@@ -67,7 +68,8 @@ public class GameContainer {
         BlockRegistry registry = BlockRegistry.createDefault();
         RenderWorld renderWorld = new RenderWorld();
         ChunkRenderable chunkRenderable = new ChunkRenderable(renderWorld, atlas);
-        Renderer renderer = new Renderer(List.of(chunkRenderable));
+        DebugRenderer debugRenderer = new DebugRenderer();
+        Renderer renderer = new Renderer(List.of(chunkRenderable, debugRenderer));
 
         // 6. Audio - OpenAL is lazy-initialized on first play(), but construct after GL
         //    so the window is confirmed healthy before we open the audio device.
@@ -102,7 +104,8 @@ public class GameContainer {
                         world,
                         authority,
                         delta,
-                        mapper)
+                        mapper,
+                        debugRenderer)
                 .run();
 
         // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).

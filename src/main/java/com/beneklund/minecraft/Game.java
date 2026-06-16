@@ -1,5 +1,7 @@
 package com.beneklund.minecraft;
 
+import static com.beneklund.minecraft.util.Log.LOGGER;
+
 import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.IInputAction;
@@ -10,19 +12,23 @@ import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
+import com.beneklund.minecraft.renderer.DebugRenderer;
 import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.util.Raycast;
+import com.beneklund.minecraft.util.RaycastResult;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkState;
 import com.beneklund.minecraft.world.IWorldAuthority;
 import com.beneklund.minecraft.world.World;
 import java.util.List;
+import org.joml.Vector3f;
 
 // Per-frame update/render loop. Drives player input, chunk streaming, GPU uploads, and rendering.
 public class Game {
 
-    // Cap chunk uploads per frame to avoid hitching when many chunks arrive at once.
     private static final int MAX_UPLOADS_PER_FRAME = 4;
+    private static final float REACH = 8.0f;
 
     private final Window window;
     private final Renderer renderer;
@@ -35,6 +41,7 @@ public class Game {
     private final IWorldAuthority authority;
     private final DeltaTracker delta;
     private final InputMapper mapper;
+    private final DebugRenderer debugRenderer;
 
     public Game(
             Window window,
@@ -47,7 +54,8 @@ public class Game {
             World world,
             IWorldAuthority authority,
             DeltaTracker delta,
-            InputMapper mapper) {
+            InputMapper mapper,
+            DebugRenderer debugRenderer) {
         this.window = window;
         this.renderer = renderer;
         this.chunkManager = chunkManager;
@@ -59,6 +67,7 @@ public class Game {
         this.authority = authority;
         this.delta = delta;
         this.mapper = mapper;
+        this.debugRenderer = debugRenderer;
     }
 
     public void run() {
@@ -78,6 +87,21 @@ public class Game {
 
             world.update(actions, delta.getDelta());
             chunkManager.tick(player.getChunkPos());
+
+            for (var action : actions) {
+                if (action == IInputAction.Simple.BREAK_BLOCK) {
+                    Vector3f eyePos = new Vector3f(player.getPosition()).add(0, Player.EYE_HEIGHT, 0);
+                    Vector3f lookDir = player.getLookDirection();
+                    RaycastResult result = Raycast.cast(eyePos, lookDir, authority, REACH);
+                    LOGGER.info(
+                            "Raycast hit={} blockPos={} face={} distance={}",
+                            result.hit(),
+                            result.blockPos(),
+                            result.hitFace(),
+                            String.format("%.2f", result.distance()));
+                    debugRenderer.updateFromRaycast(eyePos, lookDir, result);
+                }
+            }
             // input sets intent (velocity, jump), physics integrates + resolves collisions,
             // then the camera follows the player's settled position. Hold physics until the
             // player's chunk is generated so we don't fall through not-yet-filled terrain.

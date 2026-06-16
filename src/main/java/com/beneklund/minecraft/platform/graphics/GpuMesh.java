@@ -6,7 +6,7 @@ import static org.lwjgl.opengl.GL11.glDrawElements;
 
 // Holds the VAO/VBO/EBO for one uploaded chunk mesh. Must only be created and deleted
 // on the main (GL) thread. Workers produce ChunkMeshData; this class is the GL result.
-public class GpuMesh {
+public class GpuMesh implements Mesh {
 
     private final GlVertexArray vao;
     private final IGlVertexArrayBuffer vbo;

@@ -20,7 +20,7 @@ public class Player implements IPhysicsBody {
     // Upward velocity applied on jump. ~9 m/s against 28 m/s² gravity clears ~1.2 blocks.
     private static final float JUMP_VELOCITY = 9.0f;
     // Eye sits above the feet (position). Matches Minecraft's 1.62 eye height.
-    private static final float EYE_HEIGHT = 1.62f;
+    public static final float EYE_HEIGHT = 1.62f;
 
     private final Vector3f position;
     private final Vector3f velocity;
