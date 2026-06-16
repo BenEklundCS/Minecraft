@@ -1,8 +1,9 @@
 package com.beneklund.minecraft.util;
 
-import com.beneklund.minecraft.world.World;
+import java.util.ArrayList;
 import java.util.List;
 import org.joml.Vector3f;
+import org.joml.Vector3i;
 
 // Axis-aligned bounding box: two world-space corners with min <= max on every axis.
 // Used for frustum culling (chunk bounds) now, and entity/block collision later.
@@ -29,8 +30,30 @@ public class AABB {
                 bottomCenter.z + halfDepth);
     }
 
-    public static List<Integer> getBlocksOverlapping(World world) {
-        return List.of(1);
+    // Every integer block cell this box actually penetrates. A block at (x,y,z) is the
+    // unit cube [x,x+1]. The low bound is floor(min); the high bound is ceil(max)-1, which
+    // is a half-open upper edge: a face resting exactly on an integer (max == 1.0) touches
+    // the next cell but shares no volume with it, so we exclude it — otherwise a body
+    // snapped flush against a wall would report a phantom collision on the other axes.
+    // Math.floor (not an int cast) so negative coords map down, not toward zero.
+    // Pure geometry — whether a cell is solid is the caller's problem.
+    public List<Vector3i> getBlocksOverlapping() {
+        int minBx = (int) Math.floor(this.min.x);
+        int maxBx = (int) Math.ceil(this.max.x) - 1;
+        int minBy = (int) Math.floor(this.min.y);
+        int maxBy = (int) Math.ceil(this.max.y) - 1;
+        int minBz = (int) Math.floor(this.min.z);
+        int maxBz = (int) Math.ceil(this.max.z) - 1;
+
+        List<Vector3i> cells = new ArrayList<>();
+        for (int x = minBx; x <= maxBx; x++) {
+            for (int y = minBy; y <= maxBy; y++) {
+                for (int z = minBz; z <= maxBz; z++) {
+                    cells.add(new Vector3i(x, y, z));
+                }
+            }
+        }
+        return cells;
     }
 
     public float minX() {

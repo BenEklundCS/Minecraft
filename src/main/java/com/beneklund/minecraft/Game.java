@@ -6,12 +6,15 @@ import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.platform.graphics.GpuMesh;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
+import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkState;
+import com.beneklund.minecraft.world.IWorldAuthority;
 import com.beneklund.minecraft.world.World;
 import java.util.List;
 
@@ -27,7 +30,9 @@ public class Game {
     private final RenderWorld renderWorld;
     private final Camera camera;
     private final Player player;
+    private final Physics physics;
     private final World world;
+    private final IWorldAuthority authority;
     private final DeltaTracker delta;
     private final InputMapper mapper;
 
@@ -38,7 +43,9 @@ public class Game {
             RenderWorld renderWorld,
             Camera camera,
             Player player,
+            Physics physics,
             World world,
+            IWorldAuthority authority,
             DeltaTracker delta,
             InputMapper mapper) {
         this.window = window;
@@ -47,7 +54,9 @@ public class Game {
         this.renderWorld = renderWorld;
         this.camera = camera;
         this.player = player;
+        this.physics = physics;
         this.world = world;
+        this.authority = authority;
         this.delta = delta;
         this.mapper = mapper;
     }
@@ -69,7 +78,14 @@ public class Game {
 
             world.update(actions, delta.getDelta());
             chunkManager.tick(player.getChunkPos());
-            player.tick(actions, delta.getDelta());
+            // input sets intent (velocity, jump), physics integrates + resolves collisions,
+            // then the camera follows the player's settled position. Hold physics until the
+            // player's chunk is generated so we don't fall through not-yet-filled terrain.
+            player.tick(actions);
+            if (physicsReady()) {
+                physics.update(player, authority, delta.getDelta());
+            }
+            player.syncCamera();
 
             // Upload at most MAX_UPLOADS_PER_FRAME new meshes — GpuMesh asserts main thread.
             for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {
@@ -88,5 +104,18 @@ public class Game {
             renderer.draw(camera);
             window.endFrame();
         }
+    }
+
+    // ChunkManager inserts an empty chunk into the World before a worker thread fills it,
+    // so "present" isn't "collidable". Only run physics once the player's chunk has been
+    // generated — otherwise gravity drags the player down through air that's about to
+    // become solid ground, leaving them buried.
+    private boolean physicsReady() {
+        Chunk chunk = world.getChunk(player.getChunkPos());
+        if (chunk == null) return false;
+        return switch (chunk.getState()) {
+            case UNLOADED, QUEUED_GEN, GENERATING -> false;
+            default -> true;
+        };
     }
 }

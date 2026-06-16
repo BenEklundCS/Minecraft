@@ -98,10 +98,13 @@ public class ChunkManager {
     }
 
     // Stops accepting new jobs and waits up to timeoutSeconds for in-flight work to finish.
+    // Drain generation fully before touching meshing: a gen job's last act is to submit a
+    // mesh job, so shutting meshing down first would get those submissions rejected and
+    // leave chunks stuck short of READY_TO_UPLOAD.
     public void shutdown(long timeoutSeconds) throws InterruptedException {
         generationPool.shutdown();
-        meshingPool.shutdown();
         generationPool.awaitTermination(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+        meshingPool.shutdown();
         meshingPool.awaitTermination(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
     }
 

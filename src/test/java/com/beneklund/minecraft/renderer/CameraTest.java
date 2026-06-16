@@ -2,6 +2,7 @@ package com.beneklund.minecraft.renderer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.beneklund.minecraft.container.CameraConfig;
 import com.beneklund.minecraft.container.WindowConfig;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.util.Color;
@@ -10,7 +11,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class CameraTest {
-    private static final WindowConfig CONFIG = new WindowConfig("test", 1920, 1080, false, new Color(0, 0, 0, 0));
+    private static final WindowConfig CONFIG =
+            new WindowConfig("test", 1920, 1080, false, new Color(0, 0, 0, 0), false);
     private static final float EPSILON = 1e-5f;
 
     private Player player;
@@ -18,8 +20,8 @@ class CameraTest {
 
     @BeforeEach
     void setUp() {
-        player = new Player(new Vector3f(0, 0, 0), 5.0f);
-        camera = new Camera(CONFIG, player, 90f);
+        camera = new Camera(CONFIG, new CameraConfig(90f));
+        player = new Player(new Vector3f(0, 0, 0), 5.0f, camera);
     }
 
     // getLookDirection() at yaw=0, pitch=0 should point along +Z (forward)
@@ -86,11 +88,12 @@ class CameraTest {
         assertEquals(m00Before * 2f, m00After, EPSILON);
     }
 
-    // moveRelative should update the view matrix (position changed)
+    // moving the player and syncing should update the camera's view matrix
     @Test
-    void moveRelative_forward_changesViewMatrix() {
+    void syncCamera_afterMove_changesViewMatrix() {
         var before = camera.getViewMatrix();
-        player.moveRelative(1f, 0f, 1f);
+        player.setPosition(new Vector3f(1f, 0f, 1f));
+        player.syncCamera();
         var after = camera.getViewMatrix();
         assertNotEquals(before, after);
     }

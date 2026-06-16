@@ -17,6 +17,8 @@ public class Player implements IPhysicsBody {
     private static final float WIDTH = 0.6f;
     private static final float HEIGHT = 1.6f;
     private static final float DEPTH = 0.6f;
+    // Upward velocity applied on jump. ~9 m/s against 28 m/s² gravity clears ~1.2 blocks.
+    private static final float JUMP_VELOCITY = 9.0f;
     // Eye sits above the feet (position). Matches Minecraft's 1.62 eye height.
     private static final float EYE_HEIGHT = 1.62f;
 
@@ -98,24 +100,32 @@ public class Player implements IPhysicsBody {
         return getLookDirection().cross(new Vector3f(0, 1, 0)).normalize();
     }
 
-    // Consume this frame's input: free-fly movement and mouse look, then push state to the camera.
-    // Free-fly writes position directly — Physics takes over movement in a later phase.
-    public void tick(List<IInputAction> actions, float dt) {
+    // Consume this frame's input: turn movement keys into a horizontal velocity, apply
+    // look, and trigger a jump. Physics integrates this velocity and resolves collisions;
+    // syncCamera() runs afterward (in the game loop) once the new position is settled.
+    public void tick(List<IInputAction> actions) {
+        Vector3f wish = new Vector3f(); // desired horizontal heading in world space
         for (IInputAction action : actions) {
             switch (action) {
-                case IInputAction.MoveActionI(float dx, float dz) -> moveRelative(dz, dx, dt);
+                case IInputAction.MoveActionI(float dx, float dz) -> {
+                    Vector3f forward = getLookDirection();
+                    forward.y = 0; // walk on the ground plane — looking up/down can't change speed
+                    if (forward.lengthSquared() > 0) forward.normalize();
+                    wish.fma(dz, forward).fma(dx, getRight());
+                }
                 case IInputAction.LookActionI(float dx, float dy) ->
                     look(dx * MOUSE_SENSITIVITY, dy * MOUSE_SENSITIVITY);
+                case IInputAction.Simple.JUMP -> {
+                    if (isOnGround) velocity.y = JUMP_VELOCITY;
+                }
                 default -> {}
             }
         }
-        syncCamera();
-    }
-
-    // Free-fly: move along look (forward/back) and right (strafe), scaled by speed and dt.
-    public void moveRelative(float forward, float right, float dt) {
-        position.fma(forward * movementSpeed * dt, getLookDirection());
-        position.fma(right * movementSpeed * dt, getRight());
+        // Set (not accumulate) horizontal velocity so releasing the keys stops us at once.
+        // Vertical velocity is left to gravity and the jump above.
+        if (wish.lengthSquared() > 0) wish.normalize().mul(movementSpeed);
+        velocity.x = wish.x;
+        velocity.z = wish.z;
     }
 
     // Apply mouse delta in degrees. -dy so mouse-up looks up; clamp pitch short of vertical.

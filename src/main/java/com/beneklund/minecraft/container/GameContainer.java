@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.container;
 
 import com.beneklund.minecraft.Game;
+import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.ChunkRenderable;
@@ -13,6 +14,7 @@ import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.resources.JsonIResourcePack;
 import com.beneklund.minecraft.platform.window.Window;
+import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.ChunkMesher;
@@ -20,6 +22,8 @@ import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.renderer.TextureAtlas;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.world.Chunk;
+import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.LocalWorldAuthority;
 import com.beneklund.minecraft.world.World;
 import com.beneklund.minecraft.world.WorldConfig;
@@ -44,7 +48,7 @@ public class GameContainer {
 
         // 3. Pre-init platform objects - constructed but not yet active.
         CameraConfig cameraConfig = new CameraConfig(70.0f);
-        PlayerConfig playerConfig = new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 5.0f);
+        PlayerConfig playerConfig = new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 4.3f);
         Camera camera = new Camera(config, cameraConfig);
         Player player = new Player(playerConfig.startPosition(), playerConfig.movementSpeed(), camera);
         player.look(0, playerConfig.startPitch());
@@ -78,12 +82,51 @@ public class GameContainer {
         WorldGenerator worldGen = new WorldGenerator(registry, generationSpecs);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         ChunkManager chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority);
-        new Game(window, renderer, chunkManager, renderWorld, camera, player, world, delta, mapper).run();
+
+        // Spawn well above the surface column and let gravity drop us onto solid ground.
+        // The generator is deterministic, so the async pipeline reproduces the identical
+        // chunk — the ground we measured will be there by the time physics kicks in.
+        Vector3f spawnXz = playerConfig.startPosition();
+        int surfaceY = surfaceHeight(
+                worldGen, worldConfig.seed(), registry, (int) Math.floor(spawnXz.x), (int) Math.floor(spawnXz.z));
+        player.setPosition(new Vector3f(spawnXz.x, surfaceY + 12, spawnXz.z));
+
+        new Game(
+                        window,
+                        renderer,
+                        chunkManager,
+                        renderWorld,
+                        camera,
+                        player,
+                        new Physics(),
+                        world,
+                        authority,
+                        delta,
+                        mapper)
+                .run();
 
         // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).
         music.shutdown();
         renderer.delete();
         atlas.delete();
         window.shutdown();
+    }
+
+    // Highest solid block in a world column. Generates that column's chunk and scans
+    // top-down — air, water, and leaves are skipped so we land on real ground. Bedrock at
+    // y=0 guarantees the loop always finds something.
+    private static int surfaceHeight(
+            WorldGenerator worldGen, long seed, BlockRegistry registry, int worldX, int worldZ) {
+        Chunk chunk = new Chunk();
+        ChunkPos pos = new ChunkPos(Math.floorDiv(worldX, Chunk.SIZE_XZ), Math.floorDiv(worldZ, Chunk.SIZE_XZ));
+        worldGen.generate(pos, seed, chunk);
+
+        int localX = Math.floorMod(worldX, Chunk.SIZE_XZ);
+        int localZ = Math.floorMod(worldZ, Chunk.SIZE_XZ);
+        for (int y = Chunk.SIZE_Y - 1; y >= 0; y--) {
+            byte id = chunk.getBlock(localX, y, localZ);
+            if (id != Block.AIR && registry.get(id).solid()) return y;
+        }
+        return 0;
     }
 }
