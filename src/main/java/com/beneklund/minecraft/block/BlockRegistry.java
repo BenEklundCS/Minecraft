@@ -56,7 +56,7 @@ public class BlockRegistry {
                 Map.entry(
                         Block.OAK_LEAF,
                         BlockDef.build(
-                                false,
+                                true,
                                 true,
                                 "oak_leaves",
                                 "oak_leaves",
@@ -67,7 +67,7 @@ public class BlockRegistry {
                 Map.entry(
                         Block.WATER,
                         BlockDef.build(
-                                false,
+                                true,
                                 true,
                                 "water_still",
                                 "water_still",

@@ -77,6 +77,10 @@ test {
     useJUnitPlatform()
     jvmArgs '--enable-preview'
     // Inherits the project toolchain above; no separate launcher needed.
+    // Default 512m isn't enough for integration tests that spin up a real
+    // ChunkManager — generating+meshing its full load-radius footprint runs
+    // into multiple hundred MB.
+    maxHeapSize = '2g'
 }
 
 spotless {

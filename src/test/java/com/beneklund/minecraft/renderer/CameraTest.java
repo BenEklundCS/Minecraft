@@ -3,6 +3,7 @@ package com.beneklund.minecraft.renderer;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.beneklund.minecraft.container.CameraConfig;
+import com.beneklund.minecraft.container.PlayerConfig;
 import com.beneklund.minecraft.container.WindowConfig;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.util.Color;
@@ -21,7 +22,8 @@ class CameraTest {
     @BeforeEach
     void setUp() {
         camera = new Camera(CONFIG, new CameraConfig(90f));
-        player = new Player(new Vector3f(0, 0, 0), 5.0f, camera);
+        // authority is null: these tests only exercise look/camera, never tick()'s raycast.
+        player = new Player(new PlayerConfig(new Vector3f(0, 0, 0), 0f, 5.0f, 8.4f, 8.0f), camera, null);
     }
 
     // getLookDirection() at yaw=0, pitch=0 should point along +Z (forward)

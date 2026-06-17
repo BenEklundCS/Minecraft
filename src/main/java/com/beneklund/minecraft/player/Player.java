@@ -1,12 +1,22 @@
 package com.beneklund.minecraft.player;
 
+import static com.beneklund.minecraft.util.Log.LOGGER;
+
+import com.beneklund.minecraft.block.Block;
+import com.beneklund.minecraft.container.PlayerConfig;
 import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.util.AABB;
+import com.beneklund.minecraft.util.Raycast;
+import com.beneklund.minecraft.util.RaycastResult;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.IWorldAuthority;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.joml.Vector3f;
+import org.joml.Vector3i;
 
 // The local player entity. Owns world position, orientation, and free-fly movement.
 // Physics will take over movement later; for now this mirrors what Camera used to do.
@@ -17,24 +27,55 @@ public class Player implements IPhysicsBody {
     private static final float WIDTH = 0.6f;
     private static final float HEIGHT = 1.6f;
     private static final float DEPTH = 0.6f;
-    // Upward velocity applied on jump. ~9 m/s against 28 m/s² gravity clears ~1.2 blocks.
-    private static final float JUMP_VELOCITY = 9.0f;
     // Eye sits above the feet (position). Matches Minecraft's 1.62 eye height.
     public static final float EYE_HEIGHT = 1.62f;
 
+    private RaycastResult targetedBlock;
+
+    private Map<Integer, Byte> slotToBlockIdHotbar = Map.of(
+            1,
+            Block.STONE,
+            2,
+            Block.DIRT,
+            3,
+            Block.GRASS,
+            4,
+            Block.BEDROCK,
+            5,
+            Block.SAND,
+            6,
+            Block.GRAVEL,
+            7,
+            Block.OAK_LOG,
+            8,
+            Block.OAK_PLANK,
+            9,
+            Block.OAK_LEAF);
+
+    // 0-indexed hotbar selection (slot 0 = key '1', matching HotbarActionI.Select). The
+    // palette map above is keyed 1-9, so look-ups add 1. Scroll and number keys move this.
+    private int selectedSlot = 0;
+
+    private final IWorldAuthority authority;
     private final Vector3f position;
     private final Vector3f velocity;
     private boolean isOnGround;
     private final float movementSpeed;
+    private final float jumpVelocity;
+    private final float reach;
     private final Camera camera;
     private float yaw;
     private float pitch;
 
-    public Player(Vector3f startPosition, float movementSpeed, Camera camera) {
-        this.position = startPosition;
+    public Player(PlayerConfig config, Camera camera, IWorldAuthority authority) {
+        this.position = config.startPosition();
         this.velocity = new Vector3f();
-        this.movementSpeed = movementSpeed;
+        this.movementSpeed = config.movementSpeed();
+        this.jumpVelocity = config.jumpVelocity();
+        this.reach = config.reach();
         this.camera = camera;
+        look(0, config.startPitch());
+        this.authority = authority;
     }
 
     @Override
@@ -103,20 +144,49 @@ public class Player implements IPhysicsBody {
     // Consume this frame's input: turn movement keys into a horizontal velocity, apply
     // look, and trigger a jump. Physics integrates this velocity and resolves collisions;
     // syncCamera() runs afterward (in the game loop) once the new position is settled.
-    public void tick(List<IInputAction> actions) {
+    public List<Interaction> tick(List<IInputAction> actions) {
         Vector3f wish = new Vector3f(); // desired horizontal heading in world space
+
+        Vector3f eyePos = new Vector3f(this.position).add(0, Player.EYE_HEIGHT, 0);
+        Vector3f lookDir = this.getLookDirection();
+        RaycastResult result = Raycast.cast(eyePos, lookDir, authority, reach);
+        this.targetedBlock = result;
+
+        List<Interaction> interactions = new ArrayList<>();
         for (IInputAction action : actions) {
             switch (action) {
                 case IInputAction.MoveActionI(float dx, float dz) -> {
                     Vector3f forward = getLookDirection();
-                    forward.y = 0; // walk on the ground plane — looking up/down can't change speed
+                    forward.y = 0;
                     if (forward.lengthSquared() > 0) forward.normalize();
                     wish.fma(dz, forward).fma(dx, getRight());
                 }
                 case IInputAction.LookActionI(float dx, float dy) ->
                     look(dx * MOUSE_SENSITIVITY, dy * MOUSE_SENSITIVITY);
                 case IInputAction.Simple.JUMP -> {
-                    if (isOnGround) velocity.y = JUMP_VELOCITY;
+                    if (isOnGround) velocity.y = jumpVelocity;
+                }
+                case IInputAction.Simple.BREAK_BLOCK -> {
+                    this.breakTargetedBlock();
+                    interactions.add(new Interaction.BlockInteraction(true, eyePos, lookDir, result));
+                }
+                case IInputAction.Simple.PLACE_BLOCK -> {
+                    this.placeBlock();
+                    interactions.add(new Interaction.BlockInteraction(false, eyePos, lookDir, result));
+                }
+                // Scroll wheel cycles the hotbar; wrap around using the palette size so it
+                // stays correct if the palette grows. Up (positive) advances, down goes back.
+                case IInputAction.ScrollActionI(float delta) -> {
+                    if (delta != 0) {
+                        int step = delta > 0 ? 1 : -1;
+                        this.selectedSlot = Math.floorMod(this.selectedSlot + step, slotToBlockIdHotbar.size());
+                        LOGGER.info("Selected slot {} -> {}", selectedSlot, slotToBlockIdHotbar.get(selectedSlot + 1));
+                    }
+                }
+                // Number keys jump straight to a slot.
+                case IInputAction.HotbarActionI.Select(int slot) -> {
+                    this.selectedSlot = slot;
+                    LOGGER.info("Selected slot {} -> {}", selectedSlot, slotToBlockIdHotbar.get(selectedSlot + 1));
                 }
                 default -> {}
             }
@@ -126,6 +196,7 @@ public class Player implements IPhysicsBody {
         if (wish.lengthSquared() > 0) wish.normalize().mul(movementSpeed);
         velocity.x = wish.x;
         velocity.z = wish.z;
+        return interactions;
     }
 
     // Apply mouse delta in degrees. -dy so mouse-up looks up; clamp pitch short of vertical.
@@ -139,5 +210,48 @@ public class Player implements IPhysicsBody {
     public void syncCamera() {
         camera.setPosition(new Vector3f(position).add(0, EYE_HEIGHT, 0));
         camera.setFront(getLookDirection());
+    }
+
+    public RaycastResult getTargetedBlock() {
+        return this.targetedBlock;
+    }
+
+    // 0-indexed currently-selected hotbar slot, for the HUD to highlight.
+    public int getSelectedSlot() {
+        return this.selectedSlot;
+    }
+
+    private void breakTargetedBlock() {
+        logRaycast();
+        authority.setBlock(
+                this.targetedBlock.blockPos().x,
+                this.targetedBlock.blockPos().y,
+                this.targetedBlock.blockPos().z,
+                Block.AIR);
+    }
+
+    private void placeBlock() {
+        logRaycast();
+        Vector3i placementPosition =
+                this.targetedBlock.blockPos().add(this.targetedBlock.hitFace().normal());
+        if (this.getBoundingBox().getBlocksOverlapping().contains(placementPosition)) {
+            LOGGER.info(
+                    "Player overlaps block, cannot place at ({}, {}, {})",
+                    placementPosition.x,
+                    placementPosition.y,
+                    placementPosition.z);
+            return;
+        }
+        byte blockId = slotToBlockIdHotbar.getOrDefault(selectedSlot + 1, Block.STONE);
+        authority.setBlock(placementPosition.x, placementPosition.y, placementPosition.z, blockId);
+    }
+
+    private void logRaycast() {
+        LOGGER.info(
+                "Raycast hit={} blockPos={} face={} distance={}",
+                this.targetedBlock.hit(),
+                this.targetedBlock.blockPos(),
+                this.targetedBlock.hitFace(),
+                String.format("%.2f", this.targetedBlock.distance()));
     }
 }

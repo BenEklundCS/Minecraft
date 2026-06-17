@@ -1,18 +1,26 @@
 package com.beneklund.minecraft.platform.input;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.lwjgl.glfw.GLFW.*;
 
 import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.IInputAction.Simple;
-import java.util.HashSet;
 import java.util.List;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 class InputMapperTest {
 
-    // --- WASD move actions ---
+    private static final float FRAME = 1f / 60f;
+
+    private static InputMapper mapper(InputEventQueue queue) {
+        return new InputMapper(queue, InputMapper.DEFAULT_BINDINGS);
+    }
+
+    // --- Movement: held bindings fire while down, starting on press ---
 
     record WasdCase(int key, float expectedDx, float expectedDz) {}
 
@@ -26,32 +34,71 @@ class InputMapperTest {
 
     @ParameterizedTest
     @MethodSource("wasdCases")
-    void keyPress_returnsMoveActionWithCorrectDxDz(WasdCase tc) {
+    void keyHeld_emitsMoveActionEveryFrame(WasdCase tc) {
         InputEventQueue queue = new InputEventQueue();
-        InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
+        InputMapper mapper = mapper(queue);
         queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_PRESS, 0));
 
-        List<IInputAction> actions = mapper.drain();
+        List<IInputAction> actions = mapper.drain(FRAME);
 
         assertEquals(1, actions.size());
         assertEquals(new IInputAction.MoveActionI(tc.expectedDx(), tc.expectedDz()), actions.getFirst());
     }
 
-    // --- Simple key actions (fire on release) ---
+    @Test
+    void spaceHeld_emitsJumpOnPress() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+        queue.offer(new IRawInputEvent.KeyEventI(GLFW_KEY_SPACE, 0, GLFW_PRESS, 0));
 
-    record SimpleKeyCase(int key, Simple expected) {}
-
-    static List<SimpleKeyCase> simpleKeyCases() {
-        return List.of(
-                new SimpleKeyCase(GLFW_KEY_ESCAPE, Simple.EXIT),
-                new SimpleKeyCase(GLFW_KEY_X, Simple.EXIT),
-                new SimpleKeyCase(GLFW_KEY_SPACE, Simple.JUMP),
-                new SimpleKeyCase(GLFW_KEY_I, Simple.INVENTORY),
-                new SimpleKeyCase(GLFW_KEY_F3, Simple.DEBUG_OVERLAY),
-                new SimpleKeyCase(GLFW_KEY_P, Simple.PAUSE));
+        assertEquals(List.of(Simple.JUMP), mapper.drain(FRAME));
     }
 
-    // --- Hotbar select actions ---
+    @Test
+    void heldKey_stopsEmittingAfterRelease() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+
+        queue.offer(new IRawInputEvent.KeyEventI(GLFW_KEY_W, 0, GLFW_PRESS, 0));
+        assertEquals(1, mapper.drain(FRAME).size()); // fires while held
+
+        queue.offer(new IRawInputEvent.KeyEventI(GLFW_KEY_W, 0, GLFW_RELEASE, 0));
+        assertTrue(mapper.drain(FRAME).isEmpty()); // nothing once released
+    }
+
+    // --- Taps: fire once, on release ---
+
+    record TapKeyCase(int key, Simple expected) {}
+
+    static List<TapKeyCase> tapKeyCases() {
+        return List.of(
+                new TapKeyCase(GLFW_KEY_ESCAPE, Simple.EXIT),
+                new TapKeyCase(GLFW_KEY_X, Simple.EXIT),
+                new TapKeyCase(GLFW_KEY_I, Simple.INVENTORY),
+                new TapKeyCase(GLFW_KEY_F3, Simple.DEBUG_OVERLAY),
+                new TapKeyCase(GLFW_KEY_P, Simple.PAUSE));
+    }
+
+    @ParameterizedTest
+    @MethodSource("tapKeyCases")
+    void keyRelease_returnsTapAction(TapKeyCase tc) {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+        queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_RELEASE, 0));
+
+        assertEquals(List.of(tc.expected()), mapper.drain(FRAME));
+    }
+
+    @Test
+    void tapKeyPress_emitsNothing() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+        queue.offer(new IRawInputEvent.KeyEventI(GLFW_KEY_ESCAPE, 0, GLFW_PRESS, 0));
+
+        assertTrue(mapper.drain(FRAME).isEmpty());
+    }
+
+    // --- Hotbar select (tap, on release) ---
 
     record HotbarCase(int key, int expectedSlot) {}
 
@@ -72,48 +119,56 @@ class InputMapperTest {
     @MethodSource("hotbarCases")
     void keyRelease_returnsHotbarSelect(HotbarCase tc) {
         InputEventQueue queue = new InputEventQueue();
-        InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
+        InputMapper mapper = mapper(queue);
         queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_RELEASE, 0));
 
-        List<IInputAction> actions = mapper.drain();
-
-        assertEquals(1, actions.size());
-        assertEquals(new IInputAction.HotbarActionI.Select(tc.expectedSlot()), actions.getFirst());
+        assertEquals(List.of(new IInputAction.HotbarActionI.Select(tc.expectedSlot())), mapper.drain(FRAME));
     }
 
-    @ParameterizedTest
-    @MethodSource("simpleKeyCases")
-    void keyRelease_returnsSimpleAction(SimpleKeyCase tc) {
-        InputEventQueue queue = new InputEventQueue();
-        InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
-        queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_RELEASE, 0));
+    // --- Mouse buttons: now held, fire on press, repeat on a delay ---
 
-        List<IInputAction> actions = mapper.drain();
+    record MouseCase(int button, Simple expected) {}
 
-        assertEquals(1, actions.size());
-        assertEquals(tc.expected(), actions.getFirst());
-    }
-
-    // --- Simple mouse button actions (fire on release) ---
-
-    record SimpleMouseCase(int button, Simple expected) {}
-
-    static List<SimpleMouseCase> simpleMouseCases() {
+    static List<MouseCase> mouseCases() {
         return List.of(
-                new SimpleMouseCase(GLFW_MOUSE_BUTTON_1, Simple.BREAK_BLOCK),
-                new SimpleMouseCase(GLFW_MOUSE_BUTTON_2, Simple.PLACE_BLOCK));
+                new MouseCase(GLFW_MOUSE_BUTTON_1, Simple.BREAK_BLOCK),
+                new MouseCase(GLFW_MOUSE_BUTTON_2, Simple.PLACE_BLOCK));
     }
 
     @ParameterizedTest
-    @MethodSource("simpleMouseCases")
-    void mouseButtonRelease_returnsSimpleAction(SimpleMouseCase tc) {
+    @MethodSource("mouseCases")
+    void mouseButtonPress_firesActionImmediately(MouseCase tc) {
         InputEventQueue queue = new InputEventQueue();
-        InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, new HashSet<>());
-        queue.offer(new IRawInputEvent.MouseButtonEventI(tc.button(), GLFW_RELEASE, 0));
+        InputMapper mapper = mapper(queue);
+        queue.offer(new IRawInputEvent.MouseButtonEventI(tc.button(), GLFW_PRESS, 0));
 
-        List<IInputAction> actions = mapper.drain();
+        assertEquals(List.of(tc.expected()), mapper.drain(FRAME));
+    }
 
-        assertEquals(1, actions.size());
-        assertEquals(tc.expected(), actions.getFirst());
+    @Test
+    void heldMouseButton_repeatsOnlyAfterDelay() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+
+        // press: first hit lands immediately
+        queue.offer(new IRawInputEvent.MouseButtonEventI(GLFW_MOUSE_BUTTON_1, GLFW_PRESS, 0));
+        assertTrue(mapper.drain(0.01f).contains(Simple.BREAK_BLOCK), "first hit on press");
+
+        // not enough time has passed for a repeat
+        assertFalse(mapper.drain(0.1f).contains(Simple.BREAK_BLOCK), "no repeat before the delay");
+
+        // crossing the 0.25s cadence fires the next hit
+        assertTrue(mapper.drain(0.2f).contains(Simple.BREAK_BLOCK), "repeats after the delay elapses");
+    }
+
+    // --- Scroll passes through as a ScrollAction ---
+
+    @Test
+    void scroll_emitsScrollAction() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+        queue.offer(new IRawInputEvent.ScrollEventI(0, 1.0));
+
+        assertEquals(List.of(new IInputAction.ScrollActionI(1.0f)), mapper.drain(FRAME));
     }
 }

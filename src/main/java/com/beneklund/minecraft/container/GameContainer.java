@@ -49,10 +49,8 @@ public class GameContainer {
 
         // 3. Pre-init platform objects - constructed but not yet active.
         CameraConfig cameraConfig = new CameraConfig(70.0f);
-        PlayerConfig playerConfig = new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 4.3f);
+        PlayerConfig playerConfig = new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 4.3f, 8.4f, 8.0f);
         Camera camera = new Camera(config, cameraConfig);
-        Player player = new Player(playerConfig.startPosition(), playerConfig.movementSpeed(), camera);
-        player.look(0, playerConfig.startPitch());
         Window window = new Window(config, queue);
         InputHandler handler = new InputHandler(window, camera);
         DeltaTracker delta = new DeltaTracker(window::getTime);
@@ -85,13 +83,17 @@ public class GameContainer {
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         ChunkManager chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority);
 
-        // Spawn well above the surface column and let gravity drop us onto solid ground.
-        // The generator is deterministic, so the async pipeline reproduces the identical
-        // chunk — the ground we measured will be there by the time physics kicks in.
+        Player player = new Player(playerConfig, camera, authority);
+
+        // Spawn resting directly on the surface (feet one block above the highest solid).
+        // We used to spawn ~12 blocks up and free-fall, but that gave gravity a chance to
+        // build speed and tunnel the player through the ground during a spawn-time frame
+        // hitch (the mesh/upload storm). No fall = no tunnel. The generator is deterministic,
+        // so this measured height matches the async-generated chunk exactly.
         Vector3f spawnXz = playerConfig.startPosition();
         int surfaceY = surfaceHeight(
                 worldGen, worldConfig.seed(), registry, (int) Math.floor(spawnXz.x), (int) Math.floor(spawnXz.z));
-        player.setPosition(new Vector3f(spawnXz.x, surfaceY + 12, spawnXz.z));
+        player.setPosition(new Vector3f(spawnXz.x, surfaceY + 1, spawnXz.z));
 
         new Game(
                         window,

@@ -18,7 +18,7 @@ import org.joml.Vector3i;
 // separately is what lets you slide along a wall instead of sticking to it: a
 // diagonal move into a wall blocks one axis but the other still goes through.
 public class Physics {
-    private static final float GRAVITY = 28.0f;
+    private static final float GRAVITY = 32.0f;
 
     public void update(IPhysicsBody body, IWorldAuthority world, float dt) {
         // gravity accelerates us downward every tick

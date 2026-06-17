@@ -3,104 +3,121 @@ package com.beneklund.minecraft.platform.input;
 import static org.lwjgl.glfw.GLFW.*;
 
 import com.beneklund.minecraft.input.IInputAction;
+import com.beneklund.minecraft.platform.input.Binding.Trigger;
 import java.util.*;
 
-// maps glfw keycodes to InputAction
+// Maps raw GLFW events to domain InputActions. Every code's behavior (tap vs hold, and
+// how fast a hold repeats) lives in its Binding, so there's no separate "holdable keys" set.
 public class InputMapper {
-    public static final Map<Integer, IInputAction> DEFAULT_BINDINGS = Map.ofEntries(
-            // exit game
-            Map.entry(GLFW_KEY_ESCAPE, IInputAction.Simple.EXIT),
-            Map.entry(GLFW_KEY_X, IInputAction.Simple.EXIT),
-            // player
-            Map.entry(GLFW_KEY_1, new IInputAction.HotbarActionI.Select(0)),
-            Map.entry(GLFW_KEY_2, new IInputAction.HotbarActionI.Select(1)),
-            Map.entry(GLFW_KEY_3, new IInputAction.HotbarActionI.Select(2)),
-            Map.entry(GLFW_KEY_4, new IInputAction.HotbarActionI.Select(3)),
-            Map.entry(GLFW_KEY_5, new IInputAction.HotbarActionI.Select(4)),
-            Map.entry(GLFW_KEY_6, new IInputAction.HotbarActionI.Select(5)),
-            Map.entry(GLFW_KEY_7, new IInputAction.HotbarActionI.Select(6)),
-            Map.entry(GLFW_KEY_8, new IInputAction.HotbarActionI.Select(7)),
-            Map.entry(GLFW_KEY_9, new IInputAction.HotbarActionI.Select(8)),
-            Map.entry(GLFW_KEY_SPACE, IInputAction.Simple.JUMP),
-            Map.entry(GLFW_KEY_I, IInputAction.Simple.INVENTORY),
-            Map.entry(GLFW_KEY_F3, IInputAction.Simple.DEBUG_OVERLAY),
-            Map.entry(GLFW_KEY_P, IInputAction.Simple.PAUSE),
 
-            // mouse
-            Map.entry(GLFW_MOUSE_BUTTON_1, IInputAction.Simple.BREAK_BLOCK),
-            Map.entry(GLFW_MOUSE_BUTTON_2, IInputAction.Simple.PLACE_BLOCK));
+    // Default repeat cadence for mining/placing while the mouse is held down.
+    private static final float CLICK_REPEAT_SECONDS = 0.25f;
+    // Movement and jump repeat every frame while held.
+    private static final float EVERY_FRAME = 0f;
+
+    public static final Map<Integer, Binding> DEFAULT_BINDINGS = Map.ofEntries(
+            // Movement: each key emits its own ±1 component every frame; Player sums them
+            // (W+D -> forward + right -> normalized diagonal) so the input layer stays dumb.
+            Map.entry(GLFW_KEY_W, Binding.hold(new IInputAction.MoveActionI(0, 1), EVERY_FRAME)),
+            Map.entry(GLFW_KEY_S, Binding.hold(new IInputAction.MoveActionI(0, -1), EVERY_FRAME)),
+            Map.entry(GLFW_KEY_A, Binding.hold(new IInputAction.MoveActionI(-1, 0), EVERY_FRAME)),
+            Map.entry(GLFW_KEY_D, Binding.hold(new IInputAction.MoveActionI(1, 0), EVERY_FRAME)),
+            Map.entry(GLFW_KEY_SPACE, Binding.hold(IInputAction.Simple.JUMP, EVERY_FRAME)),
+
+            // Mouse: held with a cadence so holding the button mines/places on a timer.
+            Map.entry(GLFW_MOUSE_BUTTON_1, Binding.hold(IInputAction.Simple.BREAK_BLOCK, CLICK_REPEAT_SECONDS)),
+            Map.entry(GLFW_MOUSE_BUTTON_2, Binding.hold(IInputAction.Simple.PLACE_BLOCK, CLICK_REPEAT_SECONDS)),
+
+            // Taps: fire once on release.
+            Map.entry(GLFW_KEY_ESCAPE, Binding.tap(IInputAction.Simple.EXIT)),
+            Map.entry(GLFW_KEY_X, Binding.tap(IInputAction.Simple.EXIT)),
+            Map.entry(GLFW_KEY_1, Binding.tap(new IInputAction.HotbarActionI.Select(0))),
+            Map.entry(GLFW_KEY_2, Binding.tap(new IInputAction.HotbarActionI.Select(1))),
+            Map.entry(GLFW_KEY_3, Binding.tap(new IInputAction.HotbarActionI.Select(2))),
+            Map.entry(GLFW_KEY_4, Binding.tap(new IInputAction.HotbarActionI.Select(3))),
+            Map.entry(GLFW_KEY_5, Binding.tap(new IInputAction.HotbarActionI.Select(4))),
+            Map.entry(GLFW_KEY_6, Binding.tap(new IInputAction.HotbarActionI.Select(5))),
+            Map.entry(GLFW_KEY_7, Binding.tap(new IInputAction.HotbarActionI.Select(6))),
+            Map.entry(GLFW_KEY_8, Binding.tap(new IInputAction.HotbarActionI.Select(7))),
+            Map.entry(GLFW_KEY_9, Binding.tap(new IInputAction.HotbarActionI.Select(8))),
+            Map.entry(GLFW_KEY_I, Binding.tap(IInputAction.Simple.INVENTORY)),
+            Map.entry(GLFW_KEY_F3, Binding.tap(IInputAction.Simple.DEBUG_OVERLAY)),
+            Map.entry(GLFW_KEY_P, Binding.tap(IInputAction.Simple.PAUSE)));
 
     private final InputEventQueue queue;
-    private final Map<Integer, IInputAction> bindings;
-    private final Set<Integer> heldKeys = new HashSet<>();
-    // Only WASD generate continuous MoveActions each frame. All other keys fire once on release.
-    private final Set<Integer> holdableKeys = Set.of(GLFW_KEY_W, GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D);
+    private final Map<Integer, Binding> bindings;
+    // Codes currently held that have a Hold trigger, mapped to seconds accumulated since their
+    // last emit. Presence in this map == currently held; absence == up.
+    private final Map<Integer, Float> heldTimers = new HashMap<>();
     // NaN on startup so the first mouse event doesn't produce a huge delta from (0,0).
     private double lastMouseX = Double.NaN;
     private double lastMouseY = Double.NaN;
 
     public InputMapper(InputEventQueue queue) {
-        this.queue = queue;
-        this.bindings = DEFAULT_BINDINGS;
+        this(queue, DEFAULT_BINDINGS);
     }
 
-    public InputMapper(InputEventQueue queue, Map<Integer, IInputAction> bindings, Set<Integer> heldKeys) {
+    public InputMapper(InputEventQueue queue, Map<Integer, Binding> bindings) {
         this.queue = queue;
         this.bindings = bindings;
-        this.heldKeys.addAll(heldKeys);
     }
 
-    public List<IInputAction> drain() {
+    // dt is the frame time in seconds; it advances the repeat timers for held bindings.
+    public List<IInputAction> drain(float dt) {
         List<IInputAction> actions = new ArrayList<>();
-        List<IRawInputEvent> IRawInputEvents = this.queue.drain();
-        processRawInputEvents(IRawInputEvents, actions);
-        processHeldActions(actions);
+        for (IRawInputEvent event : this.queue.drain()) {
+            switch (event) {
+                case IRawInputEvent.KeyEventI e -> handleButton(e.key(), e.action(), actions);
+                case IRawInputEvent.MouseButtonEventI e -> handleButton(e.button(), e.action(), actions);
+                case IRawInputEvent.MouseMoveEventI e -> handleMouseMove(e, actions);
+                case IRawInputEvent.ScrollEventI e -> actions.add(new IInputAction.ScrollActionI((float) e.yoffset()));
+            }
+        }
+        processHeld(dt, actions);
         return actions;
     }
 
-    private void processRawInputEvents(List<IRawInputEvent> IRawInputEvents, List<IInputAction> actions) {
-        for (var rawInputEvent : IRawInputEvents) {
-            switch (rawInputEvent) {
-                case IRawInputEvent.KeyEventI e -> {
-                    if (e.action() == GLFW_RELEASE) {
-                        // Fire the bound action on key-up, not key-down, to avoid double-firing
-                        // with GLFW's built-in key-repeat events (GLFW_REPEAT is ignored here).
-                        IInputAction action = this.bindings.get(e.key());
-                        if (action != null) actions.add(action);
-                        this.heldKeys.remove(e.key());
-                    } else if (e.action() == GLFW_PRESS && this.holdableKeys.contains(e.key())) {
-                        this.heldKeys.add(e.key());
-                    }
+    // Keys and mouse buttons share this path — both are just integer codes with a Binding.
+    private void handleButton(int code, int glfwAction, List<IInputAction> actions) {
+        Binding binding = this.bindings.get(code);
+        if (binding == null) return;
+        switch (binding.trigger()) {
+            case Trigger.Tap tap -> {
+                if (glfwAction == GLFW_RELEASE) actions.add(binding.action());
+            }
+            case Trigger.Hold hold -> {
+                if (glfwAction == GLFW_PRESS) {
+                    // Prime the timer at the repeat interval so processHeld fires it instantly
+                    // this frame (no wait for the first hit), then spaces out subsequent ones.
+                    this.heldTimers.put(code, hold.repeatSeconds());
+                } else if (glfwAction == GLFW_RELEASE) {
+                    this.heldTimers.remove(code);
                 }
-                case IRawInputEvent.MouseButtonEventI e -> {
-                    if (e.action() == GLFW_RELEASE) {
-                        IInputAction action = this.bindings.get(e.button());
-                        if (action != null) actions.add(action);
-                    }
-                }
-                case IRawInputEvent.MouseMoveEventI e -> {
-                    if (!Double.isNaN(this.lastMouseX)) {
-                        float dx = (float) (e.xpos() - this.lastMouseX);
-                        float dy = (float) (e.ypos() - this.lastMouseY);
-                        actions.add(new IInputAction.LookActionI(dx, dy));
-                    }
-                    this.lastMouseX = e.xpos();
-                    this.lastMouseY = e.ypos();
-                }
-                case IRawInputEvent.ScrollEventI e -> actions.add(new IInputAction.ScrollActionI((float) e.yoffset()));
+                // GLFW_REPEAT is ignored — our own timer drives repetition.
             }
         }
     }
 
-    private void processHeldActions(List<IInputAction> actions) {
-        // Emit ±1 direction components only — movement speed is the Player's concern,
-        // not the input layer's. Player normalizes the combined heading before scaling.
-        float dx = 0f;
-        float dz = 0f;
-        if (this.heldKeys.contains(GLFW_KEY_W)) dz += 1f;
-        if (this.heldKeys.contains(GLFW_KEY_S)) dz -= 1f;
-        if (this.heldKeys.contains(GLFW_KEY_A)) dx -= 1f;
-        if (this.heldKeys.contains(GLFW_KEY_D)) dx += 1f;
-        if (dx != 0f || dz != 0f) actions.add(new IInputAction.MoveActionI(dx, dz));
+    private void processHeld(float dt, List<IInputAction> actions) {
+        for (var entry : this.heldTimers.entrySet()) {
+            Binding binding = this.bindings.get(entry.getKey());
+            float repeatSeconds = ((Trigger.Hold) binding.trigger()).repeatSeconds();
+            float elapsed = entry.getValue() + dt;
+            if (elapsed >= repeatSeconds) { // repeat 0 -> true every frame
+                actions.add(binding.action());
+                elapsed = 0f;
+            }
+            entry.setValue(elapsed);
+        }
+    }
+
+    private void handleMouseMove(IRawInputEvent.MouseMoveEventI e, List<IInputAction> actions) {
+        if (!Double.isNaN(this.lastMouseX)) {
+            float dx = (float) (e.xpos() - this.lastMouseX);
+            float dy = (float) (e.ypos() - this.lastMouseY);
+            actions.add(new IInputAction.LookActionI(dx, dy));
+        }
+        this.lastMouseX = e.xpos();
+        this.lastMouseY = e.ypos();
     }
 }

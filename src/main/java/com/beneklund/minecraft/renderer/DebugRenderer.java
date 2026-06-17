@@ -2,6 +2,7 @@ package com.beneklund.minecraft.renderer;
 
 import com.beneklund.minecraft.platform.graphics.LineMesh;
 import com.beneklund.minecraft.util.RaycastResult;
+import java.util.ArrayList;
 import java.util.List;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -12,6 +13,8 @@ public class DebugRenderer implements IRenderable {
     private static final Matrix4f IDENTITY = new Matrix4f();
 
     private LineMesh laserMesh;
+    private LineMesh targetMesh;
+    private Matrix4f targetTransform;
     private boolean laserDirty = true;
     private Vector3f laserStart;
     private Vector3f laserEnd;
@@ -39,7 +42,49 @@ public class DebugRenderer implements IRenderable {
         setLaser(origin, end);
     }
 
-    private void rebuildMesh() {
+    public void updateTargetedBlock(RaycastResult result) {
+        if (result.hit()) {
+            var b = result.blockPos();
+            this.targetTransform = new Matrix4f().translation(b.x, b.y, b.z);
+        } else {
+            this.targetTransform = null;
+        }
+    }
+
+    /*
+      7--------6
+     /|       /|     top face (y=1):    4,5,6,7
+    4--------5 |     bottom face (y=0):  0,1,2,3
+    | 3------|-2
+    |/       |/
+    0--------1
+      */
+    private void rebuildTargetMesh() {
+        float lo = -0.002f, hi = 1.002f;
+        if (targetMesh != null) {
+            targetMesh.delete();
+            targetMesh = null;
+        }
+        float[] vertices = {
+            lo, lo, lo, 1f, 0f, 0f, // 0
+            hi, lo, lo, 1f, 0f, 0f, // 1
+            hi, lo, hi, 1f, 0f, 0f, // 2
+            lo, lo, hi, 1f, 0f, 0f, // 3
+            lo, hi, lo, 1f, 0f, 0f, // 4
+            hi, hi, lo, 1f, 0f, 0f, // 5
+            hi, hi, hi, 1f, 0f, 0f, // 6
+            lo, hi, hi, 1f, 0f, 0f, // 7
+        };
+        int[] indices = {
+            0, 1, 1, 2, 2, 3, 3, 0, // bottom square
+            4, 5, 5, 6, 6, 7, 7, 4, // top square
+            0, 4, 1, 5, 2, 6, 3, 7, // verticals
+        };
+        this.targetMesh = new LineMesh();
+        this.targetMesh.upload(vertices, indices);
+    }
+
+    private void rebuildLaserMesh() {
         if (laserMesh != null) {
             laserMesh.delete();
             laserMesh = null;
@@ -60,9 +105,16 @@ public class DebugRenderer implements IRenderable {
 
     @Override
     public List<DrawCall> getDrawCalls(Camera camera) {
-        if (laserDirty) rebuildMesh();
-        if (laserMesh == null) return List.of();
-        return List.of(new DrawCall(laserMesh, IDENTITY, DEBUG_SHADER));
+        if (laserDirty) rebuildLaserMesh();
+        if (targetMesh == null) rebuildTargetMesh();
+        List<DrawCall> calls = new ArrayList<>();
+        if (laserMesh != null) {
+            calls.add(new DrawCall(laserMesh, IDENTITY, DEBUG_SHADER));
+        }
+        if (targetTransform != null) {
+            calls.add(new DrawCall(targetMesh, targetTransform, DEBUG_SHADER));
+        }
+        return calls;
     }
 
     @Override
