@@ -42,11 +42,11 @@ public class GlShader {
     }
 
     public void use() {
-        glUseProgram(this.programId);
+        glUseProgram(programId);
     }
 
     public int getProgramId() {
-        return this.programId;
+        return programId;
     }
 
     // Uploads a 4x4 matrix into a mat4 uniform. The program must be bound (use()) first - glUniform*
@@ -66,39 +66,39 @@ public class GlShader {
     }
 
     private int location(String name) {
-        return this.uniformLocations.computeIfAbsent(name, n -> glGetUniformLocation(this.programId, n));
+        return uniformLocations.computeIfAbsent(name, n -> glGetUniformLocation(programId, n));
     }
 
     public void delete() {
-        glDeleteProgram(this.programId);
-        glDeleteShader(this.vertexShader);
-        glDeleteShader(this.fragmentShader);
+        glDeleteProgram(programId);
+        glDeleteShader(vertexShader);
+        glDeleteShader(fragmentShader);
     }
 
     private void compile() {
-        this.vertexShader = glCreateShader(GL_VERTEX_SHADER);
-        this.fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(this.vertexShader, this.vertexShaderSource);
-        glShaderSource(this.fragmentShader, this.fragmentShaderSource);
-        glCompileShader(this.vertexShader);
-        glCompileShader(this.fragmentShader);
-        if (glGetShaderi(this.vertexShader, GL_COMPILE_STATUS) == GL_FALSE) {
-            LOGGER.error(glGetShaderInfoLog(this.vertexShader));
+        vertexShader = glCreateShader(GL_VERTEX_SHADER);
+        fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(vertexShader, vertexShaderSource);
+        glShaderSource(fragmentShader, fragmentShaderSource);
+        glCompileShader(vertexShader);
+        glCompileShader(fragmentShader);
+        if (glGetShaderi(vertexShader, GL_COMPILE_STATUS) == GL_FALSE) {
+            LOGGER.error(glGetShaderInfoLog(vertexShader));
             throw new RuntimeException("Failed to compile() vertex shader.");
         }
-        if (glGetShaderi(this.fragmentShader, GL_COMPILE_STATUS) == GL_FALSE) {
-            LOGGER.error(glGetShaderInfoLog(this.fragmentShader));
+        if (glGetShaderi(fragmentShader, GL_COMPILE_STATUS) == GL_FALSE) {
+            LOGGER.error(glGetShaderInfoLog(fragmentShader));
             throw new RuntimeException("Failed to compile() fragment shader.");
         }
     }
 
     private void link() {
-        this.programId = glCreateProgram();
-        glAttachShader(this.programId, this.vertexShader);
-        glAttachShader(this.programId, this.fragmentShader);
-        glLinkProgram(this.programId);
-        if (glGetProgrami(this.programId, GL_LINK_STATUS) == GL_FALSE) {
-            LOGGER.error(glGetProgramInfoLog(this.programId));
+        programId = glCreateProgram();
+        glAttachShader(programId, vertexShader);
+        glAttachShader(programId, fragmentShader);
+        glLinkProgram(programId);
+        if (glGetProgrami(programId, GL_LINK_STATUS) == GL_FALSE) {
+            LOGGER.error(glGetProgramInfoLog(programId));
             throw new RuntimeException("Failed to link() shader program");
         }
     }

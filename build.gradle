@@ -1,4 +1,5 @@
 import org.gradle.internal.os.OperatingSystem
+import spotlesstools.ThisQualifierCleanup
 
 plugins {
     id 'java'
@@ -86,6 +87,8 @@ test {
 spotless {
     enforceCheck true
     java {
+        // Strip redundant `this.` (AST-aware) before Palantir reformats the result.
+        custom('removeRedundantThis') { String text -> ThisQualifierCleanup.clean(text) }
         palantirJavaFormat('2.91.0')
         importOrder()
         removeUnusedImports()

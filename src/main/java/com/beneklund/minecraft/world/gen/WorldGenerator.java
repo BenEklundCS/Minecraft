@@ -47,8 +47,8 @@ public class WorldGenerator implements IWorldGenerator {
 
     public WorldGenerator(BlockRegistry registry, List<IGenerationSpec> specs) {
         this.registry = registry;
-        this.noiseHelper = new NoiseHelper();
-        this.treePlacer = new TreePlacer();
+        noiseHelper = new NoiseHelper();
+        treePlacer = new TreePlacer();
 
         List<IGenerationSpec.OreSpecI> ores = new ArrayList<>();
         IGenerationSpec.NoiseLayersSpecI layers = null;
@@ -62,12 +62,12 @@ public class WorldGenerator implements IWorldGenerator {
             else if (spec instanceof IGenerationSpec.CaveSpecI c) cave = c;
             else if (spec instanceof IGenerationSpec.BiomeSpecI b) biomeSpecs.add(b);
         }
-        this.oreSpecs = ores;
-        this.noiseLayers = layers;
-        this.treeSpec = tree;
-        this.caveSpec = cave;
-        this.tempSpec = biomeSpecs.size() > 0 ? biomeSpecs.get(0) : null;
-        this.humidSpec = biomeSpecs.size() > 1 ? biomeSpecs.get(1) : null;
+        oreSpecs = ores;
+        noiseLayers = layers;
+        treeSpec = tree;
+        caveSpec = cave;
+        tempSpec = biomeSpecs.size() > 0 ? biomeSpecs.get(0) : null;
+        humidSpec = biomeSpecs.size() > 1 ? biomeSpecs.get(1) : null;
     }
 
     @Override
@@ -80,8 +80,7 @@ public class WorldGenerator implements IWorldGenerator {
                 int worldZ = pos.z() * Chunk.SIZE_XZ + localZ;
 
                 ResolvedBiome biome = selectBiome(
-                        sampleSpec(seed, worldX, worldZ, this.tempSpec),
-                        sampleSpec(seed, worldX, worldZ, this.humidSpec));
+                        sampleSpec(seed, worldX, worldZ, tempSpec), sampleSpec(seed, worldX, worldZ, humidSpec));
                 int surfaceY = computeSurfaceY(seed, worldX, worldZ, biome.data());
                 surfaceHeights[localX + localZ * Chunk.SIZE_XZ] = surfaceY;
                 fillColumn(chunk, localX, localZ, surfaceY, biome.type());
@@ -144,7 +143,7 @@ public class WorldGenerator implements IWorldGenerator {
         return noiseHelper.noise2(seed + spec.seedOffset(), x, z, spec.octaves(), spec.persistence(), spec.scale());
     }
 
-    private record BiomeColumnBlocks(byte surface, byte subsurface, byte depth) {}
+    private record BiomeColumnBlocks(Block surface, Block subsurface, Block depth) {}
 
     private static final Map<Biome, BiomeColumnBlocks> BIOME_BLOCKS = Map.of(
             Biome.PLAINS, new BiomeColumnBlocks(Block.GRASS, Block.DIRT, Block.STONE),
@@ -168,7 +167,7 @@ public class WorldGenerator implements IWorldGenerator {
 
     // Mountains: always stone, snow above SNOW_LINE - height determines surface, not sea level.
     // Everything else: use biome surface above sea level; sand below (flooded terrain floor).
-    private static byte chooseSurface(int surfaceY, Biome biome, BiomeColumnBlocks blocks) {
+    private static Block chooseSurface(int surfaceY, Biome biome, BiomeColumnBlocks blocks) {
         if (biome == Biome.MOUNTAINS) {
             return surfaceY >= SNOW_LINE ? Block.SNOW : blocks.surface();
         }

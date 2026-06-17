@@ -63,11 +63,11 @@ public class Window {
     }
 
     public boolean shouldClose() {
-        return glfwWindowShouldClose(this.window);
+        return glfwWindowShouldClose(window);
     }
 
     public void close() {
-        glfwSetWindowShouldClose(this.window, true);
+        glfwSetWindowShouldClose(window, true);
     }
 
     public void pollEvents() {
@@ -79,17 +79,17 @@ public class Window {
     }
 
     public void endFrame() {
-        glfwSwapBuffers(this.window);
+        glfwSwapBuffers(window);
     }
 
     public void setTitle(String t) {
-        glfwSetWindowTitle(this.window, t);
+        glfwSetWindowTitle(window, t);
     }
 
     // Register interest in framebuffer resizes. Window never learns who's listening - the
     // composition root decides (e.g. the Camera, so its aspect ratio tracks the window).
     public void addResizeListener(ResizeListener listener) {
-        this.resizeListeners.add(listener);
+        resizeListeners.add(listener);
     }
 
     public double getTime() {
@@ -97,8 +97,8 @@ public class Window {
     }
 
     public void shutdown() {
-        glfwFreeCallbacks(this.window);
-        glfwDestroyWindow(this.window);
+        glfwFreeCallbacks(window);
+        glfwDestroyWindow(window);
         glfwTerminate();
         Objects.requireNonNull(glfwSetErrorCallback(null)).free();
     }
@@ -114,53 +114,52 @@ public class Window {
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-        this.window = glfwCreateWindow(this.config.width(), this.config.height(), this.config.title(), NULL, NULL);
-        if (this.window == NULL) throw new RuntimeException("Failed to create the GLFW window");
+        window = glfwCreateWindow(config.width(), config.height(), config.title(), NULL, NULL);
+        if (window == NULL) throw new RuntimeException("Failed to create the GLFW window");
 
         // Center the window on the primary monitor.
         try (MemoryStack stack = stackPush()) {
             IntBuffer pWidth = stack.mallocInt(1);
             IntBuffer pHeight = stack.mallocInt(1);
-            glfwGetWindowSize(this.window, pWidth, pHeight);
+            glfwGetWindowSize(window, pWidth, pHeight);
             GLFWVidMode vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
             if (vidMode == null) {
                 throw new RuntimeException("Failed to get video mode.");
             }
-            glfwSetWindowPos(
-                    this.window, (vidMode.width() - pWidth.get(0)) / 2, (vidMode.height() - pHeight.get(0)) / 2);
+            glfwSetWindowPos(window, (vidMode.width() - pWidth.get(0)) / 2, (vidMode.height() - pHeight.get(0)) / 2);
         }
 
-        glfwShowWindow(this.window);
-        glfwRequestWindowAttention(this.window);
+        glfwShowWindow(window);
+        glfwRequestWindowAttention(window);
 
-        glfwSetInputMode(this.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         System.out.printf("Minecraft started %s!%n", Version.getVersion());
     }
 
     private void initOpenGL() {
         // Bind the GL context to this thread - must happen before any GL call.
-        glfwMakeContextCurrent(this.window);
-        glfwSwapInterval(this.config.vsync() ? 1 : 0);
+        glfwMakeContextCurrent(window);
+        glfwSwapInterval(config.vsync() ? 1 : 0);
         GL.createCapabilities();
         if (config.debugEnabled()) {
             GLUtil.setupDebugMessageCallback();
         }
         glClearColor(
-                this.config.clearColor().red(),
-                this.config.clearColor().green(),
-                this.config.clearColor().blue(),
-                this.config.clearColor().alpha());
+                config.clearColor().red(),
+                config.clearColor().green(),
+                config.clearColor().blue(),
+                config.clearColor().alpha());
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
         glEnable(GL_CULL_FACE);
     }
 
     private void initCallbacks() {
-        glfwSetKeyCallback(this.window, IRawInputEvent.KeyEventI.callback(this.queue));
-        glfwSetMouseButtonCallback(this.window, IRawInputEvent.MouseButtonEventI.callback(this.queue));
-        glfwSetCursorPosCallback(this.window, IRawInputEvent.MouseMoveEventI.callback(this.queue));
-        glfwSetScrollCallback(this.window, IRawInputEvent.ScrollEventI.callback(this.queue));
-        glfwSetFramebufferSizeCallback(this.window, resizeCallback());
+        glfwSetKeyCallback(window, IRawInputEvent.KeyEventI.callback(queue));
+        glfwSetMouseButtonCallback(window, IRawInputEvent.MouseButtonEventI.callback(queue));
+        glfwSetCursorPosCallback(window, IRawInputEvent.MouseMoveEventI.callback(queue));
+        glfwSetScrollCallback(window, IRawInputEvent.ScrollEventI.callback(queue));
+        glfwSetFramebufferSizeCallback(window, resizeCallback());
     }
 
     // GLFW fires this during glfwPollEvents() on the main thread, so notifying listeners straight
@@ -168,7 +167,7 @@ public class Window {
     private GLFWFramebufferSizeCallbackI resizeCallback() {
         return (long window, int width, int height) -> {
             glViewport(0, 0, width, height);
-            for (ResizeListener listener : this.resizeListeners) listener.onResize(width, height);
+            for (ResizeListener listener : resizeListeners) listener.onResize(width, height);
         };
     }
 }

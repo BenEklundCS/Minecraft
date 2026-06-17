@@ -2,6 +2,7 @@ package com.beneklund.minecraft.util;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.world.Chunk;
@@ -28,7 +29,7 @@ class RaycastTest {
                 return solid.contains(new Vector3i(x, y, z)) ? STONE : AIR;
             }
 
-            public void setBlock(int x, int y, int z, byte id) {}
+            public void setBlock(int x, int y, int z, Block block) {}
 
             public Chunk getChunk(ChunkPos pos) {
                 return null;

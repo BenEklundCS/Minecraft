@@ -17,25 +17,25 @@ public class DeltaTracker {
     }
 
     public void tick() {
-        this.prevFrameTime = this.currentTime;
-        this.currentTime = this.clock.getAsDouble();
-        this.frames++;
+        prevFrameTime = currentTime;
+        currentTime = clock.getAsDouble();
+        frames++;
     }
 
     public float getDelta() {
-        return (float) (this.currentTime - this.prevFrameTime);
+        return (float) (currentTime - prevFrameTime);
     }
 
     public boolean timePassed(double time) {
-        return this.currentTime - this.lastTime >= time;
+        return currentTime - lastTime >= time;
     }
 
     public int getFrames() {
-        return this.frames;
+        return frames;
     }
 
     public void reset() {
-        this.lastTime = this.clock.getAsDouble();
-        this.frames = 0;
+        lastTime = clock.getAsDouble();
+        frames = 0;
     }
 }

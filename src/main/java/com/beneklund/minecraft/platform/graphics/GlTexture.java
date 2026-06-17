@@ -28,36 +28,36 @@ public class GlTexture {
     private ImageData data;
 
     public void load(String classpathPng) {
-        this.data = LOADER.load(classpathPng);
+        data = LOADER.load(classpathPng);
     }
 
     public void upload() {
-        upload(this.data.pixels(), this.data.width(), this.data.height());
-        this.data.close();
-        this.data = null;
+        upload(data.pixels(), data.width(), data.height());
+        data.close();
+        data = null;
     }
 
     // For callers that build their own pixel buffer (e.g. TextureAtlas stitching).
     // Caller is responsible for freeing the buffer after this returns.
     public void upload(ByteBuffer pixels, int width, int height) {
-        this.id = glGenTextures();
-        glBindTexture(GL_TEXTURE_2D, this.id);
+        id = glGenTextures();
+        glBindTexture(GL_TEXTURE_2D, id);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
 
     public void bind() {
-        glBindTexture(GL_TEXTURE_2D, this.id);
+        glBindTexture(GL_TEXTURE_2D, id);
     }
 
     public void delete() {
         // data is normally already freed in upload(); only non-null if load() ran without
         // upload(). The atlas path uses the upload(ByteBuffer) overload and never sets data.
-        if (this.data != null) {
-            this.data.close();
-            this.data = null;
+        if (data != null) {
+            data.close();
+            data = null;
         }
-        glDeleteTextures(this.id);
+        glDeleteTextures(id);
     }
 }

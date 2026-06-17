@@ -102,7 +102,7 @@ public class ChunkMesher {
         for (int x = 0; x < Chunk.SIZE_XZ; x++) {
             for (int y = 0; y < Chunk.SIZE_Y; y++) {
                 for (int z = 0; z < Chunk.SIZE_XZ; z++) {
-                    byte blockId = chunk.getBlock(x, y, z);
+                    Block blockId = chunk.getBlock(x, y, z);
                     if (blockId == Block.AIR) continue;
 
                     BlockDef def = registry.get(blockId);
@@ -175,7 +175,7 @@ public class ChunkMesher {
 
     // Grass top and all leaf blocks store greyscale textures in the faithful pack —
     // they need a biome color multiplied in. Everything else is white (no tint).
-    private static Color getTint(byte blockId, Direction dir) {
+    private static Color getTint(Block blockId, Direction dir) {
         if (blockId == Block.OAK_LEAF) return FOLIAGE_TINT;
         if (blockId == Block.GRASS && dir == Direction.UP) return GRASS_TINT;
         return Color.WHITE;

@@ -29,7 +29,7 @@ class BlockRegistryTest {
 
     @Test
     void allBlockIds_returnNonNullBlockDef() {
-        byte[] allIds = {
+        Block[] allIds = {
             Block.AIR,
             Block.STONE,
             Block.DIRT,
@@ -47,8 +47,8 @@ class BlockRegistryTest {
             Block.IRON_ORE,
             Block.SNOW
         };
-        for (byte id : allIds) {
-            assertNotNull(registry.get(id), "BlockDef was null for block id " + id);
+        for (Block id : allIds) {
+            assertNotNull(registry.get(id), "BlockDef was null for block " + id);
         }
     }
 }

@@ -23,7 +23,7 @@ public sealed interface IGenerationSpec {
     record NoiseLayersSpecI(NoiseLayerSpec continental, NoiseLayerSpec erosion, NoiseLayerSpec detail)
             implements IGenerationSpec {}
 
-    record OreSpecI(byte blockId, int minY, int maxY, float chance) implements IGenerationSpec {}
+    record OreSpecI(Block blockId, int minY, int maxY, float chance) implements IGenerationSpec {}
 
     record TreeSpecI(float spawnChance, int minHeadroom) implements IGenerationSpec {}
 

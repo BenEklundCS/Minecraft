@@ -2,6 +2,7 @@ package com.beneklund.minecraft.infra;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.entity.Entity;
@@ -35,7 +36,7 @@ class ChunkManagerTest {
             }
 
             @Override
-            public void setBlock(int x, int y, int z, byte id) {}
+            public void setBlock(int x, int y, int z, Block block) {}
 
             @Override
             public Chunk getChunk(ChunkPos pos) {

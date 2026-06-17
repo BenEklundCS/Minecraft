@@ -31,24 +31,14 @@ public class InputHandler {
                 case IInputAction.Simple.DEBUG_OVERLAY -> LOGGER.debug("DEBUG_OVERLAY");
                 case IInputAction.Simple.INVENTORY -> LOGGER.debug("INVENTORY");
                 case IInputAction.HotbarActionI.Select h -> LOGGER.debug("SLOT_{}", h.slot() + 1);
-                case IInputAction.Simple.EXIT -> this.window.close();
+                case IInputAction.Simple.EXIT -> window.close();
                 case IInputAction.MoveActionI m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
                 case IInputAction.LookActionI l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
                 case IInputAction.ScrollActionI s -> {
                     LOGGER.debug("SCROLL delta={}", s.delta());
-                    handleScroll(s);
                 }
                 default -> {}
             }
         }
-    }
-
-    private void handleScroll(IInputAction.ScrollActionI scrollAction) {
-        // Scroll zooms by adjusting FOV. 45° is the normal Minecraft FOV; clamped so
-        // it never goes fisheye or collapses to a point.
-        float fov = this.camera.getFov() - scrollAction.delta();
-        if (fov < 1.0f) fov = 1.0f;
-        if (fov > 45.0f) fov = 45.0f;
-        this.camera.setFov(fov);
     }
 }

@@ -2,6 +2,7 @@ package com.beneklund.minecraft.player;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.util.AABB;
@@ -66,7 +67,7 @@ class PhysicsTest {
                 return solid.test(new Vector3i(x, y, z)) ? SOLID : AIR;
             }
 
-            public void setBlock(int x, int y, int z, byte id) {}
+            public void setBlock(int x, int y, int z, Block block) {}
 
             public Chunk getChunk(ChunkPos pos) {
                 return null;

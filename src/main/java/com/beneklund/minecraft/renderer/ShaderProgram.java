@@ -29,14 +29,14 @@ public class ShaderProgram {
                 fragmentShaderSource = new String(fragmentShaderStream.readAllBytes(), StandardCharsets.UTF_8);
             }
 
-            this.shader = new GlShader(vertexShaderSource, fragmentShaderSource);
+            shader = new GlShader(vertexShaderSource, fragmentShaderSource);
         } catch (IOException e) {
             throw new RuntimeException("Failed to load shader program: ", e);
         }
     }
 
     public void bind() {
-        this.shader.use();
+        shader.use();
     }
 
     public void setUniformMat4(String name, Matrix4f matrix) {

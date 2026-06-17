@@ -20,15 +20,15 @@ public class DebugRenderer implements IRenderable {
     private Vector3f laserEnd;
 
     public void setLaser(Vector3f start, Vector3f end) {
-        this.laserStart = new Vector3f(start);
-        this.laserEnd = new Vector3f(end);
-        this.laserDirty = true;
+        laserStart = new Vector3f(start);
+        laserEnd = new Vector3f(end);
+        laserDirty = true;
     }
 
     public void clearLaser() {
-        this.laserStart = null;
-        this.laserEnd = null;
-        this.laserDirty = true;
+        laserStart = null;
+        laserEnd = null;
+        laserDirty = true;
     }
 
     public void updateFromRaycast(Vector3f origin, Vector3f direction, RaycastResult result) {
@@ -45,9 +45,9 @@ public class DebugRenderer implements IRenderable {
     public void updateTargetedBlock(RaycastResult result) {
         if (result.hit()) {
             var b = result.blockPos();
-            this.targetTransform = new Matrix4f().translation(b.x, b.y, b.z);
+            targetTransform = new Matrix4f().translation(b.x, b.y, b.z);
         } else {
-            this.targetTransform = null;
+            targetTransform = null;
         }
     }
 
@@ -80,8 +80,8 @@ public class DebugRenderer implements IRenderable {
             4, 5, 5, 6, 6, 7, 7, 4, // top square
             0, 4, 1, 5, 2, 6, 3, 7, // verticals
         };
-        this.targetMesh = new LineMesh();
-        this.targetMesh.upload(vertices, indices);
+        targetMesh = new LineMesh();
+        targetMesh.upload(vertices, indices);
     }
 
     private void rebuildLaserMesh() {

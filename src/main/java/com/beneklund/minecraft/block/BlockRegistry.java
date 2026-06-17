@@ -3,21 +3,21 @@ package com.beneklund.minecraft.block;
 import java.util.Map;
 
 public class BlockRegistry {
-    private final Map<Byte, BlockDef> blockDefs;
+    private final Map<Block, BlockDef> blockDefs;
 
-    public BlockRegistry(Map<Byte, BlockDef> blockDefs) {
+    public BlockRegistry(Map<Block, BlockDef> blockDefs) {
         this.blockDefs = blockDefs;
     }
 
-    // Falls back to AIR so an unregistered block ID renders as invisible rather than NPE-ing
-    // in a worker thread where the stack trace would be hard to trace back to the bad ID.
-    public BlockDef get(byte b) {
-        return blockDefs.getOrDefault(b, blockDefs.get(Block.AIR));
+    // Falls back to AIR so an unregistered block renders as invisible rather than NPE-ing
+    // in a worker thread where the stack trace would be hard to trace back to the bad block.
+    public BlockDef get(Block block) {
+        return blockDefs.getOrDefault(block, blockDefs.get(Block.AIR));
     }
 
     public static BlockRegistry createDefault() {
         // face order: up, down, north, south, east, west
-        return new BlockRegistry(Map.ofEntries(
+        return new BlockRegistry(Map.<Block, BlockDef>ofEntries(
                 Map.entry(
                         Block.AIR, new BlockDef(false, true, new String[] {"air", "air", "air", "air", "air", "air"})),
                 Map.entry(

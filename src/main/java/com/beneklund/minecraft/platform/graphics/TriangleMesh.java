@@ -1,16 +1,17 @@
 package com.beneklund.minecraft.platform.graphics;
 
-import static org.lwjgl.opengl.GL11.GL_LINES;
+import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
 import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
 import static org.lwjgl.opengl.GL11.glDrawElements;
 
-public class LineMesh implements Mesh {
+// Same upload/layout as LineMesh, but draws filled triangles instead of lines.
+public class TriangleMesh implements Mesh {
     private final GlVertexArray vao;
     private final IGlVertexArrayBuffer vbo;
     private final IGlElementArrayBuffer ebo;
     private int indexCount;
 
-    public LineMesh() {
+    public TriangleMesh() {
         vao = new GlVertexArray();
         vbo = new IGlVertexArrayBuffer();
         ebo = new IGlElementArrayBuffer();
@@ -31,7 +32,7 @@ public class LineMesh implements Mesh {
     public void render() {
         if (indexCount == 0) return;
         vao.bind();
-        glDrawElements(GL_LINES, indexCount, GL_UNSIGNED_INT, 0L);
+        glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0L);
     }
 
     public void delete() {

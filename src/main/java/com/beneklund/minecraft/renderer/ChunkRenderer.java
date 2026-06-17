@@ -12,7 +12,7 @@ public class ChunkRenderer {
     private final TextureAtlas atlas;
 
     public ChunkRenderer(TextureAtlas atlas) {
-        this.shader = new ShaderProgram("/shaders/chunk.vert", "/shaders/chunk.frag");
+        shader = new ShaderProgram("/shaders/chunk.vert", "/shaders/chunk.frag");
         this.atlas = atlas;
     }
 

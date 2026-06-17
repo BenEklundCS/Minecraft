@@ -19,7 +19,7 @@ public class World {
     }
 
     public void update(List<IInputAction> actions, float dt) {
-        this.inputHandler.handle(actions);
+        inputHandler.handle(actions);
     }
 
     public Chunk getChunk(ChunkPos pos) {
@@ -27,22 +27,22 @@ public class World {
     }
 
     public void addChunk(ChunkPos pos, Chunk chunk) {
-        this.chunks.put(pos, chunk);
+        chunks.put(pos, chunk);
     }
 
     public void removeChunk(ChunkPos pos) {
-        this.chunks.remove(pos);
+        chunks.remove(pos);
     }
 
     public boolean hasChunk(ChunkPos pos) {
-        return this.chunks.containsKey(pos);
+        return chunks.containsKey(pos);
     }
 
     public Set<ChunkPos> getChunkPositions() {
-        return this.chunks.keySet();
+        return chunks.keySet();
     }
 
     public Set<Map.Entry<ChunkPos, Chunk>> getChunkEntries() {
-        return this.chunks.entrySet();
+        return chunks.entrySet();
     }
 }

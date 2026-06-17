@@ -14,7 +14,7 @@ public class LocalConfig {
 
     public LocalConfig() {
         try (var in = new FileInputStream("local.properties")) {
-            this.props.load(in);
+            props.load(in);
         } catch (IOException ignored) {
             // no local.properties — all settings will be absent
         }
@@ -22,11 +22,11 @@ public class LocalConfig {
 
     // e.g. "music/c418/disc_cat.ogg" — plays on startup if set.
     public Optional<String> startupDisc() {
-        return Optional.ofNullable(this.props.getProperty("startup.disc"));
+        return Optional.ofNullable(props.getProperty("startup.disc"));
     }
 
     public boolean debugEnabled() {
-        Optional<String> prop = Optional.ofNullable(this.props.getProperty("debug.enabled"));
+        Optional<String> prop = Optional.ofNullable(props.getProperty("debug.enabled"));
         if (prop.isPresent()) {
             String propValue = prop.get();
             if (propValue.equals("true") || propValue.equals("false")) {

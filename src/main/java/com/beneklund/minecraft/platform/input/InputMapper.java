@@ -65,7 +65,7 @@ public class InputMapper {
     // dt is the frame time in seconds; it advances the repeat timers for held bindings.
     public List<IInputAction> drain(float dt) {
         List<IInputAction> actions = new ArrayList<>();
-        for (IRawInputEvent event : this.queue.drain()) {
+        for (IRawInputEvent event : queue.drain()) {
             switch (event) {
                 case IRawInputEvent.KeyEventI e -> handleButton(e.key(), e.action(), actions);
                 case IRawInputEvent.MouseButtonEventI e -> handleButton(e.button(), e.action(), actions);
@@ -79,7 +79,7 @@ public class InputMapper {
 
     // Keys and mouse buttons share this path — both are just integer codes with a Binding.
     private void handleButton(int code, int glfwAction, List<IInputAction> actions) {
-        Binding binding = this.bindings.get(code);
+        Binding binding = bindings.get(code);
         if (binding == null) return;
         switch (binding.trigger()) {
             case Trigger.Tap tap -> {
@@ -89,9 +89,9 @@ public class InputMapper {
                 if (glfwAction == GLFW_PRESS) {
                     // Prime the timer at the repeat interval so processHeld fires it instantly
                     // this frame (no wait for the first hit), then spaces out subsequent ones.
-                    this.heldTimers.put(code, hold.repeatSeconds());
+                    heldTimers.put(code, hold.repeatSeconds());
                 } else if (glfwAction == GLFW_RELEASE) {
-                    this.heldTimers.remove(code);
+                    heldTimers.remove(code);
                 }
                 // GLFW_REPEAT is ignored — our own timer drives repetition.
             }
@@ -99,8 +99,8 @@ public class InputMapper {
     }
 
     private void processHeld(float dt, List<IInputAction> actions) {
-        for (var entry : this.heldTimers.entrySet()) {
-            Binding binding = this.bindings.get(entry.getKey());
+        for (var entry : heldTimers.entrySet()) {
+            Binding binding = bindings.get(entry.getKey());
             float repeatSeconds = ((Trigger.Hold) binding.trigger()).repeatSeconds();
             float elapsed = entry.getValue() + dt;
             if (elapsed >= repeatSeconds) { // repeat 0 -> true every frame
@@ -112,12 +112,12 @@ public class InputMapper {
     }
 
     private void handleMouseMove(IRawInputEvent.MouseMoveEventI e, List<IInputAction> actions) {
-        if (!Double.isNaN(this.lastMouseX)) {
-            float dx = (float) (e.xpos() - this.lastMouseX);
-            float dy = (float) (e.ypos() - this.lastMouseY);
+        if (!Double.isNaN(lastMouseX)) {
+            float dx = (float) (e.xpos() - lastMouseX);
+            float dy = (float) (e.ypos() - lastMouseY);
             actions.add(new IInputAction.LookActionI(dx, dy));
         }
-        this.lastMouseX = e.xpos();
-        this.lastMouseY = e.ypos();
+        lastMouseX = e.xpos();
+        lastMouseY = e.ypos();
     }
 }

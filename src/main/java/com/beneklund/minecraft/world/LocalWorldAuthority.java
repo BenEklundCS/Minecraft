@@ -30,13 +30,13 @@ public class LocalWorldAuthority implements IWorldAuthority {
     }
 
     @Override
-    public void setBlock(int x, int y, int z, byte id) {
+    public void setBlock(int x, int y, int z, Block block) {
         if (y < 0 || y >= Chunk.SIZE_Y) return;
         Chunk chunk = getChunk(x, z);
         ChunkPos pos = getChunkPos(x, z);
         if (chunk == null) return;
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
-        chunk.setBlock(chunkCoordinates.x, y, chunkCoordinates.z, id);
+        chunk.setBlock(chunkCoordinates.x, y, chunkCoordinates.z, block);
         chunk.tryTransition(ChunkState.DIRTY);
         // edit occured on border, mark cardinals dirty if they're uploaded
         if (atChunkBorder(chunkCoordinates)) {
@@ -65,7 +65,7 @@ public class LocalWorldAuthority implements IWorldAuthority {
 
     private Chunk getChunk(int x, int z) {
         ChunkPos pos = getChunkPos(x, z);
-        return this.world.getChunk(pos);
+        return world.getChunk(pos);
     }
 
     private ChunkPos getChunkPos(int x, int z) {

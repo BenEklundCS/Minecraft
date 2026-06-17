@@ -41,15 +41,15 @@ public class ChunkManager {
             WorldConfig config, World world, IWorldGenerator generator, ChunkMesher mesher, IWorldAuthority authority) {
         this.world = world;
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
-        this.generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
-        this.meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
-        this.meshJob = (JobInput input) -> {
+        generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
+        meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
+        meshJob = (JobInput input) -> {
             if (!input.chunk.tryTransition(ChunkState.MESHING)) return;
             ChunkMeshData meshData = mesher.mesh(input.pos, input.chunk);
             if (!input.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
             uploadQueue.add(meshData);
         };
-        this.genJob = (JobInput genJobInput) -> {
+        genJob = (JobInput genJobInput) -> {
             if (!genJobInput.chunk.tryTransition(ChunkState.GENERATING)) return;
             generator.generate(genJobInput.pos, config.seed(), genJobInput.chunk);
             authority.markCardinalNeighborsDirty(genJobInput.pos);
@@ -62,36 +62,36 @@ public class ChunkManager {
         // query list of chunk positions around the player
         List<ChunkPos> chunkPositions = getChunksInRadius(playerPos, CHUNK_LOAD_RADIUS);
         // UNLOAD
-        Set<ChunkPos> worldChunkPositionSet = this.world.getChunkPositions();
+        Set<ChunkPos> worldChunkPositionSet = world.getChunkPositions();
         Set<ChunkPos> nearbyChunkPositionSet = new HashSet<>(chunkPositions);
         for (ChunkPos worldPos : worldChunkPositionSet) {
             if (!nearbyChunkPositionSet.contains(worldPos)) {
-                Chunk chunk = this.world.getChunk(worldPos);
+                Chunk chunk = world.getChunk(worldPos);
                 if (chunk.getState() == ChunkState.DIRTY) continue;
                 if (!chunk.tryTransition(ChunkState.UNLOADING)) continue;
-                this.world.removeChunk(worldPos);
-                this.unloadQueue.add(worldPos);
+                world.removeChunk(worldPos);
+                unloadQueue.add(worldPos);
             }
         }
         // LOAD
         int loadsThisTick = 0;
         for (ChunkPos chunkPos : chunkPositions) {
             if (loadsThisTick >= MAX_LOADS_PER_TICK) break;
-            if (!this.world.hasChunk(chunkPos)) {
+            if (!world.hasChunk(chunkPos)) {
                 Chunk chunk = new Chunk();
-                this.world.addChunk(chunkPos, chunk);
+                world.addChunk(chunkPos, chunk);
                 if (!chunk.tryTransition(ChunkState.QUEUED_GEN)) continue;
-                this.generationPool.submit(() -> genJob.accept(new JobInput(chunk, chunkPos)));
+                generationPool.submit(() -> genJob.accept(new JobInput(chunk, chunkPos)));
                 loadsThisTick++;
             }
         }
         // DIRTY
-        for (var entry : this.world.getChunkEntries()) {
+        for (var entry : world.getChunkEntries()) {
             Chunk chunk = entry.getValue();
             ChunkPos pos = entry.getKey();
             if (chunk.getState() == ChunkState.DIRTY) {
                 if (chunk.tryTransition(ChunkState.QUEUED_MESH)) {
-                    this.meshingPool.submit(() -> meshJob.accept(new JobInput(chunk, pos)));
+                    meshingPool.submit(() -> meshJob.accept(new JobInput(chunk, pos)));
                 }
             }
         }
@@ -146,7 +146,7 @@ public class ChunkManager {
     //    x, y = x+dx, y+dy
 
     private List<ChunkPos> getChunksInRadius(ChunkPos pos, int radius) {
-        if (pos == this.lastChunkPosition) return this.lastChunksInRadius;
+        if (pos == lastChunkPosition) return lastChunksInRadius;
         List<ChunkPos> result = new ArrayList<>();
         int offsetX = 0;
         int offsetZ = 0;
@@ -165,7 +165,7 @@ public class ChunkManager {
             offsetX = offsetX + stepX;
             offsetZ = offsetZ + stepZ;
         }
-        this.lastChunksInRadius = result;
+        lastChunksInRadius = result;
         return result;
     }
 

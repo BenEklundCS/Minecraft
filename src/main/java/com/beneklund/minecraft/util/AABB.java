@@ -12,8 +12,8 @@ public class AABB {
     private final Vector3f max;
 
     public AABB(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
-        this.min = new Vector3f(minX, minY, minZ);
-        this.max = new Vector3f(maxX, maxY, maxZ);
+        min = new Vector3f(minX, minY, minZ);
+        max = new Vector3f(maxX, maxY, maxZ);
     }
 
     // Box of the given footprint/height whose bottom face is centered on bottomCenter.
@@ -38,12 +38,12 @@ public class AABB {
     // Math.floor (not an int cast) so negative coords map down, not toward zero.
     // Pure geometry — whether a cell is solid is the caller's problem.
     public List<Vector3i> getBlocksOverlapping() {
-        int minBx = (int) Math.floor(this.min.x);
-        int maxBx = (int) Math.ceil(this.max.x) - 1;
-        int minBy = (int) Math.floor(this.min.y);
-        int maxBy = (int) Math.ceil(this.max.y) - 1;
-        int minBz = (int) Math.floor(this.min.z);
-        int maxBz = (int) Math.ceil(this.max.z) - 1;
+        int minBx = (int) Math.floor(min.x);
+        int maxBx = (int) Math.ceil(max.x) - 1;
+        int minBy = (int) Math.floor(min.y);
+        int maxBy = (int) Math.ceil(max.y) - 1;
+        int minBz = (int) Math.floor(min.z);
+        int maxBz = (int) Math.ceil(max.z) - 1;
 
         List<Vector3i> cells = new ArrayList<>();
         for (int x = minBx; x <= maxBx; x++) {

@@ -36,52 +36,52 @@ public class AudioPlayer {
 
     private void init() {
         // null = let OpenAL pick the default audio device.
-        this.device = alcOpenDevice((ByteBuffer) null);
-        if (this.device == NULL) throw new RuntimeException("Failed to open OpenAL device");
+        device = alcOpenDevice((ByteBuffer) null);
+        if (device == NULL) throw new RuntimeException("Failed to open OpenAL device");
 
-        this.context = alcCreateContext(this.device, new int[] {0});
-        alcMakeContextCurrent(this.context);
+        context = alcCreateContext(device, new int[] {0});
+        alcMakeContextCurrent(context);
 
         // Reads driver support and makes the AL functions callable.
-        ALCCapabilities alcCaps = ALC.createCapabilities(this.device);
+        ALCCapabilities alcCaps = ALC.createCapabilities(device);
         ALCapabilities alCaps = AL.createCapabilities(alcCaps);
     }
 
     public void play(String classpathOgg) {
-        if (this.device == NULL) {
+        if (device == NULL) {
             init();
         }
         clean();
-        try (AudioData data = this.loader.load(classpathOgg)) {
+        try (AudioData data = loader.load(classpathOgg)) {
             int format = data.channels() == 1 ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
-            this.buffer = alGenBuffers();
-            alBufferData(this.buffer, format, data.pcm(), data.sampleRate());
+            buffer = alGenBuffers();
+            alBufferData(buffer, format, data.pcm(), data.sampleRate());
 
-            this.source = alGenSources();
-            alSourcei(this.source, AL_BUFFER, this.buffer);
-            alSourcei(this.source, AL_LOOPING, AL_TRUE);
-            alSourcePlay(this.source);
+            source = alGenSources();
+            alSourcei(source, AL_BUFFER, buffer);
+            alSourcei(source, AL_LOOPING, AL_TRUE);
+            alSourcePlay(source);
         }
     }
 
     public void shutdown() {
-        if (this.device == NULL) return;
-        alSourceStop(this.source);
-        alDeleteSources(this.source);
-        alDeleteBuffers(this.buffer);
+        if (device == NULL) return;
+        alSourceStop(source);
+        alDeleteSources(source);
+        alDeleteBuffers(buffer);
         alcMakeContextCurrent(NULL);
-        alcDestroyContext(this.context);
-        alcCloseDevice(this.device);
+        alcDestroyContext(context);
+        alcCloseDevice(device);
     }
 
     // Called before each play() to avoid leaking AL objects if play() is called multiple times.
     private void clean() {
-        if (this.source != 0) {
-            alSourceStop(this.source);
-            alDeleteSources(this.source);
-            alDeleteBuffers(this.buffer);
-            this.source = 0;
-            this.buffer = 0;
+        if (source != 0) {
+            alSourceStop(source);
+            alDeleteSources(source);
+            alDeleteBuffers(buffer);
+            source = 0;
+            buffer = 0;
         }
     }
 

@@ -94,7 +94,7 @@ class FallThroughReproTest {
         int localZ = Math.floorMod(worldZ, Chunk.SIZE_XZ);
         int trueSurfaceY = 0;
         for (int y = Chunk.SIZE_Y - 1; y >= 0; y--) {
-            byte id = probeChunk.getBlock(localX, y, localZ);
+            Block id = probeChunk.getBlock(localX, y, localZ);
             if (id != Block.AIR && registry.get(id).solid()) {
                 trueSurfaceY = y;
                 break;

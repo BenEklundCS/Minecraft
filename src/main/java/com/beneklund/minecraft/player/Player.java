@@ -32,25 +32,16 @@ public class Player implements IPhysicsBody {
 
     private RaycastResult targetedBlock;
 
-    private Map<Integer, Byte> slotToBlockIdHotbar = Map.of(
-            1,
-            Block.STONE,
-            2,
-            Block.DIRT,
-            3,
-            Block.GRASS,
-            4,
-            Block.BEDROCK,
-            5,
-            Block.SAND,
-            6,
-            Block.GRAVEL,
-            7,
-            Block.OAK_LOG,
-            8,
-            Block.OAK_PLANK,
-            9,
-            Block.OAK_LEAF);
+    private final Map<Integer, Block> slotToBlockIdHotbar = Map.ofEntries(
+            Map.entry(1, Block.STONE),
+            Map.entry(2, Block.DIRT),
+            Map.entry(3, Block.GRASS),
+            Map.entry(4, Block.BEDROCK),
+            Map.entry(5, Block.SAND),
+            Map.entry(6, Block.GRAVEL),
+            Map.entry(7, Block.OAK_LOG),
+            Map.entry(8, Block.OAK_PLANK),
+            Map.entry(9, Block.OAK_LEAF));
 
     // 0-indexed hotbar selection (slot 0 = key '1', matching HotbarActionI.Select). The
     // palette map above is keyed 1-9, so look-ups add 1. Scroll and number keys move this.
@@ -68,11 +59,11 @@ public class Player implements IPhysicsBody {
     private float pitch;
 
     public Player(PlayerConfig config, Camera camera, IWorldAuthority authority) {
-        this.position = config.startPosition();
-        this.velocity = new Vector3f();
-        this.movementSpeed = config.movementSpeed();
-        this.jumpVelocity = config.jumpVelocity();
-        this.reach = config.reach();
+        position = config.startPosition();
+        velocity = new Vector3f();
+        movementSpeed = config.movementSpeed();
+        jumpVelocity = config.jumpVelocity();
+        reach = config.reach();
         this.camera = camera;
         look(0, config.startPitch());
         this.authority = authority;
@@ -80,12 +71,12 @@ public class Player implements IPhysicsBody {
 
     @Override
     public Vector3f getPosition() {
-        return this.position;
+        return position;
     }
 
     @Override
     public Vector3f getVelocity() {
-        return this.velocity;
+        return velocity;
     }
 
     @Override
@@ -105,12 +96,12 @@ public class Player implements IPhysicsBody {
 
     @Override
     public boolean isOnGround() {
-        return this.isOnGround;
+        return isOnGround;
     }
 
     @Override
     public void setOnGround(boolean onGround) {
-        this.isOnGround = onGround;
+        isOnGround = onGround;
     }
 
     public float getYaw() {
@@ -129,8 +120,8 @@ public class Player implements IPhysicsBody {
 
     // Spherical -> cartesian from yaw/pitch. Yaw=0 faces +Z; yaw grows clockwise.
     public Vector3f getLookDirection() {
-        double y = Math.toRadians(this.yaw);
-        double p = Math.toRadians(this.pitch);
+        double y = Math.toRadians(yaw);
+        double p = Math.toRadians(pitch);
         return new Vector3f(
                         (float) (Math.cos(p) * Math.sin(y)), (float) Math.sin(p), (float) (Math.cos(p) * Math.cos(y)))
                 .normalize();
@@ -147,10 +138,10 @@ public class Player implements IPhysicsBody {
     public List<Interaction> tick(List<IInputAction> actions) {
         Vector3f wish = new Vector3f(); // desired horizontal heading in world space
 
-        Vector3f eyePos = new Vector3f(this.position).add(0, Player.EYE_HEIGHT, 0);
+        Vector3f eyePos = new Vector3f(position).add(0, Player.EYE_HEIGHT, 0);
         Vector3f lookDir = this.getLookDirection();
         RaycastResult result = Raycast.cast(eyePos, lookDir, authority, reach);
-        this.targetedBlock = result;
+        targetedBlock = result;
 
         List<Interaction> interactions = new ArrayList<>();
         for (IInputAction action : actions) {
@@ -179,14 +170,20 @@ public class Player implements IPhysicsBody {
                 case IInputAction.ScrollActionI(float delta) -> {
                     if (delta != 0) {
                         int step = delta > 0 ? 1 : -1;
-                        this.selectedSlot = Math.floorMod(this.selectedSlot + step, slotToBlockIdHotbar.size());
-                        LOGGER.info("Selected slot {} -> {}", selectedSlot, slotToBlockIdHotbar.get(selectedSlot + 1));
+                        selectedSlot = Math.floorMod(selectedSlot + step, slotToBlockIdHotbar.size());
+                        LOGGER.info(
+                                "Selected slot {} -> {}",
+                                selectedSlot,
+                                slotToBlockIdHotbar.get(selectedSlot + 1).name());
                     }
                 }
                 // Number keys jump straight to a slot.
                 case IInputAction.HotbarActionI.Select(int slot) -> {
-                    this.selectedSlot = slot;
-                    LOGGER.info("Selected slot {} -> {}", selectedSlot, slotToBlockIdHotbar.get(selectedSlot + 1));
+                    selectedSlot = slot;
+                    LOGGER.info(
+                            "Selected slot {} -> {}",
+                            selectedSlot,
+                            slotToBlockIdHotbar.get(selectedSlot + 1).name());
                 }
                 default -> {}
             }
@@ -201,9 +198,9 @@ public class Player implements IPhysicsBody {
 
     // Apply mouse delta in degrees. -dy so mouse-up looks up; clamp pitch short of vertical.
     public void look(float dxDegrees, float dyDegrees) {
-        this.yaw -= dxDegrees;
-        this.pitch -= dyDegrees;
-        this.pitch = Math.clamp(this.pitch, -MAX_PITCH, MAX_PITCH);
+        yaw -= dxDegrees;
+        pitch -= dyDegrees;
+        pitch = Math.clamp(pitch, -MAX_PITCH, MAX_PITCH);
     }
 
     // Push the eye position and look direction into the camera. Call after movement each frame.
@@ -213,27 +210,24 @@ public class Player implements IPhysicsBody {
     }
 
     public RaycastResult getTargetedBlock() {
-        return this.targetedBlock;
+        return targetedBlock;
     }
 
     // 0-indexed currently-selected hotbar slot, for the HUD to highlight.
     public int getSelectedSlot() {
-        return this.selectedSlot;
+        return selectedSlot;
     }
 
     private void breakTargetedBlock() {
         logRaycast();
         authority.setBlock(
-                this.targetedBlock.blockPos().x,
-                this.targetedBlock.blockPos().y,
-                this.targetedBlock.blockPos().z,
-                Block.AIR);
+                targetedBlock.blockPos().x, targetedBlock.blockPos().y, targetedBlock.blockPos().z, Block.AIR);
     }
 
     private void placeBlock() {
         logRaycast();
         Vector3i placementPosition =
-                this.targetedBlock.blockPos().add(this.targetedBlock.hitFace().normal());
+                targetedBlock.blockPos().add(targetedBlock.hitFace().normal());
         if (this.getBoundingBox().getBlocksOverlapping().contains(placementPosition)) {
             LOGGER.info(
                     "Player overlaps block, cannot place at ({}, {}, {})",
@@ -242,16 +236,16 @@ public class Player implements IPhysicsBody {
                     placementPosition.z);
             return;
         }
-        byte blockId = slotToBlockIdHotbar.getOrDefault(selectedSlot + 1, Block.STONE);
+        Block blockId = slotToBlockIdHotbar.getOrDefault(selectedSlot + 1, Block.STONE);
         authority.setBlock(placementPosition.x, placementPosition.y, placementPosition.z, blockId);
     }
 
     private void logRaycast() {
         LOGGER.info(
                 "Raycast hit={} blockPos={} face={} distance={}",
-                this.targetedBlock.hit(),
-                this.targetedBlock.blockPos(),
-                this.targetedBlock.hitFace(),
-                String.format("%.2f", this.targetedBlock.distance()));
+                targetedBlock.hit(),
+                targetedBlock.blockPos(),
+                targetedBlock.hitFace(),
+                String.format("%.2f", targetedBlock.distance()));
     }
 }

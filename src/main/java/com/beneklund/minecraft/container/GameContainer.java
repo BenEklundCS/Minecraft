@@ -16,11 +16,7 @@ import com.beneklund.minecraft.platform.resources.JsonIResourcePack;
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
-import com.beneklund.minecraft.renderer.Camera;
-import com.beneklund.minecraft.renderer.ChunkMesher;
-import com.beneklund.minecraft.renderer.DebugRenderer;
-import com.beneklund.minecraft.renderer.Renderer;
-import com.beneklund.minecraft.renderer.TextureAtlas;
+import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.world.Chunk;
@@ -67,7 +63,8 @@ public class GameContainer {
         RenderWorld renderWorld = new RenderWorld();
         ChunkRenderable chunkRenderable = new ChunkRenderable(renderWorld, atlas);
         DebugRenderer debugRenderer = new DebugRenderer();
-        Renderer renderer = new Renderer(List.of(chunkRenderable, debugRenderer));
+        HudRenderer hudRenderer = new HudRenderer();
+        Renderer renderer = new Renderer(List.of(chunkRenderable, debugRenderer, hudRenderer));
 
         // 6. Audio - OpenAL is lazy-initialized on first play(), but construct after GL
         //    so the window is confirmed healthy before we open the audio device.
@@ -82,6 +79,7 @@ public class GameContainer {
         WorldGenerator worldGen = new WorldGenerator(registry, generationSpecs);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         ChunkManager chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority);
+        Physics physics = new Physics();
 
         Player player = new Player(playerConfig, camera, authority);
 
@@ -102,12 +100,13 @@ public class GameContainer {
                         renderWorld,
                         camera,
                         player,
-                        new Physics(),
+                        physics,
                         world,
                         authority,
                         delta,
                         mapper,
-                        debugRenderer)
+                        debugRenderer,
+                        hudRenderer)
                 .run();
 
         // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).
@@ -129,7 +128,7 @@ public class GameContainer {
         int localX = Math.floorMod(worldX, Chunk.SIZE_XZ);
         int localZ = Math.floorMod(worldZ, Chunk.SIZE_XZ);
         for (int y = Chunk.SIZE_Y - 1; y >= 0; y--) {
-            byte id = chunk.getBlock(localX, y, localZ);
+            Block id = chunk.getBlock(localX, y, localZ);
             if (id != Block.AIR && registry.get(id).solid()) return y;
         }
         return 0;

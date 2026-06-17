@@ -10,13 +10,13 @@ public class InputEventQueue {
     private final ConcurrentLinkedQueue<IRawInputEvent> queue = new ConcurrentLinkedQueue<>();
 
     public void offer(IRawInputEvent event) {
-        this.queue.offer(event);
+        queue.offer(event);
     }
 
     public List<IRawInputEvent> drain() {
         List<IRawInputEvent> batch = new ArrayList<>();
         IRawInputEvent e;
-        while ((e = this.queue.poll()) != null) batch.add(e);
+        while ((e = queue.poll()) != null) batch.add(e);
         return batch;
     }
 }

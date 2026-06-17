@@ -18,19 +18,19 @@ public class IGlVertexArrayBuffer implements IGlBuffer {
     private final int buffer;
 
     public IGlVertexArrayBuffer() {
-        this.buffer = glGenBuffers();
+        buffer = glGenBuffers();
     }
 
     public void upload(float[] vertices) {
-        glBindBuffer(GL_ARRAY_BUFFER, this.buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
         glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);
     }
 
     public void bind() {
-        glBindBuffer(GL_ARRAY_BUFFER, this.buffer);
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
     }
 
     public void delete() {
-        glDeleteBuffers(this.buffer);
+        glDeleteBuffers(buffer);
     }
 }

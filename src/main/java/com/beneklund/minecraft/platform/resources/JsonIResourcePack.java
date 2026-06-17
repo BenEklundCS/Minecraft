@@ -27,10 +27,10 @@ public class JsonIResourcePack implements IResourcePack {
 
         JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
-        this.name = root.get("name").getAsString();
-        this.author = root.get("author").getAsString();
-        this.license = root.get("license").getAsString();
-        this.tileSize = root.get("tileSize").getAsInt();
+        name = root.get("name").getAsString();
+        author = root.get("author").getAsString();
+        license = root.get("license").getAsString();
+        tileSize = root.get("tileSize").getAsInt();
 
         // Tile paths in the JSON are relative to the pack file itself, so prefix with the
         // pack's directory so ImageLoader gets a full classpath path.
@@ -42,30 +42,30 @@ public class JsonIResourcePack implements IResourcePack {
 
     @Override
     public String getName() {
-        return this.name;
+        return name;
     }
 
     @Override
     public String getAuthor() {
-        return this.author;
+        return author;
     }
 
     @Override
     public String getLicense() {
-        return this.license;
+        return license;
     }
 
     @Override
     public int getTileSize() {
-        return this.tileSize;
+        return tileSize;
     }
 
     @Override
     public Map<String, ImageData> loadTiles() {
         // LinkedHashMap preserves insertion order, which keeps atlas stitching deterministic.
         Map<String, ImageData> data = new LinkedHashMap<>();
-        for (var entry : this.tilePaths.entrySet()) {
-            data.put(entry.getKey(), this.loader.load(entry.getValue()));
+        for (var entry : tilePaths.entrySet()) {
+            data.put(entry.getKey(), loader.load(entry.getValue()));
         }
         return data;
     }

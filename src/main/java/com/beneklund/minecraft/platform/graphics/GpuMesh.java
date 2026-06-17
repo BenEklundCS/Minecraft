@@ -18,10 +18,10 @@ public class GpuMesh implements Mesh {
         if (!Thread.currentThread().getName().equals("main"))
             throw new IllegalStateException("GpuMesh must be created on the main thread, was: "
                     + Thread.currentThread().getName());
-        this.vao = new GlVertexArray();
-        this.vbo = new IGlVertexArrayBuffer();
-        this.ebo = new IGlElementArrayBuffer();
-        this.indexCount = indices.length;
+        vao = new GlVertexArray();
+        vbo = new IGlVertexArrayBuffer();
+        ebo = new IGlElementArrayBuffer();
+        indexCount = indices.length;
 
         vao.bind();
         vbo.upload(vertices);

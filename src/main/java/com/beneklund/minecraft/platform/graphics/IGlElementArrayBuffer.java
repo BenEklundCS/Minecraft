@@ -21,19 +21,19 @@ public class IGlElementArrayBuffer implements IGlBuffer {
     private final int buffer;
 
     public IGlElementArrayBuffer() {
-        this.buffer = glGenBuffers();
+        buffer = glGenBuffers();
     }
 
     public void upload(int[] indices) {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.buffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW);
     }
 
     public void bind() {
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this.buffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer);
     }
 
     public void delete() {
-        glDeleteBuffers(this.buffer);
+        glDeleteBuffers(buffer);
     }
 }

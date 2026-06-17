@@ -9,10 +9,7 @@ import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.player.Interaction;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
-import com.beneklund.minecraft.renderer.Camera;
-import com.beneklund.minecraft.renderer.ChunkMeshData;
-import com.beneklund.minecraft.renderer.DebugRenderer;
-import com.beneklund.minecraft.renderer.Renderer;
+import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.util.RaycastResult;
 import com.beneklund.minecraft.world.Chunk;
@@ -44,6 +41,7 @@ public class Game {
     private final DeltaTracker delta;
     private final InputMapper mapper;
     private final DebugRenderer debugRenderer;
+    private final HudRenderer hudRenderer;
 
     public Game(
             Window window,
@@ -57,7 +55,8 @@ public class Game {
             IWorldAuthority authority,
             DeltaTracker delta,
             InputMapper mapper,
-            DebugRenderer debugRenderer) {
+            DebugRenderer debugRenderer,
+            HudRenderer hudRenderer) {
         this.window = window;
         this.renderer = renderer;
         this.chunkManager = chunkManager;
@@ -70,6 +69,7 @@ public class Game {
         this.delta = delta;
         this.mapper = mapper;
         this.debugRenderer = debugRenderer;
+        this.hudRenderer = hudRenderer;
     }
 
     public void run() {
@@ -105,7 +105,7 @@ public class Game {
                 }
             }
 
-            debugRenderer.updateTargetedBlock(this.player.getTargetedBlock());
+            debugRenderer.updateTargetedBlock(player.getTargetedBlock());
 
             if (physicsReady()) {
                 physics.update(player, authority, Math.min(delta.getDelta(), MAX_PHYSICS_STEP));

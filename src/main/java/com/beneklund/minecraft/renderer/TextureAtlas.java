@@ -92,8 +92,8 @@ public class TextureAtlas {
     // Create a GlTexture, call texture.upload(atlas, atlasW, atlasH), store the id,
     // then MemoryUtil.memFree(atlas) - GPU has the data, CPU buffer is dead weight.
     private void upload(ByteBuffer atlas, int atlasW, int atlasH) {
-        this.textureAtlas = new GlTexture();
-        this.textureAtlas.upload(atlas, atlasW, atlasH);
+        textureAtlas = new GlTexture();
+        textureAtlas.upload(atlas, atlasW, atlasH);
         memFree(atlas);
     }
 
@@ -110,10 +110,10 @@ public class TextureAtlas {
     }
 
     public void bind() {
-        this.textureAtlas.bind();
+        textureAtlas.bind();
     }
 
     public void delete() {
-        this.textureAtlas.delete();
+        textureAtlas.delete();
     }
 }

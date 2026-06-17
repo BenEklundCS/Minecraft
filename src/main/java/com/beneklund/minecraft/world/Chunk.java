@@ -1,21 +1,23 @@
 package com.beneklund.minecraft.world;
 
+import com.beneklund.minecraft.block.Block;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Chunk {
     public static final int SIZE_XZ = 16;
     public static final int SIZE_Y = 256;
+    // Storage stays a packed byte[] (1 byte/block) for memory and cache; Block is the API face.
     private final byte[] blocks = new byte[SIZE_XZ * SIZE_XZ * SIZE_Y]; // 16 * 16 * 256 == 65,536
     private final AtomicReference<ChunkState> state = new AtomicReference<>(ChunkState.UNLOADED);
 
     public Chunk() {}
 
-    public byte getBlock(int x, int y, int z) {
-        return this.blocks[index(x, y, z)];
+    public Block getBlock(int x, int y, int z) {
+        return Block.fromId(blocks[index(x, y, z)]);
     }
 
-    public void setBlock(int x, int y, int z, byte id) {
-        this.blocks[index(x, y, z)] = id;
+    public void setBlock(int x, int y, int z, Block block) {
+        blocks[index(x, y, z)] = block.id();
     }
 
     private static int index(int x, int y, int z) {

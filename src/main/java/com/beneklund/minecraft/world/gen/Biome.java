@@ -55,11 +55,11 @@ public enum Biome {
     }
 
     public float getTemperature() {
-        return this.temperature;
+        return temperature;
     }
 
     public float getHumidity() {
-        return this.humidity;
+        return humidity;
     }
 
     // Used by ChunkMesher to tint greyscale grass_top and leaf textures.

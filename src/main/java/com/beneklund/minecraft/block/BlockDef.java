@@ -25,6 +25,6 @@ public record BlockDef(boolean solid, boolean transparent, String[] tileNames) {
     }
 
     public String getTileFace(Direction direction) {
-        return this.tileNames[direction.ordinal()];
+        return tileNames[direction.ordinal()];
     }
 }

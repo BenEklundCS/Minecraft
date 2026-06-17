@@ -22,14 +22,14 @@ import static org.lwjgl.opengl.GL30.*;
  * Lifecycle: new -> bind() -> attribPointer() per attribute -> unbind() -> bind() each frame -> delete() on shutdown.
  */
 public class GlVertexArray {
-    private int vertexArray;
+    private final int vertexArray;
 
     public GlVertexArray() {
-        this.vertexArray = glGenVertexArrays();
+        vertexArray = glGenVertexArrays();
     }
 
     public void bind() {
-        glBindVertexArray(this.vertexArray);
+        glBindVertexArray(vertexArray);
     }
 
     public void unbind() {
@@ -38,7 +38,7 @@ public class GlVertexArray {
     }
 
     public void delete() {
-        glDeleteVertexArrays(this.vertexArray);
+        glDeleteVertexArrays(vertexArray);
     }
 
     public void attribPointer(int index, int size, int stride, long offset) {

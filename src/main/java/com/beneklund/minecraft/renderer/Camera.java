@@ -18,8 +18,8 @@ public class Camera {
     private float fov;
 
     public Camera(WindowConfig config, CameraConfig cameraConfig) {
-        this.windowSize = new Vector2f(config.width(), config.height());
-        this.fov = cameraConfig.fov();
+        windowSize = new Vector2f(config.width(), config.height());
+        fov = cameraConfig.fov();
     }
 
     public void setPosition(Vector3f position) {
@@ -38,8 +38,7 @@ public class Camera {
     // Standard perspective projection; aspect recalculated each call so setWindowSize() is always reflected.
     public Matrix4f getProjectionMatrix() {
         return new Matrix4f()
-                .perspective(
-                        (float) Math.toRadians(this.fov), this.windowSize.x / this.windowSize.y, NEAR_PLANE, FAR_PLANE);
+                .perspective((float) Math.toRadians(fov), windowSize.x / windowSize.y, NEAR_PLANE, FAR_PLANE);
     }
 
     public Matrix4f getViewProjectionMatrix() {
@@ -55,6 +54,6 @@ public class Camera {
     }
 
     public void setWindowSize(float width, float height) {
-        this.windowSize.set(width, height);
+        windowSize.set(width, height);
     }
 }
