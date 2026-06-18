@@ -114,13 +114,20 @@ public class HudRenderer implements IRenderable {
             int vBase = count * 4 * 8;
             float S = SLOT_SIZE;
 
-            float r = 1f, g = 1f, b = 1f, a = 1f;
+            float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
             // TODO: Remove this magic number fix for color
             if (block == Block.OAK_LEAF) {
                 r = 0.376f;
                 g = 0.502f;
                 b = 0.224f;
-                a = 1f;
+                a = 1.0f;
+            }
+
+            if (block == Block.GRASS) {
+                r = 0.306f;
+                g = 0.545f;
+                b = 0.239f;
+                a = 1.0f;
             }
 
             // TL
