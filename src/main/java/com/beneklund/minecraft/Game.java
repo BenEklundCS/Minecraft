@@ -125,6 +125,7 @@ public class Game {
                 if (entry != null) entry.mesh().delete();
             }
 
+            hudRenderer.setHotbar(player.getHotbarSnapshot(), player.getSelectedSlot());
             window.beginFrame();
             renderer.draw(camera);
             window.endFrame();

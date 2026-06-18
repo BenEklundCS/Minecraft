@@ -56,4 +56,8 @@ public class Camera {
     public void setWindowSize(float width, float height) {
         windowSize.set(width, height);
     }
+
+    public Vector2f getWindowSize() {
+        return windowSize;
+    }
 }

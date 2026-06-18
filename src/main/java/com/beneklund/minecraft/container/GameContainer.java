@@ -63,7 +63,7 @@ public class GameContainer {
         RenderWorld renderWorld = new RenderWorld();
         ChunkRenderable chunkRenderable = new ChunkRenderable(renderWorld, atlas);
         DebugRenderer debugRenderer = new DebugRenderer();
-        HudRenderer hudRenderer = new HudRenderer();
+        HudRenderer hudRenderer = new HudRenderer(registry, atlas);
         Renderer renderer = new Renderer(List.of(chunkRenderable, debugRenderer, hudRenderer));
 
         // 6. Audio - OpenAL is lazy-initialized on first play(), but construct after GL

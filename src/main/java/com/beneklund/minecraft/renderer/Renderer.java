@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.renderer;
 
+import static org.lwjgl.opengl.GL11.*;
+
 import java.util.List;
 
 // collects DrawCalls from all Renderables each frame and submits them to the GPU.
@@ -16,6 +18,9 @@ public class Renderer {
     }
 
     public void draw(Camera camera) {
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
         for (IRenderable renderable : registered) {
             List<DrawCall> drawCalls = renderable.getDrawCalls(camera);
             for (DrawCall drawCall : drawCalls) {

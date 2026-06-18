@@ -218,6 +218,18 @@ public class Player implements IPhysicsBody {
         return selectedSlot;
     }
 
+    // Returns the Block in the given 0-indexed slot, or null if empty.
+    public Block getHotbarBlock(int zeroBasedSlot) {
+        return slotToBlockIdHotbar.get(zeroBasedSlot + 1);
+    }
+
+    // Snapshot of all 9 hotbar slots (null = empty) for the HUD to render.
+    public Block[] getHotbarSnapshot() {
+        Block[] slots = new Block[9];
+        for (int i = 0; i < 9; i++) slots[i] = slotToBlockIdHotbar.get(i + 1);
+        return slots;
+    }
+
     private void breakTargetedBlock() {
         logRaycast();
         authority.setBlock(

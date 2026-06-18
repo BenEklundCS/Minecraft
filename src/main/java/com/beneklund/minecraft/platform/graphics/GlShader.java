@@ -51,6 +51,12 @@ public class GlShader {
 
     // Uploads a 4x4 matrix into a mat4 uniform. The program must be bound (use()) first - glUniform*
     // always writes into the currently-active program, not the one named here.
+    public void setFloat(String name, float value) {
+        int location = location(name);
+        if (location < 0) return;
+        glUniform1f(location, value);
+    }
+
     public void setMatrix4(String name, Matrix4f matrix) {
         int location = location(name);
         if (location < 0) return; // uniform doesn't exist or got stripped as unused; nothing to set
