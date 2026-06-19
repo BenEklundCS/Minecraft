@@ -15,7 +15,7 @@ public class HudMesh implements Mesh {
         indexCount = 0;
     }
 
-    // Vertex format: 8 floats per vertex - x, y, z, r, g, b, a, u, v. Stride = 32 bytes (4 bytes * 8 floats)
+    // Vertex format: 8 floats per vertex - x, y, r, g, b, a, u, v. Stride = 32 bytes (4 bytes * 8 floats)
     public void upload(float[] vertices, int[] indices) {
         vao.bind();
         vbo.upload(vertices);

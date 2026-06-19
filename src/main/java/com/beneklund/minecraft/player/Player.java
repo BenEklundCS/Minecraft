@@ -171,19 +171,13 @@ public class Player implements IPhysicsBody {
                     if (delta != 0) {
                         int step = delta > 0 ? 1 : -1;
                         selectedSlot = Math.floorMod(selectedSlot + step, slotToBlockIdHotbar.size());
-                        LOGGER.info(
-                                "Selected slot {} -> {}",
-                                selectedSlot,
-                                slotToBlockIdHotbar.get(selectedSlot + 1).name());
+                        logSelectedSlot();
                     }
                 }
                 // Number keys jump straight to a slot.
                 case IInputAction.HotbarActionI.Select(int slot) -> {
                     selectedSlot = slot;
-                    LOGGER.info(
-                            "Selected slot {} -> {}",
-                            selectedSlot,
-                            slotToBlockIdHotbar.get(selectedSlot + 1).name());
+                    logSelectedSlot();
                 }
                 default -> {}
             }
@@ -194,6 +188,13 @@ public class Player implements IPhysicsBody {
         velocity.x = wish.x;
         velocity.z = wish.z;
         return interactions;
+    }
+
+    private void logSelectedSlot() {
+        LOGGER.info(
+                "Selected slot {} -> {}",
+                selectedSlot,
+                slotToBlockIdHotbar.get(selectedSlot + 1).name());
     }
 
     // Apply mouse delta in degrees. -dy so mouse-up looks up; clamp pitch short of vertical.
@@ -238,6 +239,9 @@ public class Player implements IPhysicsBody {
 
     private void placeBlock() {
         logRaycast();
+
+        if (!targetedBlock.hit()) return; // no op if the Player is not placing the block against another block
+
         Vector3i placementPosition =
                 targetedBlock.blockPos().add(targetedBlock.hitFace().normal());
         if (this.getBoundingBox().getBlocksOverlapping().contains(placementPosition)) {

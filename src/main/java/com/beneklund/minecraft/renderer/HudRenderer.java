@@ -130,42 +130,13 @@ public class HudRenderer implements IRenderable {
                 a = 1.0f;
             }
 
-            // TL
-            vertices[vBase] = x;
-            vertices[vBase + 1] = y;
-            vertices[vBase + 2] = r;
-            vertices[vBase + 3] = g;
-            vertices[vBase + 4] = b;
-            vertices[vBase + 5] = a;
-            vertices[vBase + 6] = uMin;
-            vertices[vBase + 7] = vMax;
-            // TR
-            vertices[vBase + 8] = x + S;
-            vertices[vBase + 9] = y;
-            vertices[vBase + 10] = r;
-            vertices[vBase + 11] = g;
-            vertices[vBase + 12] = b;
-            vertices[vBase + 13] = a;
-            vertices[vBase + 14] = uMax;
-            vertices[vBase + 15] = vMax;
-            // BL
-            vertices[vBase + 16] = x;
-            vertices[vBase + 17] = y + S;
-            vertices[vBase + 18] = r;
-            vertices[vBase + 19] = g;
-            vertices[vBase + 20] = b;
-            vertices[vBase + 21] = a;
-            vertices[vBase + 22] = uMin;
-            vertices[vBase + 23] = vMin;
-            // BR
-            vertices[vBase + 24] = x + S;
-            vertices[vBase + 25] = y + S;
-            vertices[vBase + 26] = r;
-            vertices[vBase + 27] = g;
-            vertices[vBase + 28] = b;
-            vertices[vBase + 29] = a;
-            vertices[vBase + 30] = uMax;
-            vertices[vBase + 31] = vMin;
+            float[] slot = {
+                x, y, r, g, b, a, uMin, vMax, // TL
+                x + S, y, r, g, b, a, uMax, vMax, // TR
+                x, y + S, r, g, b, a, uMin, vMin, // BL
+                x + S, y + S, r, g, b, a, uMax, vMin, // BR
+            };
+            System.arraycopy(slot, 0, vertices, vBase, 32);
 
             int iBase = count * 6;
             int v = count * 4;
@@ -204,11 +175,13 @@ public class HudRenderer implements IRenderable {
         float y = startY - 2f;
         float S = SLOT_SIZE + 4f; // 2px bleed on each side
 
+        float r = 0.5f, g = 0.5f, b = 0.5f, a = 1.0f, u = 0.0f, v = 0.0f;
+
         return new float[] {
-            x, y, 1f, 0.8f, 0f, 1f, 0f, 0f, // TL — yellow
-            x + S, y, 1f, 0.8f, 0f, 1f, 0f, 0f, // TR
-            x, y + S, 1f, 0.8f, 0f, 1f, 0f, 0f, // BL
-            x + S, y + S, 1f, 0.8f, 0f, 1f, 0f, 0f, // BR
+            x, y, r, g, b, a, u, v, // TL
+            x + S, y, r, g, b, a, u, v, // TR
+            x, y + S, r, g, b, a, u, v, // BL
+            x + S, y + S, r, g, b, a, u, v, // BR
         };
     }
 
@@ -220,71 +193,74 @@ public class HudRenderer implements IRenderable {
         float cx = lastWindowSize.x / 2f, cy = lastWindowSize.y / 2f;
         float half = 8f;
         float thick = 1.5f;
+        float r = 1f, g = 1f, b = 1f, a = 1f, u = 0f, v = 0f;
         float[] vertices = {
+            // horizontal bar
             cx - half,
             cy - thick,
-            1f,
-            1f,
-            1f,
-            1f,
-            0f,
-            0f,
+            r,
+            g,
+            b,
+            a,
+            u,
+            v, // TL
             cx + half,
             cy - thick,
-            1f,
-            1f,
-            1f,
-            1f,
-            0f,
-            0f,
+            r,
+            g,
+            b,
+            a,
+            u,
+            v, // TR
             cx - half,
             cy + thick,
-            1f,
-            1f,
-            1f,
-            1f,
-            0f,
-            0f,
+            r,
+            g,
+            b,
+            a,
+            u,
+            v, // BL
             cx + half,
             cy + thick,
-            1f,
-            1f,
-            1f,
-            1f,
-            0f,
-            0f,
+            r,
+            g,
+            b,
+            a,
+            u,
+            v, // BR
+            // vertical bar
             cx - thick,
             cy - half,
-            1f,
-            1f,
-            1f,
-            1f,
-            0f,
-            0f,
+            r,
+            g,
+            b,
+            a,
+            u,
+            v, // TL
             cx + thick,
             cy - half,
-            1f,
-            1f,
-            1f,
-            1f,
-            0f,
-            0f,
+            r,
+            g,
+            b,
+            a,
+            u,
+            v, // TR
             cx - thick,
             cy + half,
-            1f,
-            1f,
-            1f,
-            1f,
-            0f,
-            0f,
+            r,
+            g,
+            b,
+            a,
+            u,
+            v, // BL
             cx + thick,
             cy + half,
-            1f,
-            1f,
-            1f,
-            1f,
-            0f,
-            0f,
+            r,
+            g,
+            b,
+            a,
+            u,
+            v, // BR
         };
         int[] indices = {0, 1, 2, 1, 3, 2, 4, 5, 6, 5, 7, 6};
         crosshair = new HudMesh();
