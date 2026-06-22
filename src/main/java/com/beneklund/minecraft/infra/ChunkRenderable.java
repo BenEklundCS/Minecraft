@@ -4,6 +4,7 @@ import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.renderer.DrawCall;
 import com.beneklund.minecraft.renderer.Frustum;
 import com.beneklund.minecraft.renderer.IRenderable;
+import com.beneklund.minecraft.renderer.RenderPass;
 import com.beneklund.minecraft.renderer.ShaderProgram;
 import com.beneklund.minecraft.renderer.TextureAtlas;
 import java.util.ArrayList;
@@ -26,7 +27,12 @@ public class ChunkRenderable implements IRenderable {
         List<DrawCall> result = new ArrayList<>();
         for (RenderWorld.Entry entry : renderWorld.getEntries()) {
             if (!frustum.isVisible(entry.bounds())) continue;
-            result.add(new DrawCall(entry.mesh(), entry.model(), CHUNK_SHADER));
+            if (entry.opaqueMesh() != null) {
+                result.add(new DrawCall(entry.opaqueMesh(), entry.model(), CHUNK_SHADER, RenderPass.OPAQUE));
+            }
+            if (entry.transparentMesh() != null) {
+                result.add(new DrawCall(entry.transparentMesh(), entry.model(), CHUNK_SHADER, RenderPass.TRANSPARENT));
+            }
         }
         return result;
     }

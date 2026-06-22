@@ -113,16 +113,24 @@ public class Game {
             player.syncCamera();
 
             // Upload at most MAX_UPLOADS_PER_FRAME new meshes — GpuMesh asserts main thread.
+            // Skip empty buffers so chunks with no opaque (or no transparent) geometry don't
+            // allocate a zero-length VAO; null means "nothing to draw for this pass".
             for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {
-                GpuMesh mesh = new GpuMesh(data.vertices(), data.indices());
-                renderWorld.add(data.pos(), mesh);
+                GpuMesh opaque = data.opaqueIdx().length > 0 ? new GpuMesh(data.opaqueVerts(), data.opaqueIdx()) : null;
+                GpuMesh transparent = data.transparentIdx().length > 0
+                        ? new GpuMesh(data.transparentVerts(), data.transparentIdx())
+                        : null;
+                renderWorld.add(data.pos(), opaque, transparent);
                 data.chunk().tryTransition(ChunkState.UPLOADED);
             }
 
             // Free GL buffers for chunks that left the load radius.
             for (var pos : chunkManager.drainUnloadQueue()) {
                 RenderWorld.Entry entry = renderWorld.remove(pos);
-                if (entry != null) entry.mesh().delete();
+                if (entry != null) {
+                    if (entry.opaqueMesh() != null) entry.opaqueMesh().delete();
+                    if (entry.transparentMesh() != null) entry.transparentMesh().delete();
+                }
             }
 
             hudRenderer.setHotbar(player.getHotbarSnapshot(), player.getSelectedSlot());

@@ -1,0 +1,13 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // AST-aware source rewriting for the Spotless 'removeRedundantThis' step.
+    // Regex can't do this safely (it would corrupt `this.x = x` in constructors).
+    implementation 'com.github.javaparser:javaparser-core:3.26.3'
+}

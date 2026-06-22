@@ -26,8 +26,25 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
-        assertEquals(24 * 10, data.vertices().length, "24 vertices × 10 floats");
-        assertEquals(36, data.indices().length, "6 quads × 6 indices");
+        assertEquals(24 * 10, data.opaqueVerts().length, "24 vertices × 10 floats");
+        assertEquals(36, data.opaqueIdx().length, "6 quads × 6 indices");
+        assertEquals(0, data.transparentVerts().length, "stone is opaque — nothing in the transparent buffer");
+        assertEquals(0, data.transparentIdx().length);
+    }
+
+    // a transparent block (water) routes all its geometry into the transparent buffer instead
+    @Test
+    void singleWaterBlock_goesToTransparentBuffer() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(0, 64, 0, Block.WATER);
+
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
+
+        assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
+        assertEquals(24 * 10, data.transparentVerts().length, "water lives in the transparent buffer");
+        assertEquals(36, data.transparentIdx().length);
+        assertEquals(0, data.opaqueVerts().length, "nothing opaque");
+        assertEquals(0, data.opaqueIdx().length);
     }
 
     // the shared face between two adjacent blocks is culled by both — 10 quads not 12
@@ -40,7 +57,7 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
 
         assertEquals(40, data.vertexCount(), "10 quads × 4 vertices");
-        assertEquals(60, data.indices().length, "10 quads × 6 indices");
+        assertEquals(60, data.opaqueIdx().length, "10 quads × 6 indices");
     }
 
     // all-air chunk produces no geometry
@@ -49,8 +66,10 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), emptyChunk());
 
         assertEquals(0, data.vertexCount());
-        assertEquals(0, data.vertices().length);
-        assertEquals(0, data.indices().length);
+        assertEquals(0, data.opaqueVerts().length);
+        assertEquals(0, data.opaqueIdx().length);
+        assertEquals(0, data.transparentVerts().length);
+        assertEquals(0, data.transparentIdx().length);
     }
 
     // interior blocks of a fully solid chunk are completely culled;
@@ -67,6 +86,6 @@ class ChunkMesherTest {
         // outer shell: 2 caps (16×16 each) + 4 sides (16×256 each)
         int expectedFaces = 2 * (16 * 16) + 4 * (16 * 256); // = 16896
         assertEquals(expectedFaces * 4, data.vertexCount(), "only outer-shell faces emitted");
-        assertEquals(expectedFaces * 6, data.indices().length);
+        assertEquals(expectedFaces * 6, data.opaqueIdx().length);
     }
 }
