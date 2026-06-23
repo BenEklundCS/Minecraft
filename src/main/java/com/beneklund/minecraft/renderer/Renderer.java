@@ -19,29 +19,39 @@ public class Renderer {
     }
 
     public void draw(Camera camera) {
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
-
         // Collect every renderable's calls first, then draw by pass. Gathering across all
         // renderables means transparent geometry blends against the full opaque scene, not
         // just whatever opaque calls happened to come before it in the same renderable.
+        // NOTE: getDrawCalls must not set GL state — Renderer owns it entirely.
         List<DrawCall> calls = new ArrayList<>();
         for (IRenderable renderable : registered) calls.addAll(renderable.getDrawCalls(camera));
 
-        // Opaque pass: write depth normally, no blending.
+        // Opaque pass: full depth test + write, no blending.
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
         glDepthMask(true);
         glDisable(GL_BLEND);
         for (DrawCall call : calls) if (call.pass() == RenderPass.OPAQUE) submit(call, camera);
 
-        // Transparent pass: blend over the opaque scene. Depth test stays on (so water is
-        // occluded by terrain in front of it) but depth writes are off (so transparent
-        // surfaces behind other transparent surfaces still draw instead of self-occluding).
+        // Transparent pass: depth test on so water is occluded by terrain, but depth write
+        // off so transparent surfaces behind other transparent surfaces still draw.
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
         glDepthMask(false);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         for (DrawCall call : calls) if (call.pass() == RenderPass.TRANSPARENT) submit(call, camera);
 
-        // Restore the default for the next frame's opaque work.
+        // HUD pass: drawn last over everything, no depth test, blending on for alpha.
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        glDepthMask(true);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        for (DrawCall call : calls) if (call.pass() == RenderPass.HUD) submit(call, camera);
+
+        // Restore sane defaults for the next frame.
+        glEnable(GL_DEPTH_TEST);
         glDepthMask(true);
         glDisable(GL_BLEND);
     }

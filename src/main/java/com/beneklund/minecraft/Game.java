@@ -107,8 +107,13 @@ public class Game {
 
             debugRenderer.updateTargetedBlock(player.getTargetedBlock());
 
-            if (physicsReady()) {
+            if (physicsReady() && !player.isFlyMode()) {
                 physics.update(player, authority, Math.min(delta.getDelta(), MAX_PHYSICS_STEP));
+            } else if (player.isFlyMode()) {
+                // Still integrate velocity in fly mode — Player sets it, we move the position.
+                float dt = Math.min(delta.getDelta(), MAX_PHYSICS_STEP);
+                player.getPosition()
+                        .add(player.getVelocity().x * dt, player.getVelocity().y * dt, player.getVelocity().z * dt);
             }
             player.syncCamera();
 

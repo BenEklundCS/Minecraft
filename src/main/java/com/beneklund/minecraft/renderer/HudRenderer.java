@@ -1,7 +1,5 @@
 package com.beneklund.minecraft.renderer;
 
-import static org.lwjgl.opengl.GL11.*;
-
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
@@ -51,11 +49,6 @@ public class HudRenderer implements IRenderable {
 
     @Override
     public List<DrawCall> getDrawCalls(Camera camera) {
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
         Vector2f windowSize = camera.getWindowSize();
         if (!windowSize.equals(lastWindowSize)) {
             lastWindowSize = new Vector2f(windowSize);
@@ -76,9 +69,9 @@ public class HudRenderer implements IRenderable {
 
         atlas.bind();
         return List.of(
-                new DrawCall(highlightedSlot, ortho, HUD_COLOR),
-                new DrawCall(hotBar, ortho, HUD_TEXTURE),
-                new DrawCall(crosshair, ortho, HUD_COLOR));
+                new DrawCall(highlightedSlot, ortho, HUD_COLOR, RenderPass.HUD),
+                new DrawCall(hotBar, ortho, HUD_TEXTURE, RenderPass.HUD),
+                new DrawCall(crosshair, ortho, HUD_COLOR, RenderPass.HUD));
     }
 
     private void rebuildHotBar() {

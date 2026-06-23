@@ -23,6 +23,7 @@ public class InputMapper {
             Map.entry(GLFW_KEY_A, Binding.hold(new IInputAction.MoveActionI(-1, 0), EVERY_FRAME)),
             Map.entry(GLFW_KEY_D, Binding.hold(new IInputAction.MoveActionI(1, 0), EVERY_FRAME)),
             Map.entry(GLFW_KEY_SPACE, Binding.hold(IInputAction.Simple.JUMP, EVERY_FRAME)),
+            Map.entry(GLFW_KEY_LEFT_SHIFT, Binding.hold(IInputAction.Simple.SNEAK, EVERY_FRAME)),
 
             // Mouse: held with a cadence so holding the button mines/places on a timer.
             Map.entry(GLFW_MOUSE_BUTTON_1, Binding.hold(IInputAction.Simple.BREAK_BLOCK, CLICK_REPEAT_SECONDS)),

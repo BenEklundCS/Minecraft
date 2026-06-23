@@ -18,6 +18,7 @@ public sealed interface IInputAction {
 
     enum Simple implements IInputAction {
         JUMP,
+        SNEAK,
         BREAK_BLOCK,
         PLACE_BLOCK,
         SLOT_NEXT,

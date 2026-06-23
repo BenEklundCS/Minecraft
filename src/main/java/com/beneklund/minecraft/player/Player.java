@@ -30,6 +30,13 @@ public class Player implements IPhysicsBody {
     // Eye sits above the feet (position). Matches Minecraft's 1.62 eye height.
     public static final float EYE_HEIGHT = 1.62f;
 
+    private static final long DOUBLE_TAP_NANOS = 300_000_000L; // 300ms window
+    private static final float FLY_SPEED = 50.0f;
+
+    private boolean flyMode = false;
+    private boolean wasJumpHeld = false;
+    private long lastJumpPressNanos = 0L;
+
     private RaycastResult targetedBlock;
 
     private final Map<Integer, Block> slotToBlockIdHotbar = Map.ofEntries(
@@ -137,6 +144,8 @@ public class Player implements IPhysicsBody {
     // syncCamera() runs afterward (in the game loop) once the new position is settled.
     public List<Interaction> tick(List<IInputAction> actions) {
         Vector3f wish = new Vector3f(); // desired horizontal heading in world space
+        boolean jumpHeld = false;
+        boolean sneakHeld = false;
 
         Vector3f eyePos = new Vector3f(position).add(0, Player.EYE_HEIGHT, 0);
         Vector3f lookDir = this.getLookDirection();
@@ -154,9 +163,8 @@ public class Player implements IPhysicsBody {
                 }
                 case IInputAction.LookActionI(float dx, float dy) ->
                     look(dx * MOUSE_SENSITIVITY, dy * MOUSE_SENSITIVITY);
-                case IInputAction.Simple.JUMP -> {
-                    if (isOnGround) velocity.y = jumpVelocity;
-                }
+                case IInputAction.Simple.JUMP -> jumpHeld = true;
+                case IInputAction.Simple.SNEAK -> sneakHeld = true;
                 case IInputAction.Simple.BREAK_BLOCK -> {
                     this.breakTargetedBlock();
                     interactions.add(new Interaction.BlockInteraction(true, eyePos, lookDir, result));
@@ -182,12 +190,40 @@ public class Player implements IPhysicsBody {
                 default -> {}
             }
         }
-        // Set (not accumulate) horizontal velocity so releasing the keys stops us at once.
-        // Vertical velocity is left to gravity and the jump above.
-        if (wish.lengthSquared() > 0) wish.normalize().mul(movementSpeed);
+
+        // Double-tap space toggles fly mode. Fresh press = JUMP seen this frame but not last.
+        if (jumpHeld && !wasJumpHeld) {
+            long now = System.nanoTime();
+            if (now - lastJumpPressNanos < DOUBLE_TAP_NANOS) {
+                flyMode = !flyMode;
+                velocity.y = 0;
+                LOGGER.info("Fly mode {}", flyMode ? "ON" : "OFF");
+            }
+            lastJumpPressNanos = now;
+        }
+        wasJumpHeld = jumpHeld;
+
+        // Horizontal velocity — faster in fly mode.
+        float hSpeed = flyMode ? FLY_SPEED : movementSpeed;
+        if (wish.lengthSquared() > 0) wish.normalize().mul(hSpeed);
         velocity.x = wish.x;
         velocity.z = wish.z;
+
+        if (flyMode) {
+            // Space = ascend, shift = descend, neither = hover.
+            if (jumpHeld) velocity.y = FLY_SPEED;
+            else if (sneakHeld) velocity.y = -FLY_SPEED;
+            else velocity.y = 0;
+        } else {
+            // Normal mode: jump when grounded.
+            if (jumpHeld && isOnGround) velocity.y = jumpVelocity;
+        }
+
         return interactions;
+    }
+
+    public boolean isFlyMode() {
+        return flyMode;
     }
 
     private void logSelectedSlot() {

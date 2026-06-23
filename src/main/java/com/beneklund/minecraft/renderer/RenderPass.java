@@ -5,5 +5,6 @@ package com.beneklund.minecraft.renderer;
 // surfaces blend against the opaque geometry already in the framebuffer.
 public enum RenderPass {
     OPAQUE,
-    TRANSPARENT
+    TRANSPARENT,
+    HUD
 }

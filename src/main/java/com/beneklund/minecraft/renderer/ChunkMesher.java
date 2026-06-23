@@ -187,7 +187,8 @@ public class ChunkMesher {
         }
 
         Block neighbor = chunk.getBlock(nx, ny, nz);
-        return registry.get(neighbor).solid() || neighbor == blockId;
+        BlockDef neighborDef = registry.get(neighbor);
+        return (neighborDef.solid() && !neighborDef.transparent()) || neighbor == blockId;
     }
 
     private static float faceIdFor(Direction dir) {
