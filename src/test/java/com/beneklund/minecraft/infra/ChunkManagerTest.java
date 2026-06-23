@@ -56,7 +56,7 @@ class ChunkManagerTest {
         ChunkMesher stubMesher = new ChunkMesher(BlockRegistry.createDefault(), null) {
             @Override
             public ChunkMeshData mesh(ChunkPos pos, Chunk chunk) {
-                return new ChunkMeshData(pos, new float[0], new int[0], 0, chunk);
+                return new ChunkMeshData(pos, new float[0], new int[0], new float[0], new int[0], 0, chunk);
             }
         };
 

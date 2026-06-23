@@ -92,12 +92,12 @@ public class ChunkMesher {
 
     // Transforms a chunk's block data into renderable geometry.
     // Safe to call from any worker thread — no GL calls, no shared mutable state.
+    //
+    // Faces are routed into one of two buffers by the block's transparent flag so the
+    // renderer can do an opaque pass then a transparent pass (see ChunkRenderable / Renderer).
     public ChunkMeshData mesh(ChunkPos pos, Chunk chunk) {
-        float[] verts = new float[INITIAL_FACE_CAPACITY * VERTICES_PER_QUAD * FLOATS_PER_VERTEX];
-        int[] idxs = new int[INITIAL_FACE_CAPACITY * INDICES_PER_QUAD];
-        int vertPos = 0;
-        int idxPos = 0;
-        int vertexBase = 0;
+        Buffer opaque = new Buffer();
+        Buffer transparent = new Buffer();
 
         for (int x = 0; x < Chunk.SIZE_XZ; x++) {
             for (int y = 0; y < Chunk.SIZE_Y; y++) {
@@ -106,13 +106,12 @@ public class ChunkMesher {
                     if (blockId == Block.AIR) continue;
 
                     BlockDef def = registry.get(blockId);
+                    Buffer buf = def.transparent() ? transparent : opaque;
 
                     for (Direction dir : DIRECTIONS) {
-                        if (isCulled(chunk, x, y, z, dir)) continue;
+                        if (isCulled(chunk, x, y, z, dir, blockId)) continue;
 
-                        if (vertPos + VERTICES_PER_QUAD * FLOATS_PER_VERTEX > verts.length)
-                            verts = Arrays.copyOf(verts, verts.length * 2);
-                        if (idxPos + INDICES_PER_QUAD > idxs.length) idxs = Arrays.copyOf(idxs, idxs.length * 2);
+                        buf.ensureCapacity();
 
                         float[] uvs = getUVs(def, dir);
                         Color tint = getTint(blockId, dir);
@@ -123,38 +122,63 @@ public class ChunkMesher {
 
                         for (int i = 0; i < VERTICES_PER_QUAD; i++) {
                             float[] c = corners[i];
-                            verts[vertPos++] = x + c[0];
-                            verts[vertPos++] = y + c[1];
-                            verts[vertPos++] = z + c[2];
-                            verts[vertPos++] = fracs[i * 2] == 0 ? uMin : uMax;
-                            verts[vertPos++] = fracs[i * 2 + 1] == 0 ? vMin : vMax;
-                            verts[vertPos++] = 1.0f; // ao placeholder
-                            verts[vertPos++] = faceId;
-                            verts[vertPos++] = tint.red();
-                            verts[vertPos++] = tint.green();
-                            verts[vertPos++] = tint.blue();
+                            buf.verts[buf.vertPos++] = x + c[0];
+                            buf.verts[buf.vertPos++] = y + c[1];
+                            buf.verts[buf.vertPos++] = z + c[2];
+                            buf.verts[buf.vertPos++] = fracs[i * 2] == 0 ? uMin : uMax;
+                            buf.verts[buf.vertPos++] = fracs[i * 2 + 1] == 0 ? vMin : vMax;
+                            buf.verts[buf.vertPos++] = 1.0f; // ao placeholder
+                            buf.verts[buf.vertPos++] = faceId;
+                            buf.verts[buf.vertPos++] = tint.red();
+                            buf.verts[buf.vertPos++] = tint.green();
+                            buf.verts[buf.vertPos++] = tint.blue();
                         }
 
                         // Two triangles sharing the diagonal: 0-1-2 and 2-3-0
-                        idxs[idxPos++] = vertexBase;
-                        idxs[idxPos++] = vertexBase + 1;
-                        idxs[idxPos++] = vertexBase + 2;
-                        idxs[idxPos++] = vertexBase + 2;
-                        idxs[idxPos++] = vertexBase + 3;
-                        idxs[idxPos++] = vertexBase;
-                        vertexBase += VERTICES_PER_QUAD;
+                        buf.idxs[buf.idxPos++] = buf.vertexBase;
+                        buf.idxs[buf.idxPos++] = buf.vertexBase + 1;
+                        buf.idxs[buf.idxPos++] = buf.vertexBase + 2;
+                        buf.idxs[buf.idxPos++] = buf.vertexBase + 2;
+                        buf.idxs[buf.idxPos++] = buf.vertexBase + 3;
+                        buf.idxs[buf.idxPos++] = buf.vertexBase;
+                        buf.vertexBase += VERTICES_PER_QUAD;
                     }
                 }
             }
         }
 
-        return new ChunkMeshData(pos, Arrays.copyOf(verts, vertPos), Arrays.copyOf(idxs, idxPos), vertexBase, chunk);
+        return new ChunkMeshData(
+                pos,
+                Arrays.copyOf(opaque.verts, opaque.vertPos),
+                Arrays.copyOf(opaque.idxs, opaque.idxPos),
+                Arrays.copyOf(transparent.verts, transparent.vertPos),
+                Arrays.copyOf(transparent.idxs, transparent.idxPos),
+                opaque.vertexBase + transparent.vertexBase,
+                chunk);
     }
 
-    // A face is culled if its in-chunk neighbor is solid.
+    // One growable vertex/index buffer plus its write cursors. We keep two of these per mesh
+    // (opaque + transparent) so a single emit loop can write into whichever the block belongs to.
+    private static final class Buffer {
+        float[] verts = new float[INITIAL_FACE_CAPACITY * VERTICES_PER_QUAD * FLOATS_PER_VERTEX];
+        int[] idxs = new int[INITIAL_FACE_CAPACITY * INDICES_PER_QUAD];
+        int vertPos = 0;
+        int idxPos = 0;
+        int vertexBase = 0;
+
+        // Grow before writing one more quad's worth of vertices/indices.
+        void ensureCapacity() {
+            if (vertPos + VERTICES_PER_QUAD * FLOATS_PER_VERTEX > verts.length)
+                verts = Arrays.copyOf(verts, verts.length * 2);
+            if (idxPos + INDICES_PER_QUAD > idxs.length) idxs = Arrays.copyOf(idxs, idxs.length * 2);
+        }
+    }
+
+    // A face is culled if its in-chunk neighbor is solid, or if the neighbor is the same block
+    // (so we don't emit internal surfaces inside a body of water or a pane of glass).
     // Out-of-chunk neighbors are never culled — the adjacent chunk's mesher handles
     // its own boundary faces, so we must emit ours to prevent holes at seams.
-    private boolean isCulled(Chunk chunk, int x, int y, int z, Direction dir) {
+    private boolean isCulled(Chunk chunk, int x, int y, int z, Direction dir, Block blockId) {
         int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
         int nx = x + off[0], ny = y + off[1], nz = z + off[2];
 
@@ -162,7 +186,9 @@ public class ChunkMesher {
             return false;
         }
 
-        return registry.get(chunk.getBlock(nx, ny, nz)).solid();
+        Block neighbor = chunk.getBlock(nx, ny, nz);
+        BlockDef neighborDef = registry.get(neighbor);
+        return (neighborDef.solid() && !neighborDef.transparent()) || neighbor == blockId;
     }
 
     private static float faceIdFor(Direction dir) {
