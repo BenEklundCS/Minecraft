@@ -24,6 +24,7 @@ public class ChunkManager {
     private static final int MAX_LOADS_PER_TICK = 8;
 
     private final World world;
+    private final IChunkStore chunkStore;
 
     private final ExecutorService generationPool;
     private final ExecutorService meshingPool;
@@ -38,8 +39,14 @@ public class ChunkManager {
     private List<ChunkPos> lastChunksInRadius;
 
     public ChunkManager(
-            WorldConfig config, World world, IWorldGenerator generator, ChunkMesher mesher, IWorldAuthority authority) {
+            WorldConfig config,
+            World world,
+            IWorldGenerator generator,
+            ChunkMesher mesher,
+            IWorldAuthority authority,
+            IChunkStore chunkStore) {
         this.world = world;
+        this.chunkStore = chunkStore;
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
         generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
         meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
@@ -49,13 +56,27 @@ public class ChunkManager {
             if (!input.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
             uploadQueue.add(meshData);
         };
-        genJob = (JobInput genJobInput) -> {
-            if (!genJobInput.chunk.tryTransition(ChunkState.GENERATING)) return;
-            generator.generate(genJobInput.pos, config.seed(), genJobInput.chunk);
-            authority.markCardinalNeighborsDirty(genJobInput.pos);
-            if (!genJobInput.chunk.tryTransition(ChunkState.QUEUED_MESH)) return;
-            meshingPool.submit(() -> meshJob.accept(new JobInput(genJobInput.chunk, genJobInput.pos)));
+        genJob = (JobInput in) -> {
+            if (!in.chunk.tryTransition(ChunkState.GENERATING)) return;
+            generator.generate(in.pos, config.seed(), in.chunk);
+            // Generator calls setBlock thousands of times; the deterministic output doesn't
+            // need persisting (regen produces the same bytes). Clear the flag so only real
+            // player edits trigger a disk write.
+            in.chunk.clearNeedsPersisting();
+            authority.markCardinalNeighborsDirty(in.pos);
+            if (!in.chunk.tryTransition(ChunkState.QUEUED_MESH)) return;
+            meshingPool.submit(() -> meshJob.accept(new JobInput(in.chunk, in.pos)));
         };
+    }
+
+    public void flushAllDirty() {
+        for (var entry : world.getChunkEntries()) {
+            Chunk chunk = entry.getValue();
+            if (chunk.needsPersisting()) {
+                chunkStore.save(entry.getKey(), chunk);
+                chunk.clearNeedsPersisting();
+            }
+        }
     }
 
     public void tick(ChunkPos playerPos) {
@@ -69,21 +90,32 @@ public class ChunkManager {
                 Chunk chunk = world.getChunk(worldPos);
                 if (chunk.getState() == ChunkState.DIRTY) continue;
                 if (!chunk.tryTransition(ChunkState.UNLOADING)) continue;
+                if (chunk.needsPersisting()) {
+                    chunkStore.save(worldPos, chunk);
+                    chunk.clearNeedsPersisting();
+                }
                 world.removeChunk(worldPos);
                 unloadQueue.add(worldPos);
             }
         }
-        // LOAD
+        // LOAD: prefer saved chunks (skip gen, go straight to meshing); otherwise queue generation.
+        // chunkStore.load runs on the game thread — single small file per chunk so the hit is small.
+        // Move to a worker if it ever shows up in a frame profile.
         int loadsThisTick = 0;
         for (ChunkPos chunkPos : chunkPositions) {
             if (loadsThisTick >= MAX_LOADS_PER_TICK) break;
-            if (!world.hasChunk(chunkPos)) {
-                Chunk chunk = new Chunk();
-                world.addChunk(chunkPos, chunk);
+            if (world.hasChunk(chunkPos)) continue;
+            Optional<Chunk> saved = chunkStore.load(chunkPos);
+            Chunk chunk = saved.orElseGet(Chunk::new);
+            world.addChunk(chunkPos, chunk);
+            if (saved.isPresent()) {
+                if (!chunk.tryTransition(ChunkState.QUEUED_MESH)) continue;
+                meshingPool.submit(() -> meshJob.accept(new JobInput(chunk, chunkPos)));
+            } else {
                 if (!chunk.tryTransition(ChunkState.QUEUED_GEN)) continue;
                 generationPool.submit(() -> genJob.accept(new JobInput(chunk, chunkPos)));
-                loadsThisTick++;
             }
+            loadsThisTick++;
         }
         // DIRTY
         for (var entry : world.getChunkEntries()) {
@@ -123,7 +155,9 @@ public class ChunkManager {
     public List<ChunkPos> drainUnloadQueue() {
         List<ChunkPos> batch = new ArrayList<>();
         ChunkPos item;
-        while ((item = unloadQueue.poll()) != null) batch.add(item);
+        while ((item = unloadQueue.poll()) != null) {
+            batch.add(item);
+        }
         return batch;
     }
 

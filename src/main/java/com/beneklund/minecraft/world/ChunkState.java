@@ -13,7 +13,9 @@ public enum ChunkState {
 
     public boolean canTransitionTo(ChunkState next) {
         return switch (this) {
-            case UNLOADED -> next == QUEUED_GEN;
+            // QUEUED_GEN for fresh chunks; QUEUED_MESH for chunks restored from disk
+            // (byte[] is already populated, gen is skipped).
+            case UNLOADED -> next == QUEUED_GEN || next == QUEUED_MESH;
             // only queued, no worker owns it yet, so it's safe to cancel early
             case QUEUED_GEN -> next == GENERATING || next == UNLOADING;
             case GENERATING -> next == QUEUED_MESH;

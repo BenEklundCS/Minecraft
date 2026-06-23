@@ -7,10 +7,17 @@ public class Chunk {
     public static final int SIZE_XZ = 16;
     public static final int SIZE_Y = 256;
     // Storage stays a packed byte[] (1 byte/block) for memory and cache; Block is the API face.
-    private final byte[] blocks = new byte[SIZE_XZ * SIZE_XZ * SIZE_Y]; // 16 * 16 * 256 == 65,536
+    private byte[] blocks = new byte[SIZE_XZ * SIZE_XZ * SIZE_Y]; // 16 * 16 * 256 == 65,536
     private final AtomicReference<ChunkState> state = new AtomicReference<>(ChunkState.UNLOADED);
+    // Tracks "has edits not yet written to disk" separately from the mesh-state machine,
+    // which uses DIRTY only to signal "needs re-meshing" and clears it on the next tick.
+    private volatile boolean needsPersisting = false;
 
     public Chunk() {}
+
+    public Chunk(byte[] blocks) {
+        this.blocks = blocks;
+    }
 
     public Block getBlock(int x, int y, int z) {
         return Block.fromId(blocks[index(x, y, z)]);
@@ -18,6 +25,15 @@ public class Chunk {
 
     public void setBlock(int x, int y, int z, Block block) {
         blocks[index(x, y, z)] = block.id();
+        needsPersisting = true;
+    }
+
+    public boolean needsPersisting() {
+        return needsPersisting;
+    }
+
+    public void clearNeedsPersisting() {
+        needsPersisting = false;
     }
 
     private static int index(int x, int y, int z) {
@@ -39,5 +55,9 @@ public class Chunk {
             if (!current.canTransitionTo(next)) return false;
         } while (!state.compareAndSet(current, next));
         return true;
+    }
+
+    public byte[] serialize() {
+        return this.blocks;
     }
 }

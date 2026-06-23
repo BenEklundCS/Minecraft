@@ -5,6 +5,7 @@ import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.ChunkRenderable;
+import com.beneklund.minecraft.infra.ChunkStore;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
@@ -78,7 +79,8 @@ public class GameContainer {
         WorldConfig worldConfig = new WorldConfig(42L, 4);
         WorldGenerator worldGen = new WorldGenerator(registry, generationSpecs);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
-        ChunkManager chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority);
+        ChunkStore store = new ChunkStore(worldConfig.seed());
+        ChunkManager chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store);
         Physics physics = new Physics();
 
         Player player = new Player(playerConfig, camera, authority);
@@ -110,6 +112,14 @@ public class GameContainer {
                 .run();
 
         // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).
+        //    Stop chunk workers before flushing so no async setBlock can dirty a chunk
+        //    after we've already persisted it.
+        try {
+            chunkManager.shutdown(5);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        chunkManager.flushAllDirty();
         music.shutdown();
         renderer.delete();
         atlas.delete();
