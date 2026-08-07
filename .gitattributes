@@ -1,0 +1,10 @@
+# Normalize everything to LF in the repo; git converts on checkout per platform.
+* text=auto
+
+# These care about their endings regardless of platform.
+*.sh text eol=lf
+gradlew text eol=lf
+.githooks/* text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
