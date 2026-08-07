@@ -52,7 +52,7 @@ public class ChunkManager {
         meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
         meshJob = (JobInput input) -> {
             if (!input.chunk.tryTransition(ChunkState.MESHING)) return;
-            ChunkMeshData meshData = mesher.mesh(input.pos, input.chunk);
+            ChunkMeshData meshData = mesher.mesh(input.pos, input.chunk, neighborsOf(input.pos));
             if (!input.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
             uploadQueue.add(meshData);
         };
@@ -159,6 +159,20 @@ public class ChunkManager {
             batch.add(item);
         }
         return batch;
+    }
+
+    // Resolved on the meshing worker rather than at submit time, so a neighbor that finished
+    // generating while this job sat in the queue is still picked up. A null here means "not
+    // loaded" — the mesher emits the boundary face, and markCardinalNeighborsDirty schedules
+    // the remesh that cleans up the seam once the neighbor arrives.
+    //
+    // Field order matches NEIGHBOR_OFFSETS in ChunkMesher: NORTH is z-1, SOUTH is z+1.
+    private ChunkMesher.ChunkNeighbors neighborsOf(ChunkPos pos) {
+        return new ChunkMesher.ChunkNeighbors(
+                world.getChunk(new ChunkPos(pos.x(), pos.z() - 1)), // NORTH
+                world.getChunk(new ChunkPos(pos.x(), pos.z() + 1)), // SOUTH
+                world.getChunk(new ChunkPos(pos.x() + 1, pos.z())), // EAST
+                world.getChunk(new ChunkPos(pos.x() - 1, pos.z()))); // WEST
     }
 
     private record JobInput(Chunk chunk, ChunkPos pos) {}

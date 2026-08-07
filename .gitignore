@@ -47,3 +47,8 @@ private/
 src/main/resources/music/c418/
 local.properties
 gradle.properties
+
+### Runtime artifacts ###
+saves/
+hs_err_pid*.log
+replay_pid*.log

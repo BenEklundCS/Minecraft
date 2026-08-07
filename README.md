@@ -1,6 +1,6 @@
 # Minecraft Clone
 
-[![Java](https://img.shields.io/badge/Java_25-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/25/)
+[![Java](https://img.shields.io/badge/Java_21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
 [![Gradle](https://img.shields.io/badge/Gradle-02303A?style=for-the-badge&logo=gradle&logoColor=white)](https://gradle.org/)
 [![OpenGL](https://img.shields.io/badge/OpenGL_3.3-5586A4?style=for-the-badge&logo=opengl&logoColor=white)](https://www.opengl.org/)
 
@@ -17,8 +17,22 @@ A **Minecraft clone** built from scratch in **Java 25** using **LWJGL** (OpenGL 
 | `Left Click` | Break block |
 | `Right Click` | Place block |
 | `Scroll Wheel` | Cycle hotbar |
+| `1`–`9` | Select hotbar slot |
 | `Space` | Jump |
-| `X` | Quit |
+| `Double-tap Space` | Toggle creative fly |
+| `Left Shift` | Sneak |
+| `X` / `Esc` | Quit |
+
+---
+
+## Documentation
+
+Full project documentation lives in [`docs/`](docs/README.md):
+
+- **[State of Play](docs/STATE_OF_PLAY.md)** — what's built, what's broken, verified against the code
+- **[Backlog](docs/BACKLOG.md)** — planned features, sized and ordered
+- **[Architecture](docs/ARCHITECTURE.md)** — layering, thread model, chunk lifecycle
+- **[Decision records](docs/decisions/)** — why the design is the way it is
 
 ---
 

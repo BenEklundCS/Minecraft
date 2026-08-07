@@ -17,13 +17,19 @@ class ChunkMesherTest {
         return new Chunk();
     }
 
+    // No adjacent chunks loaded — boundary faces are emitted, which is what these
+    // tests assumed back when mesh() took no neighbors at all.
+    private static ChunkMesher.ChunkNeighbors noNeighbors() {
+        return new ChunkMesher.ChunkNeighbors(null, null, null, null);
+    }
+
     // a single isolated block has no solid neighbors → all 6 faces emitted
     @Test
     void singleBlock_producesSixQuads() {
         Chunk chunk = emptyChunk();
         chunk.setBlock(0, 64, 0, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk, noNeighbors());
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
         assertEquals(24 * 10, data.opaqueVerts().length, "24 vertices × 10 floats");
@@ -38,7 +44,7 @@ class ChunkMesherTest {
         Chunk chunk = emptyChunk();
         chunk.setBlock(0, 64, 0, Block.WATER);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk, noNeighbors());
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
         assertEquals(24 * 10, data.transparentVerts().length, "water lives in the transparent buffer");
@@ -54,7 +60,7 @@ class ChunkMesherTest {
         chunk.setBlock(0, 64, 0, Block.STONE);
         chunk.setBlock(1, 64, 0, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk, noNeighbors());
 
         assertEquals(40, data.vertexCount(), "10 quads × 4 vertices");
         assertEquals(60, data.opaqueIdx().length, "10 quads × 6 indices");
@@ -63,7 +69,7 @@ class ChunkMesherTest {
     // all-air chunk produces no geometry
     @Test
     void allAirChunk_producesEmptyMesh() {
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), emptyChunk());
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), emptyChunk(), noNeighbors());
 
         assertEquals(0, data.vertexCount());
         assertEquals(0, data.opaqueVerts().length);
@@ -81,7 +87,7 @@ class ChunkMesherTest {
             for (int y = 0; y < Chunk.SIZE_Y; y++)
                 for (int z = 0; z < Chunk.SIZE_XZ; z++) chunk.setBlock(x, y, z, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk);
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), chunk, noNeighbors());
 
         // outer shell: 2 caps (16×16 each) + 4 sides (16×256 each)
         int expectedFaces = 2 * (16 * 16) + 4 * (16 * 256); // = 16896

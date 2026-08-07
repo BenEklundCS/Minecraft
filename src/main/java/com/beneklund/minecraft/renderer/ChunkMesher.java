@@ -9,6 +9,7 @@ import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.gen.Biome;
 import java.util.Arrays;
+import java.util.Optional;
 
 // Converts a Chunk's block data into a ChunkMeshData (float[] vertices, int[] indices).
 // No GL calls — safe to run on any worker thread. The caller uploads the result to the
@@ -21,6 +22,20 @@ import java.util.Arrays;
 //   [6]    faceId        0=UP, 1=side, 2=DOWN (drives brightness bands in chunk.frag)
 //   [7-9]  r, g, b       biome tint (1,1,1 = no tint)
 public class ChunkMesher {
+
+    public record ChunkNeighbors(Chunk north, Chunk south, Chunk east, Chunk west) {
+        public Optional<Chunk> resolve(int nx, int nz) {
+            return (nz < 0)
+                    ? o(north)
+                    : (nz >= Chunk.SIZE_XZ)
+                            ? o(south)
+                            : (nx >= Chunk.SIZE_XZ) ? o(east) : (nx < 0) ? o(west) : Optional.empty();
+        }
+
+        private Optional<Chunk> o(Chunk c) {
+            return Optional.ofNullable(c);
+        }
+    }
 
     // 4 corner offsets per face, CCW winding when viewed from outside the block.
     // Indexed by Direction.ordinal(): UP=0, DOWN=1, NORTH=2, SOUTH=3, EAST=4, WEST=5.
@@ -95,7 +110,7 @@ public class ChunkMesher {
     //
     // Faces are routed into one of two buffers by the block's transparent flag so the
     // renderer can do an opaque pass then a transparent pass (see ChunkRenderable / Renderer).
-    public ChunkMeshData mesh(ChunkPos pos, Chunk chunk) {
+    public ChunkMeshData mesh(ChunkPos pos, Chunk chunk, ChunkNeighbors neighbors) {
         Buffer opaque = new Buffer();
         Buffer transparent = new Buffer();
 
@@ -109,7 +124,7 @@ public class ChunkMesher {
                     Buffer buf = def.transparent() ? transparent : opaque;
 
                     for (Direction dir : DIRECTIONS) {
-                        if (isCulled(chunk, x, y, z, dir, blockId)) continue;
+                        if (isCulled(chunk, x, y, z, dir, blockId, neighbors)) continue;
 
                         buf.ensureCapacity();
 
@@ -178,15 +193,21 @@ public class ChunkMesher {
     // (so we don't emit internal surfaces inside a body of water or a pane of glass).
     // Out-of-chunk neighbors are never culled — the adjacent chunk's mesher handles
     // its own boundary faces, so we must emit ours to prevent holes at seams.
-    private boolean isCulled(Chunk chunk, int x, int y, int z, Direction dir, Block blockId) {
+    private boolean isCulled(
+            Chunk chunk, int x, int y, int z, Direction dir, Block blockId, ChunkNeighbors chunkNeighbors) {
         int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
         int nx = x + off[0], ny = y + off[1], nz = z + off[2];
 
-        if (nx < 0 || nx >= Chunk.SIZE_XZ || ny < 0 || ny >= Chunk.SIZE_Y || nz < 0 || nz >= Chunk.SIZE_XZ) {
+        // above or below chunk out of bounds check
+        if (ny < 0 || ny >= Chunk.SIZE_Y) {
             return false;
         }
 
-        Block neighbor = chunk.getBlock(nx, ny, nz);
+        boolean inChunk = (nx >= 0 && nx < Chunk.SIZE_XZ) && (nz >= 0 && nz < Chunk.SIZE_XZ);
+        Chunk realChunk = inChunk ? chunk : chunkNeighbors.resolve(nx, nz).orElse(null);
+        if (realChunk == null) return false;
+
+        Block neighbor = realChunk.getBlock(Math.floorMod(nx, Chunk.SIZE_XZ), ny, Math.floorMod(nz, Chunk.SIZE_XZ));
         BlockDef neighborDef = registry.get(neighbor);
         return (neighborDef.solid() && !neighborDef.transparent()) || neighbor == blockId;
     }
