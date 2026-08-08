@@ -7,6 +7,7 @@ import com.beneklund.minecraft.platform.graphics.HudMesh;
 import com.beneklund.minecraft.util.Direction;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 
@@ -67,11 +68,10 @@ public class HudRenderer implements IRenderable {
             layoutDirty = false;
         }
 
-        atlas.bind();
         return List.of(
-                new DrawCall(highlightedSlot, ortho, HUD_COLOR, RenderPass.HUD),
-                new DrawCall(hotBar, ortho, HUD_TEXTURE, RenderPass.HUD),
-                new DrawCall(crosshair, ortho, HUD_COLOR, RenderPass.HUD));
+                new DrawCall(highlightedSlot, ortho, HUD_COLOR, Optional.empty(), RenderPass.HUD),
+                new DrawCall(hotBar, ortho, HUD_TEXTURE, atlas, RenderPass.HUD),
+                new DrawCall(crosshair, ortho, HUD_COLOR, Optional.empty(), RenderPass.HUD));
     }
 
     private void rebuildHotBar() {

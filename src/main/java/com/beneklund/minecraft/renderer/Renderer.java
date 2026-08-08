@@ -57,6 +57,8 @@ public class Renderer {
     }
 
     private void submit(DrawCall call, Camera camera) {
+        if (call.atlas().isPresent()) call.atlas().get().bind();
+        else glBindTexture(GL_TEXTURE_2D, 0);
         call.shader().bind();
         call.shader().setUniformMat4("uView", camera.getViewMatrix());
         call.shader().setUniformMat4("uProjection", camera.getProjectionMatrix());

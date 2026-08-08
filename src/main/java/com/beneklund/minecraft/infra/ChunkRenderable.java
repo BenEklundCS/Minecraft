@@ -22,16 +22,16 @@ public class ChunkRenderable implements IRenderable {
 
     @Override
     public List<DrawCall> getDrawCalls(Camera camera) {
-        atlas.bind();
         Frustum frustum = new Frustum(camera.getViewProjectionMatrix());
         List<DrawCall> result = new ArrayList<>();
         for (RenderWorld.Entry entry : renderWorld.getEntries()) {
             if (!frustum.isVisible(entry.bounds())) continue;
             if (entry.opaqueMesh() != null) {
-                result.add(new DrawCall(entry.opaqueMesh(), entry.model(), CHUNK_SHADER, RenderPass.OPAQUE));
+                result.add(new DrawCall(entry.opaqueMesh(), entry.model(), CHUNK_SHADER, atlas, RenderPass.OPAQUE));
             }
             if (entry.transparentMesh() != null) {
-                result.add(new DrawCall(entry.transparentMesh(), entry.model(), CHUNK_SHADER, RenderPass.TRANSPARENT));
+                result.add(new DrawCall(
+                        entry.transparentMesh(), entry.model(), CHUNK_SHADER, atlas, RenderPass.TRANSPARENT));
             }
         }
         return result;
