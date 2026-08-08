@@ -5,7 +5,7 @@
 [![OpenGL](https://img.shields.io/badge/OpenGL_3.3-5586A4?style=for-the-badge&logo=opengl&logoColor=white)](https://www.opengl.org/)
 
 ## Overview
-A **Minecraft clone** built from scratch in **Java 25** using **LWJGL** (OpenGL 3.3 core, GLFW) and **JOML** for 3D math. The project uses a **domain driven architecture** — the domain layer (world, blocks, player) knows nothing about OpenGL, GLFW, or threads. The project is currently in active development.
+A **Minecraft clone** built from scratch in **Java 21** using **LWJGL** (OpenGL 3.3 core, GLFW) and **JOML** for 3D math. The project uses a **domain driven architecture** — the domain layer (world, blocks, player) knows nothing about OpenGL, GLFW, or threads. The project is currently in active development.
 
 ---
 
@@ -25,17 +25,6 @@ A **Minecraft clone** built from scratch in **Java 25** using **LWJGL** (OpenGL 
 
 ---
 
-## Documentation
-
-Full project documentation lives in [`docs/`](docs/README.md):
-
-- **[State of Play](docs/STATE_OF_PLAY.md)** — what's built, what's broken, verified against the code
-- **[Backlog](docs/BACKLOG.md)** — planned features, sized and ordered
-- **[Architecture](docs/ARCHITECTURE.md)** — layering, thread model, chunk lifecycle
-- **[Decision records](docs/decisions/)** — why the design is the way it is
-
----
-
 ## Architecture
 
 ```
@@ -43,23 +32,41 @@ src/main/java/com/beneklund/minecraft/
   block/           Pure domain — block types, BlockDef, BlockRegistry
   world/           Pure domain — Chunk, World, IWorldAuthority, ChunkState machine
     gen/           World generation (pure factory: ChunkPos + seed → Chunk)
-  player/          Pure domain — Player, IPhysicsBody, Physics
+  player/          Pure domain — Player, IPhysicsBody, Physics, PlayerState
   util/            Stateless utilities — Raycast (DDA), AABB, Direction, OpenSimplex2
   renderer/        Rendering logic — ChunkMesher, Camera, ShaderProgram, TextureAtlas
   platform/
     window/        GLFW window lifecycle and game loop
     input/         Raw GLFW events → InputAction (anti-corruption layer)
     graphics/      OpenGL objects — GlShader, GlBuffer, GlVertexArray, GlTexture, GpuMesh
-  infra/           Infrastructure — ChunkManager (thread pools, queues), ChunkStore (save/load)
-  container/       GameContainer — DI composition root, all `new` calls live here
+  infra/           Infrastructure — ChunkManager (thread pools, queues),
+                   SaveFile + ChunkStore + PlayerStore (persistence)
+  container/       GameContainer — DI composition root, all `new` calls live here;
+                   ContainerConfig carries every launch knob
 ```
+
+---
+
+## Saves
+
+Worlds live in `saves/<seed>/` — chunks as `<x>_<z>.bin`, the player as `level.dat`. Both
+share one binary layout: a 12-byte header (magic number, format version, payload length)
+followed by the payload.
+
+Reads validate the magic and length and fall back to "no save" instead of throwing, so a
+foreign or truncated file regenerates rather than crashing the game. Writes go to a temp
+file and are moved into place atomically, so a crash mid-save can't leave a half-written
+world behind.
+
+The save directory is derived from the world seed, so changing the seed starts a fresh
+world rather than overwriting an existing one. `saves/` is gitignored.
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-- [**Java 25**](https://www.azul.com/downloads/) (Azul Zulu recommended)
+- [**Java 21**](https://www.azul.com/downloads/) (Azul Zulu recommended)
 - Gradle wrapper included — no separate install needed
 
 ### Recommended IDE
