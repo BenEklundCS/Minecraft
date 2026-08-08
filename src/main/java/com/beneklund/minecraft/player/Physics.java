@@ -10,7 +10,7 @@ import org.joml.Vector3i;
 // solid blocks. Operates on IPhysicsBody so it isn't tied to Player alone.
 //
 // Tuning baseline (phase 15.9 — start here, then playtest by feel):
-//   gravity        28.0 m/s²   downward acceleration
+//   gravity        32.0 m/s²   downward acceleration
 //   jump velocity   9.0 m/s    → ~1.2 blocks of air time (lives in Player)
 //   walk speed      4.3 m/s    horizontal (lives in PlayerConfig)
 //
