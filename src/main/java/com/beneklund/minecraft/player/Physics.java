@@ -19,10 +19,14 @@ import org.joml.Vector3i;
 // diagonal move into a wall blocks one axis but the other still goes through.
 public class Physics {
     private static final float GRAVITY = 32.0f;
+    private static final float TERMINAL_VELOCITY = 40.0f;
 
     public void update(IPhysicsBody body, IWorldAuthority world, float dt) {
         // gravity accelerates us downward every tick
-        body.getVelocity().y -= GRAVITY * dt;
+        Vector3f velocity = body.getVelocity();
+        velocity.y -= GRAVITY * dt;
+
+        if (velocity.y < -TERMINAL_VELOCITY) velocity.y = -TERMINAL_VELOCITY;
 
         // assume we're airborne; the downward Y sweep re-proves contact if we land
         body.setOnGround(false);

@@ -23,11 +23,6 @@ import org.joml.Vector3f;
 public class Game {
 
     private static final int MAX_UPLOADS_PER_FRAME = 4;
-    // Cap the physics step. Collision is discrete (checks the destination cell, not the swept
-    // path), so a long frame — a GC pause or the spawn-time mesh-upload storm — could otherwise
-    // move the body far enough in one step to skip clean through a block. Clamping trades a
-    // momentary slow-down during a hitch for never tunnelling.
-    private static final float MAX_PHYSICS_STEP = 1.0f / 20.0f;
 
     private final Window window;
     private final Renderer renderer;
@@ -107,11 +102,28 @@ public class Game {
 
             debugRenderer.updateTargetedBlock(player.getTargetedBlock());
 
+            // TODO: physics steps once per frame on the raw delta, so the simulation is only as
+            // stable as the frame rate. Collision is discrete — resolveY checks the cells the box
+            // lands in, never the ones it passed through — so a long frame (GC pause, the spawn
+            // mesh-upload storm) can move the player far enough to skip clean through a floor.
+            //
+            // Real engines don't scale dt down to hide this, they stop letting the frame rate set
+            // the step at all. Fixed timestep: bank the elapsed time in an accumulator, run as many
+            // fixed 1/60 sub-steps as the bank affords, carry the remainder into next frame. A 0.25s
+            // hitch becomes 15 small correct steps instead of one huge wrong one, and the sim
+            // becomes deterministic — same inputs, same steps, regardless of machine. That's
+            // Unity's FixedUpdate, Source's tick rate, and Quake before either of them.
+            //
+            // The other half is swept collision: test the path the box travels, not just where it
+            // lands. Unity calls it Continuous collision detection, Box2D calls it a bullet body.
+            // Fixed step is the one to do first — it's what buys determinism.
+            //
+            // Backlog: "Fixed timestep for physics" on the warm-up shelf in docs/BACKLOG.md.
+            float dt = delta.getDelta();
             if (physicsReady() && !player.isFlyMode()) {
-                physics.update(player, authority, Math.min(delta.getDelta(), MAX_PHYSICS_STEP));
+                physics.update(player, authority, dt);
             } else if (player.isFlyMode()) {
                 // Still integrate velocity in fly mode — Player sets it, we move the position.
-                float dt = Math.min(delta.getDelta(), MAX_PHYSICS_STEP);
                 player.getPosition()
                         .add(player.getVelocity().x * dt, player.getVelocity().y * dt, player.getVelocity().z * dt);
             }
