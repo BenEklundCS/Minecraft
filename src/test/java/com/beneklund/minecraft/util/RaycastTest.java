@@ -16,8 +16,8 @@ import org.joml.Vector3i;
 import org.junit.jupiter.api.Test;
 
 class RaycastTest {
-    private static final BlockDef STONE = new BlockDef(true, false, new String[0]);
-    private static final BlockDef AIR = new BlockDef(false, true, new String[0]);
+    private static final BlockDef STONE = new BlockDef(true, false, true, new String[0]);
+    private static final BlockDef AIR = new BlockDef(false, true, true, new String[0]);
     private static final float REACH = 8.0f;
 
     // A world that is solid exactly at the given block coordinates, AIR everywhere else.

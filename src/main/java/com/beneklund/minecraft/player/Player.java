@@ -269,6 +269,7 @@ public class Player implements IPhysicsBody {
 
     private void breakTargetedBlock() {
         logRaycast();
+        if (!targetedBlock.hit() || !targetedBlock.hitBlock().breakable()) return;
         authority.setBlock(
                 targetedBlock.blockPos().x, targetedBlock.blockPos().y, targetedBlock.blockPos().z, Block.AIR);
     }

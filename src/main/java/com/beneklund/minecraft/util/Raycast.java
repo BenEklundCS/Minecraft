@@ -49,7 +49,7 @@ public class Raycast {
             // Check the current voxel before advancing
             var block = world.getBlock(x, y, z);
             if (block != null && block.solid()) {
-                return new RaycastResult(true, new Vector3i(x, y, z), hitFace, distance);
+                return new RaycastResult(true, new Vector3i(x, y, z), block, hitFace, distance);
             }
 
             // Advance to the next voxel by crossing whichever axis boundary is nearest (smallest t).
@@ -78,6 +78,6 @@ public class Raycast {
             }
         }
 
-        return new RaycastResult(false, new Vector3i(x, y, z), hitFace, distance);
+        return new RaycastResult(false, new Vector3i(x, y, z), world.getBlock(x, y, z), hitFace, distance);
     }
 }

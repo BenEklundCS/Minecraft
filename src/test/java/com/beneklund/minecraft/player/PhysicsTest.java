@@ -16,8 +16,8 @@ import org.joml.Vector3i;
 import org.junit.jupiter.api.Test;
 
 class PhysicsTest {
-    private static final BlockDef SOLID = new BlockDef(true, false, new String[0]);
-    private static final BlockDef AIR = new BlockDef(false, true, new String[0]);
+    private static final BlockDef SOLID = new BlockDef(true, false, true, new String[0]);
+    private static final BlockDef AIR = new BlockDef(false, true, true, new String[0]);
 
     // Minimal IPhysicsBody with the player's footprint (0.6 x 1.6 x 0.6). getPosition/
     // getVelocity hand back the live vectors so Physics can mutate them in place.

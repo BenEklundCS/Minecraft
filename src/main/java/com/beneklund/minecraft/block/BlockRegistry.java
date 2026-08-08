@@ -19,15 +19,19 @@ public class BlockRegistry {
         // face order: up, down, north, south, east, west
         return new BlockRegistry(Map.<Block, BlockDef>ofEntries(
                 Map.entry(
-                        Block.AIR, new BlockDef(false, true, new String[] {"air", "air", "air", "air", "air", "air"})),
+                        Block.AIR,
+                        new BlockDef(false, true, true, new String[] {"air", "air", "air", "air", "air", "air"})),
                 Map.entry(
-                        Block.STONE, BlockDef.build(true, false, "stone", "stone", "stone", "stone", "stone", "stone")),
-                Map.entry(Block.DIRT, BlockDef.build(true, false, "dirt", "dirt", "dirt", "dirt", "dirt", "dirt")),
+                        Block.STONE,
+                        BlockDef.build(true, false, true, "stone", "stone", "stone", "stone", "stone", "stone")),
+                Map.entry(
+                        Block.DIRT, BlockDef.build(true, false, true, "dirt", "dirt", "dirt", "dirt", "dirt", "dirt")),
                 Map.entry(
                         Block.GRASS,
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "grass_top",
                                 "dirt",
                                 "grass_side",
@@ -36,16 +40,20 @@ public class BlockRegistry {
                                 "grass_side")),
                 Map.entry(
                         Block.BEDROCK,
-                        BlockDef.build(true, false, "bedrock", "bedrock", "bedrock", "bedrock", "bedrock", "bedrock")),
-                Map.entry(Block.SAND, BlockDef.build(true, false, "sand", "sand", "sand", "sand", "sand", "sand")),
+                        // the one unbreakable block — world floor, guarded in Player.breakTargetedBlock
+                        BlockDef.build(
+                                true, false, false, "bedrock", "bedrock", "bedrock", "bedrock", "bedrock", "bedrock")),
+                Map.entry(
+                        Block.SAND, BlockDef.build(true, false, true, "sand", "sand", "sand", "sand", "sand", "sand")),
                 Map.entry(
                         Block.GRAVEL,
-                        BlockDef.build(true, false, "gravel", "gravel", "gravel", "gravel", "gravel", "gravel")),
+                        BlockDef.build(true, false, true, "gravel", "gravel", "gravel", "gravel", "gravel", "gravel")),
                 Map.entry(
                         Block.OAK_LOG,
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "oak_log_top",
                                 "oak_log_top",
                                 "oak_log_side",
@@ -56,6 +64,7 @@ public class BlockRegistry {
                 Map.entry(
                         Block.OAK_LEAF,
                         BlockDef.build(
+                                true,
                                 true,
                                 true,
                                 "oak_leaves",
@@ -69,6 +78,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 true,
+                                true,
                                 "water_still",
                                 "water_still",
                                 "water_flowing",
@@ -80,6 +90,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "cobblestone",
                                 "cobblestone",
                                 "cobblestone",
@@ -87,12 +98,14 @@ public class BlockRegistry {
                                 "cobblestone",
                                 "cobblestone")),
                 Map.entry(
-                        Block.GLASS, BlockDef.build(false, true, "glass", "glass", "glass", "glass", "glass", "glass")),
+                        Block.GLASS,
+                        BlockDef.build(false, true, true, "glass", "glass", "glass", "glass", "glass", "glass")),
                 Map.entry(
                         Block.OAK_PLANK,
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "oak_planks",
                                 "oak_planks",
                                 "oak_planks",
@@ -102,16 +115,33 @@ public class BlockRegistry {
                 Map.entry(
                         Block.COAL_ORE,
                         BlockDef.build(
-                                true, false, "coal_ore", "coal_ore", "coal_ore", "coal_ore", "coal_ore", "coal_ore")),
+                                true,
+                                false,
+                                true,
+                                "coal_ore",
+                                "coal_ore",
+                                "coal_ore",
+                                "coal_ore",
+                                "coal_ore",
+                                "coal_ore")),
                 Map.entry(
                         Block.IRON_ORE,
                         BlockDef.build(
-                                true, false, "iron_ore", "iron_ore", "iron_ore", "iron_ore", "iron_ore", "iron_ore")),
+                                true,
+                                false,
+                                true,
+                                "iron_ore",
+                                "iron_ore",
+                                "iron_ore",
+                                "iron_ore",
+                                "iron_ore",
+                                "iron_ore")),
                 Map.entry(
                         Block.SNOW,
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "snow_top",
                                 "snow_top",
                                 "snow_side",
@@ -122,6 +152,7 @@ public class BlockRegistry {
                         Block.LAVA,
                         BlockDef.build(
                                 false,
+                                true,
                                 true,
                                 "lava_still",
                                 "lava_still",
@@ -134,6 +165,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "sandstone_top",
                                 "sandstone_bottom",
                                 "sandstone_side",
@@ -143,18 +175,36 @@ public class BlockRegistry {
                 Map.entry(
                         Block.RED_SAND,
                         BlockDef.build(
-                                true, false, "red_sand", "red_sand", "red_sand", "red_sand", "red_sand", "red_sand")),
-                Map.entry(Block.CLAY, BlockDef.build(true, false, "clay", "clay", "clay", "clay", "clay", "clay")),
+                                true,
+                                false,
+                                true,
+                                "red_sand",
+                                "red_sand",
+                                "red_sand",
+                                "red_sand",
+                                "red_sand",
+                                "red_sand")),
+                Map.entry(
+                        Block.CLAY, BlockDef.build(true, false, true, "clay", "clay", "clay", "clay", "clay", "clay")),
                 Map.entry(
                         Block.OBSIDIAN,
                         BlockDef.build(
-                                true, false, "obsidian", "obsidian", "obsidian", "obsidian", "obsidian", "obsidian")),
-                Map.entry(Block.ICE, BlockDef.build(false, true, "ice", "ice", "ice", "ice", "ice", "ice")),
+                                true,
+                                false,
+                                true,
+                                "obsidian",
+                                "obsidian",
+                                "obsidian",
+                                "obsidian",
+                                "obsidian",
+                                "obsidian")),
+                Map.entry(Block.ICE, BlockDef.build(false, true, true, "ice", "ice", "ice", "ice", "ice", "ice")),
                 Map.entry(
                         Block.PACKED_ICE,
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "packed_ice",
                                 "packed_ice",
                                 "packed_ice",
@@ -164,22 +214,41 @@ public class BlockRegistry {
                 Map.entry(
                         Block.ANDESITE,
                         BlockDef.build(
-                                true, false, "andesite", "andesite", "andesite", "andesite", "andesite", "andesite")),
+                                true,
+                                false,
+                                true,
+                                "andesite",
+                                "andesite",
+                                "andesite",
+                                "andesite",
+                                "andesite",
+                                "andesite")),
                 Map.entry(
                         Block.DIORITE,
-                        BlockDef.build(true, false, "diorite", "diorite", "diorite", "diorite", "diorite", "diorite")),
+                        BlockDef.build(
+                                true, false, true, "diorite", "diorite", "diorite", "diorite", "diorite", "diorite")),
                 Map.entry(
                         Block.GRANITE,
-                        BlockDef.build(true, false, "granite", "granite", "granite", "granite", "granite", "granite")),
+                        BlockDef.build(
+                                true, false, true, "granite", "granite", "granite", "granite", "granite", "granite")),
                 Map.entry(
                         Block.GOLD_ORE,
                         BlockDef.build(
-                                true, false, "gold_ore", "gold_ore", "gold_ore", "gold_ore", "gold_ore", "gold_ore")),
+                                true,
+                                false,
+                                true,
+                                "gold_ore",
+                                "gold_ore",
+                                "gold_ore",
+                                "gold_ore",
+                                "gold_ore",
+                                "gold_ore")),
                 Map.entry(
                         Block.DIAMOND_ORE,
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "diamond_ore",
                                 "diamond_ore",
                                 "diamond_ore",
@@ -191,6 +260,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "redstone_ore",
                                 "redstone_ore",
                                 "redstone_ore",
@@ -202,6 +272,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "lapis_ore",
                                 "lapis_ore",
                                 "lapis_ore",
@@ -213,6 +284,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "emerald_ore",
                                 "emerald_ore",
                                 "emerald_ore",
@@ -224,6 +296,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "mossy_cobble",
                                 "mossy_cobble",
                                 "mossy_cobble",
@@ -235,6 +308,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "stone_bricks",
                                 "stone_bricks",
                                 "stone_bricks",
@@ -243,12 +317,13 @@ public class BlockRegistry {
                                 "stone_bricks")),
                 Map.entry(
                         Block.BRICKS,
-                        BlockDef.build(true, false, "bricks", "bricks", "bricks", "bricks", "bricks", "bricks")),
+                        BlockDef.build(true, false, true, "bricks", "bricks", "bricks", "bricks", "bricks", "bricks")),
                 Map.entry(
                         Block.BIRCH_LOG,
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "birch_log_top",
                                 "birch_log_top",
                                 "birch_log_side",
@@ -259,6 +334,7 @@ public class BlockRegistry {
                         Block.BIRCH_LEAF,
                         BlockDef.build(
                                 false,
+                                true,
                                 true,
                                 "birch_leaves",
                                 "birch_leaves",
@@ -271,6 +347,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "birch_planks",
                                 "birch_planks",
                                 "birch_planks",
@@ -282,6 +359,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "spruce_log_top",
                                 "spruce_log_top",
                                 "spruce_log_side",
@@ -292,6 +370,7 @@ public class BlockRegistry {
                         Block.SPRUCE_LEAF,
                         BlockDef.build(
                                 false,
+                                true,
                                 true,
                                 "spruce_leaves",
                                 "spruce_leaves",
@@ -304,6 +383,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "spruce_planks",
                                 "spruce_planks",
                                 "spruce_planks",
@@ -315,6 +395,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "jungle_log_top",
                                 "jungle_log_top",
                                 "jungle_log_side",
@@ -325,6 +406,7 @@ public class BlockRegistry {
                         Block.JUNGLE_LEAF,
                         BlockDef.build(
                                 false,
+                                true,
                                 true,
                                 "jungle_leaves",
                                 "jungle_leaves",
@@ -337,6 +419,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "jungle_planks",
                                 "jungle_planks",
                                 "jungle_planks",
@@ -348,6 +431,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "acacia_log_top",
                                 "acacia_log_top",
                                 "acacia_log_side",
@@ -358,6 +442,7 @@ public class BlockRegistry {
                         Block.ACACIA_LEAF,
                         BlockDef.build(
                                 false,
+                                true,
                                 true,
                                 "acacia_leaves",
                                 "acacia_leaves",
@@ -370,6 +455,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "acacia_planks",
                                 "acacia_planks",
                                 "acacia_planks",
@@ -381,6 +467,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "dark_oak_log_top",
                                 "dark_oak_log_top",
                                 "dark_oak_log_side",
@@ -391,6 +478,7 @@ public class BlockRegistry {
                         Block.DARK_OAK_LEAF,
                         BlockDef.build(
                                 false,
+                                true,
                                 true,
                                 "dark_oak_leaves",
                                 "dark_oak_leaves",
@@ -403,6 +491,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "dark_oak_planks",
                                 "dark_oak_planks",
                                 "dark_oak_planks",
@@ -414,6 +503,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "coal_block",
                                 "coal_block",
                                 "coal_block",
@@ -425,6 +515,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "iron_block",
                                 "iron_block",
                                 "iron_block",
@@ -436,6 +527,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "gold_block",
                                 "gold_block",
                                 "gold_block",
@@ -447,6 +539,7 @@ public class BlockRegistry {
                         BlockDef.build(
                                 true,
                                 false,
+                                true,
                                 "diamond_block",
                                 "diamond_block",
                                 "diamond_block",
