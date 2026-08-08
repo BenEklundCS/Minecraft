@@ -43,16 +43,27 @@ public class Physics {
 
         AABB box = body.getBoundingBox();
         float halfWidth = (box.maxX() - box.minX()) / 2f; // position sits at the horizontal center
+
+        // Same trap resolveY had: getBlocksOverlapping() walks x ascending, so breaking on the
+        // first solid cell always takes the lowest one. That's the face we actually hit only
+        // when moving +x; going -x into something two cells deep snapped us to the far face.
+        // Take the extreme cell in the direction of travel instead.
+        boolean movingNegative = velocity.x < 0;
+        boolean hit = false;
+        int hitX = 0;
         for (Vector3i cell : box.getBlocksOverlapping()) {
             if (!isSolid(world, cell)) continue;
-            if (velocity.x > 0) {
-                position.x = cell.x - halfWidth; // snap our right face to the block's left face
-            } else if (velocity.x < 0) {
-                position.x = cell.x + 1 + halfWidth; // snap our left face to the block's right face
-            }
-            velocity.x = 0;
-            break;
+            if (!hit || (movingNegative ? cell.x > hitX : cell.x < hitX)) hitX = cell.x;
+            hit = true;
         }
+        if (!hit) return;
+
+        if (velocity.x > 0) {
+            position.x = hitX - halfWidth; // snap our right face to the block's left face
+        } else if (velocity.x < 0) {
+            position.x = hitX + 1 + halfWidth; // snap our left face to the block's right face
+        }
+        velocity.x = 0;
     }
 
     private void resolveZ(IPhysicsBody body, IWorldAuthority world, float dt) {
@@ -62,16 +73,24 @@ public class Physics {
 
         AABB box = body.getBoundingBox();
         float halfDepth = (box.maxZ() - box.minZ()) / 2f;
+
+        // Same reasoning as resolveX above.
+        boolean movingNegative = velocity.z < 0;
+        boolean hit = false;
+        int hitZ = 0;
         for (Vector3i cell : box.getBlocksOverlapping()) {
             if (!isSolid(world, cell)) continue;
-            if (velocity.z > 0) {
-                position.z = cell.z - halfDepth;
-            } else if (velocity.z < 0) {
-                position.z = cell.z + 1 + halfDepth;
-            }
-            velocity.z = 0;
-            break;
+            if (!hit || (movingNegative ? cell.z > hitZ : cell.z < hitZ)) hitZ = cell.z;
+            hit = true;
         }
+        if (!hit) return;
+
+        if (velocity.z > 0) {
+            position.z = hitZ - halfDepth;
+        } else if (velocity.z < 0) {
+            position.z = hitZ + 1 + halfDepth;
+        }
+        velocity.z = 0;
     }
 
     private void resolveY(IPhysicsBody body, IWorldAuthority world, float dt) {

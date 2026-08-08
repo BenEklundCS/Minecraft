@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.integration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.ChunkManager;
@@ -168,5 +170,9 @@ class FallThroughReproTest {
         }
 
         System.out.println("fellThrough=" + fellThrough + " wrongLanding=" + wrongLanding + " / " + trials);
+
+        // Was a probe wearing @Test — it printed these counts and passed no matter what they were.
+        assertEquals(0, fellThrough, "trials that never landed, out of " + trials);
+        assertEquals(0, wrongLanding, "trials that landed at the wrong height, out of " + trials);
     }
 }

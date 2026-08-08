@@ -81,6 +81,63 @@ class ChunkMesherTest {
         assertEquals(0, data.transparentIdx().length);
     }
 
+    // The seam rule that is MC-4 (ChunkMesher.isCulled, the resolve()-came-back-empty branch).
+    // A block at (0,64,0) has two faces that leave the chunk: -x resolves to west, -z to north.
+    // With neither loaded the guess splits by block type — transparent culls, opaque emits.
+    @Test
+    void waterOnChunkCorner_cullsTheSeamFacesAgainstUnloadedNeighbors() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(0, 64, 0, Block.WATER);
+
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(chunk));
+
+        assertEquals(16, data.vertexCount(), "4 quads — both seam faces culled, no pane standing in the lake");
+        assertEquals(24, data.transparentIdx().length, "4 quads × 6 indices");
+        assertEquals(0, data.opaqueIdx().length);
+    }
+
+    @Test
+    void stoneOnChunkCorner_emitsTheSeamFacesAgainstUnloadedNeighbors() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(0, 64, 0, Block.STONE);
+
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(chunk));
+
+        assertEquals(24, data.vertexCount(), "6 quads — opaque emits, or you see through the render edge");
+        assertEquals(36, data.opaqueIdx().length);
+    }
+
+    // A loaded neighbor is a real answer rather than a guess, so the type-based fallback
+    // doesn't apply: air over the seam means the face is visible and gets emitted.
+    @Test
+    void waterOnChunkCorner_emitsSeamFacesWhenNeighborsAreLoadedAndEmpty() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(0, 64, 0, Block.WATER);
+
+        var cn = new ChunkMesher.ChunkWithNeighbors(chunk, emptyChunk(), null, null, emptyChunk());
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), cn);
+
+        assertEquals(24, data.vertexCount(), "6 quads — a loaded air neighbor means the face is really visible");
+        assertEquals(36, data.transparentIdx().length);
+    }
+
+    // ...and matching water across the seam culls it, which is the case the whole rule exists for.
+    @Test
+    void waterAcrossSeam_cullsAgainstMatchingWaterInALoadedNeighbor() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(0, 64, 0, Block.WATER);
+
+        // west's adjoining column is x=15 (floorMod(-1, 16)); north stays air so only one face culls
+        Chunk west = emptyChunk();
+        west.setBlock(15, 64, 0, Block.WATER);
+        var cn = new ChunkMesher.ChunkWithNeighbors(chunk, emptyChunk(), null, null, west);
+
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), cn);
+
+        assertEquals(20, data.vertexCount(), "5 quads — the west seam face culls, the north one survives");
+        assertEquals(30, data.transparentIdx().length);
+    }
+
     // interior blocks of a fully solid chunk are completely culled;
     // only the 6 outer shell surfaces are emitted
     @Test

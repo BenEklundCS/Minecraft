@@ -112,4 +112,34 @@ class PhysicsTest {
         // right face = position.x + halfWidth (0.3) should land on the wall face at x=1
         assertEquals(0.7f, body.getPosition().x, 1e-4, "position snapped so the body's face meets the wall");
     }
+
+    // The resolveY bug, mirrored on X. getBlocksOverlapping() walks x ascending, so breaking
+    // on the first solid cell always took the lowest — right when moving +x (covered above),
+    // wrong when moving -x. One fast tick spans two solid cells and the old code snapped to
+    // the far one, leaving the body embedded in the near block.
+    @Test
+    void wallOnTheLeft_movingNegativeXSnapsToTheNearFace() {
+        Physics physics = new Physics();
+        FakeBody body = new FakeBody(new Vector3f(3f, 50, 0.5f), new Vector3f(-20, 0, 0));
+        IWorldAuthority world = worldWhere(cell -> cell.x <= 1); // slab two cells deep: x=0 and x=1
+
+        physics.update(body, world, 0.1f); // moves -2.0 in one tick, spanning both cells
+
+        assertEquals(0.0f, body.getVelocity().x, 1e-4, "horizontal velocity zeroed against the wall");
+        // near face is cell 1's right side at x=2; left face = position.x - halfWidth (0.3)
+        assertEquals(2.3f, body.getPosition().x, 1e-4, "snapped to the near face, not through to cell 0");
+    }
+
+    // Same bug on Z.
+    @Test
+    void wallBehind_movingNegativeZSnapsToTheNearFace() {
+        Physics physics = new Physics();
+        FakeBody body = new FakeBody(new Vector3f(0.5f, 50, 3f), new Vector3f(0, 0, -20));
+        IWorldAuthority world = worldWhere(cell -> cell.z <= 1);
+
+        physics.update(body, world, 0.1f);
+
+        assertEquals(0.0f, body.getVelocity().z, 1e-4, "depth velocity zeroed against the wall");
+        assertEquals(2.3f, body.getPosition().z, 1e-4, "snapped to the near face, not through to cell 0");
+    }
 }

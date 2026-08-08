@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.infra;
 
+import static com.beneklund.minecraft.util.Log.LOGGER;
+
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.world.*;
@@ -50,22 +52,34 @@ public class ChunkManager {
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
         generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
         meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
-        meshJob = (JobInput input) -> {
-            if (!input.chunk.tryTransition(ChunkState.MESHING)) return;
-            ChunkMeshData meshData = mesher.mesh(input.pos, neighborsOf(input.chunk, input.pos));
-            if (!input.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
-            uploadQueue.add(meshData);
+        meshJob = (JobInput in) -> {
+            try {
+                if (!in.chunk.tryTransition(ChunkState.MESHING)) return;
+                ChunkMeshData meshData = mesher.mesh(in.pos, neighborsOf(in.chunk, in.pos));
+                if (!in.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
+                uploadQueue.add(meshData);
+            } catch (Throwable t) {
+                // Throwable, not Exception: an OutOfMemoryError while building a mesh would
+                // otherwise leave the chunk wedged in MESHING with nothing logged.
+                in.chunk.tryTransition(ChunkState.ERROR);
+                LOGGER.error("mesh job failed for chunk {}", in.pos, t);
+            }
         };
         genJob = (JobInput in) -> {
-            if (!in.chunk.tryTransition(ChunkState.GENERATING)) return;
-            generator.generate(in.pos, config.seed(), in.chunk);
-            // Generator calls setBlock thousands of times; the deterministic output doesn't
-            // need persisting (regen produces the same bytes). Clear the flag so only real
-            // player edits trigger a disk write.
-            in.chunk.clearNeedsPersisting();
-            authority.markCardinalNeighborsDirty(in.pos);
-            if (!in.chunk.tryTransition(ChunkState.QUEUED_MESH)) return;
-            meshingPool.submit(() -> meshJob.accept(new JobInput(in.chunk, in.pos)));
+            try {
+                if (!in.chunk.tryTransition(ChunkState.GENERATING)) return;
+                generator.generate(in.pos, config.seed(), in.chunk);
+                // Generator calls setBlock thousands of times; the deterministic output doesn't
+                // need persisting (regen produces the same bytes). Clear the flag so only real
+                // player edits trigger a disk write.
+                in.chunk.clearNeedsPersisting();
+                authority.markCardinalNeighborsDirty(in.pos);
+                if (!in.chunk.tryTransition(ChunkState.QUEUED_MESH)) return;
+                meshingPool.execute(() -> meshJob.accept(new JobInput(in.chunk, in.pos)));
+            } catch (Throwable t) {
+                in.chunk.tryTransition(ChunkState.ERROR);
+                LOGGER.error("generation job failed for chunk {}", in.pos, t);
+            }
         };
     }
 
@@ -110,10 +124,10 @@ public class ChunkManager {
             world.addChunk(chunkPos, chunk);
             if (saved.isPresent()) {
                 if (!chunk.tryTransition(ChunkState.QUEUED_MESH)) continue;
-                meshingPool.submit(() -> meshJob.accept(new JobInput(chunk, chunkPos)));
+                meshingPool.execute(() -> meshJob.accept(new JobInput(chunk, chunkPos)));
             } else {
                 if (!chunk.tryTransition(ChunkState.QUEUED_GEN)) continue;
-                generationPool.submit(() -> genJob.accept(new JobInput(chunk, chunkPos)));
+                generationPool.execute(() -> genJob.accept(new JobInput(chunk, chunkPos)));
             }
             loadsThisTick++;
         }
@@ -123,7 +137,7 @@ public class ChunkManager {
             ChunkPos pos = entry.getKey();
             if (chunk.getState() == ChunkState.DIRTY) {
                 if (chunk.tryTransition(ChunkState.QUEUED_MESH)) {
-                    meshingPool.submit(() -> meshJob.accept(new JobInput(chunk, pos)));
+                    meshingPool.execute(() -> meshJob.accept(new JobInput(chunk, pos)));
                 }
             }
         }

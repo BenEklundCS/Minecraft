@@ -54,9 +54,13 @@ class ChunkManagerTest {
         };
 
         // Stub mesher — returns an empty but valid ChunkMeshData so the upload queue receives an item.
+        // The signature has to match ChunkMesher.mesh(ChunkPos, ChunkWithNeighbors) exactly; an
+        // earlier version took (ChunkPos, Chunk), overrode nothing, and silently let this test
+        // drive the real mesher. @Override is what keeps that from happening again.
         ChunkMesher stubMesher = new ChunkMesher(BlockRegistry.createDefault(), null) {
-            public ChunkMeshData mesh(ChunkPos pos, Chunk chunk) {
-                return new ChunkMeshData(pos, new float[0], new int[0], new float[0], new int[0], 0, chunk);
+            @Override
+            public ChunkMeshData mesh(ChunkPos pos, ChunkMesher.ChunkWithNeighbors cn) {
+                return new ChunkMeshData(pos, new float[0], new int[0], new float[0], new int[0], 0, cn.chunk());
             }
         };
 
