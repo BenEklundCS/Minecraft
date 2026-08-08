@@ -14,6 +14,8 @@ public interface IPhysicsBody {
 
     void setPosition(Vector3f position);
 
+    void setOrientation(float pitch, float yaw);
+
     void setVelocity(Vector3f velocity);
 
     boolean isOnGround();

@@ -12,6 +12,9 @@ import java.nio.file.Paths;
 import java.util.Optional;
 
 public class ChunkStore implements IChunkStore {
+    private static final int MAGIC = 0x4D435F43; // MC_C
+    private static final int VERSION = 1;
+
     private final Path basePath;
 
     public ChunkStore(long seed) {
@@ -26,10 +29,8 @@ public class ChunkStore implements IChunkStore {
 
     @Override
     public void save(ChunkPos pos, Chunk chunk) {
-        Path fullPath = getFullPath(pos);
         try {
-            byte[] bytes = chunk.serialize();
-            Files.write(fullPath, bytes);
+            SaveFile.write(getFullPath(pos), MAGIC, VERSION, chunk.serialize());
         } catch (IOException e) {
             LOGGER.error("Failed to save chunk at {}_{}", pos.x(), pos.z());
             throw new RuntimeException(e);
@@ -38,11 +39,10 @@ public class ChunkStore implements IChunkStore {
 
     @Override
     public Optional<Chunk> load(ChunkPos pos) {
-        Path fullPath = getFullPath(pos);
-        if (!Files.exists(fullPath)) return Optional.empty();
         try {
-            byte[] bytes = Files.readAllBytes(fullPath);
-            return Optional.of(new Chunk(bytes));
+            return SaveFile.read(getFullPath(pos), MAGIC)
+                    .filter(p -> p.version() == VERSION)
+                    .map(p -> new Chunk(p.bytes()));
         } catch (IOException e) {
             LOGGER.error("Failed to load chunk at {}_{}", pos.x(), pos.z());
             throw new RuntimeException(e);

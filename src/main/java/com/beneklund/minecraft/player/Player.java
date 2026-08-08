@@ -72,7 +72,7 @@ public class Player implements IPhysicsBody {
         jumpVelocity = config.jumpVelocity();
         reach = config.reach();
         this.camera = camera;
-        look(0, config.startPitch());
+        look(config.startYaw(), config.startPitch());
         this.authority = authority;
     }
 
@@ -94,6 +94,12 @@ public class Player implements IPhysicsBody {
     @Override
     public void setPosition(Vector3f position) {
         this.position.set(position);
+    }
+
+    @Override
+    public void setOrientation(float pitch, float yaw) {
+        this.pitch = pitch;
+        this.yaw = yaw;
     }
 
     @Override

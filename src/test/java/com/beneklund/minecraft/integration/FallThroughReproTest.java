@@ -55,6 +55,9 @@ class FallThroughReproTest {
             position.set(p);
         }
 
+        // Physics never reads orientation, so these tests don't track it.
+        public void setOrientation(float pitch, float yaw) {}
+
         public void setVelocity(Vector3f v) {
             velocity.set(v);
         }

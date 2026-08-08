@@ -23,7 +23,7 @@ class CameraTest {
     void setUp() {
         camera = new Camera(CONFIG, new CameraConfig(90f));
         // authority is null: these tests only exercise look/camera, never tick()'s raycast.
-        player = new Player(new PlayerConfig(new Vector3f(0, 0, 0), 0f, 5.0f, 8.4f, 8.0f), camera, null);
+        player = new Player(new PlayerConfig(new Vector3f(0, 0, 0), 0f, 0f, 5.0f, 8.4f, 8.0f), camera, null);
     }
 
     // getLookDirection() at yaw=0, pitch=0 should point along +Z (forward)

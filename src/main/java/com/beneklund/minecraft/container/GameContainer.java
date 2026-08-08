@@ -3,10 +3,7 @@ package com.beneklund.minecraft.container;
 import com.beneklund.minecraft.Game;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
-import com.beneklund.minecraft.infra.ChunkManager;
-import com.beneklund.minecraft.infra.ChunkRenderable;
-import com.beneklund.minecraft.infra.ChunkStore;
-import com.beneklund.minecraft.infra.RenderWorld;
+import com.beneklund.minecraft.infra.*;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbIAudioLoader;
@@ -15,10 +12,11 @@ import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.resources.JsonIResourcePack;
 import com.beneklund.minecraft.platform.window.Window;
+import com.beneklund.minecraft.player.IPlayerStore;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
+import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.renderer.*;
-import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
@@ -34,88 +32,168 @@ import org.joml.Vector3f;
 
 // Composition root — the only place that wires concrete types together.
 // Nothing outside this class should call `new` on platform or renderer objects.
+//
+// The init* methods are grouped by what they're allowed to touch, and run() calls them in
+// an order that respects those rules. The fields exist so the groups can hand objects to
+// each other — nothing outside run() reads them.
 public class GameContainer {
+    private final ContainerConfig cfg;
+
+    // config
+    private LocalConfig localConfig;
+    private WindowConfig windowConfig;
+    private CameraConfig cameraConfig;
+    private WorldConfig worldConfig;
+
+    // input
+    private InputEventQueue inputEventQueue;
+    private InputMapper inputMapper;
+    private InputHandler inputHandler;
+
+    // platform
+    private Window window;
+    private Camera camera;
+    private DeltaTracker delta;
+
+    // renderer
+    private TextureAtlas atlas;
+    private BlockRegistry registry;
+    private RenderWorld renderWorld;
+    private DebugRenderer debugRenderer;
+    private HudRenderer hudRenderer;
+    private Renderer renderer;
+
+    // audio
+    private AudioPlayer music;
+
+    // world
+    private World world;
+    private LocalWorldAuthority authority;
+    private WorldGenerator worldGen;
+    private ChunkManager chunkManager;
+    private Physics physics;
+
+    // player
+    private IPlayerStore playerStore;
+    private Player player;
+
+    public GameContainer(ContainerConfig cfg) {
+        this.cfg = cfg;
+    }
+
     public void run() throws IOException {
-        // 1. Config - pure data, no platform deps.
-        LocalConfig localConfig = new LocalConfig();
-        WindowConfig config = new WindowConfig("Minecraft", 1200, 800, false, Color.SKY, localConfig.debugEnabled());
-
+        // 1. Game Config - pure data, no platform deps.
+        initConfig();
         // 2. Input plumbing - pure Java, no GLFW/GL yet.
-        InputEventQueue queue = new InputEventQueue();
-        InputMapper mapper = new InputMapper(queue);
-
+        initInput();
         // 3. Pre-init platform objects - constructed but not yet active.
-        CameraConfig cameraConfig = new CameraConfig(70.0f);
-        PlayerConfig playerConfig = new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 4.3f, 8.4f, 8.0f);
-        Camera camera = new Camera(config, cameraConfig);
-        Window window = new Window(config, queue);
-        InputHandler handler = new InputHandler(window, camera);
-        DeltaTracker delta = new DeltaTracker(window::getTime);
-        window.addResizeListener(camera::setWindowSize);
+        initPlatform();
 
         // 4. window.init() - creates the GLFW window and makes the GL context current.
         //    Nothing that calls GL or uploads to the GPU may run before this line.
         window.init();
 
         // 5. GL resources - shaders, VAOs, textures. Requires active GL context.
-        JsonIResourcePack resourcePack = new JsonIResourcePack("/packs/faithful/pack.json", new StbIImageLoader());
-        TextureAtlas atlas = new TextureAtlas(resourcePack);
-        BlockRegistry registry = BlockRegistry.createDefault();
-        RenderWorld renderWorld = new RenderWorld();
-        ChunkRenderable chunkRenderable = new ChunkRenderable(renderWorld, atlas);
-        DebugRenderer debugRenderer = new DebugRenderer();
-        HudRenderer hudRenderer = new HudRenderer(registry, atlas);
-        Renderer renderer = new Renderer(List.of(chunkRenderable, debugRenderer, hudRenderer));
-
+        initRenderer();
         // 6. Audio - OpenAL is lazy-initialized on first play(), but construct after GL
         //    so the window is confirmed healthy before we open the audio device.
-        AudioPlayer music = new AudioPlayer(new StbIAudioLoader());
-        localConfig.startupDisc().ifPresent(music::play);
-
+        initAudio();
         // 7. Game logic - depends on input and the GL renderer being ready.
-        World world = new World(new ConcurrentHashMap<>(), handler);
-        LocalWorldAuthority authority = new LocalWorldAuthority(world, registry);
+        initWorld();
+        initPlayer();
+
+        buildGame().run();
+
+        // 8. Shutdown - see the ordering note on shutdown().
+        shutdown();
+    }
+
+    private void initConfig() {
+        localConfig = new LocalConfig();
+        windowConfig = new WindowConfig(
+                cfg.windowTitle(),
+                cfg.windowWidth(),
+                cfg.windowHeight(),
+                cfg.vsync(),
+                cfg.clearColor(),
+                localConfig.debugEnabled());
+        cameraConfig = new CameraConfig(cfg.fov());
+        worldConfig = new WorldConfig(cfg.seed(), cfg.renderDistance());
+    }
+
+    private void initInput() {
+        inputEventQueue = new InputEventQueue();
+        inputMapper = new InputMapper(inputEventQueue);
+    }
+
+    private void initPlatform() {
+        camera = new Camera(windowConfig, cameraConfig);
+        window = new Window(windowConfig, inputEventQueue);
+        inputHandler = new InputHandler(window, camera);
+        delta = new DeltaTracker(window::getTime);
+        window.addResizeListener(camera::setWindowSize);
+    }
+
+    private void initRenderer() throws IOException {
+        JsonIResourcePack resourcePack = new JsonIResourcePack(cfg.resourcePack(), new StbIImageLoader());
+        atlas = new TextureAtlas(resourcePack);
+        registry = BlockRegistry.createDefault();
+        renderWorld = new RenderWorld();
+        ChunkRenderable chunkRenderable = new ChunkRenderable(renderWorld, atlas);
+        debugRenderer = new DebugRenderer();
+        hudRenderer = new HudRenderer(registry, atlas);
+        renderer = new Renderer(List.of(chunkRenderable, debugRenderer, hudRenderer));
+    }
+
+    private void initAudio() {
+        music = new AudioPlayer(new StbIAudioLoader());
+        localConfig.startupDisc().ifPresent(music::play);
+    }
+
+    private void initWorld() {
+        world = new World(new ConcurrentHashMap<>(), inputHandler);
+        authority = new LocalWorldAuthority(world, registry);
         List<IGenerationSpec> generationSpecs = IGenerationSpec.DEFAULT_WORLD_GENERATION;
-        WorldConfig worldConfig = new WorldConfig(42L, 4);
-        WorldGenerator worldGen = new WorldGenerator(registry, generationSpecs);
+        worldGen = new WorldGenerator(registry, generationSpecs);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         ChunkStore store = new ChunkStore(worldConfig.seed());
-        ChunkManager chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store);
-        Physics physics = new Physics();
+        chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store);
+        physics = new Physics();
+    }
 
-        Player player = new Player(playerConfig, camera, authority);
+    private void initPlayer() {
+        playerStore = new PlayerStore(worldConfig.seed());
+        player = new Player(cfg.player(), camera, authority);
 
-        // Spawn resting directly on the surface (feet one block above the highest solid).
-        // We used to spawn ~12 blocks up and free-fall, but that gave gravity a chance to
-        // build speed and tunnel the player through the ground during a spawn-time frame
-        // hitch (the mesh/upload storm). No fall = no tunnel. The generator is deterministic,
-        // so this measured height matches the async-generated chunk exactly.
-        Vector3f spawnXz = playerConfig.startPosition();
-        int surfaceY = surfaceHeight(
-                worldGen, worldConfig.seed(), registry, (int) Math.floor(spawnXz.x), (int) Math.floor(spawnXz.z));
-        player.setPosition(new Vector3f(spawnXz.x, surfaceY + 1, spawnXz.z));
+        PlayerState spawn = playerStore.load().orElseGet(this::defaultSpawn);
+        player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
+        player.setOrientation(spawn.pitch(), spawn.yaw());
+    }
 
-        new Game(
-                        window,
-                        renderer,
-                        chunkManager,
-                        renderWorld,
-                        camera,
-                        player,
-                        physics,
-                        world,
-                        authority,
-                        delta,
-                        mapper,
-                        debugRenderer,
-                        hudRenderer)
-                .run();
+    private Game buildGame() {
+        return new Game(
+                window,
+                renderer,
+                chunkManager,
+                renderWorld,
+                camera,
+                player,
+                physics,
+                world,
+                authority,
+                delta,
+                inputMapper,
+                debugRenderer,
+                hudRenderer);
+    }
 
-        // 8. Shutdown - reverse dependency order: audio before window (AL before GLFW/GL).
-        //    Stop chunk workers before flushing so no async setBlock can dirty a chunk
-        //    after we've already persisted it.
+    // Reverse dependency order: audio before window (AL before GLFW/GL).
+    // Stop chunk workers before flushing so no async setBlock can dirty a chunk
+    // after we've already persisted it.
+    private void shutdown() {
+        savePlayerState();
         try {
-            chunkManager.shutdown(5);
+            chunkManager.shutdown(cfg.shutdownTimeoutSeconds());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -124,6 +202,29 @@ public class GameContainer {
         renderer.delete();
         atlas.delete();
         window.shutdown();
+    }
+
+    private void savePlayerState() {
+        Vector3f p = player.getPosition();
+        float pi = player.getPitch();
+        float yaw = player.getYaw();
+        playerStore.save(new PlayerState(p.x(), p.y(), p.z(), pi, yaw));
+    }
+
+    // Where to put the player when there's no save to load. Only the configured x/z are
+    // used — y is measured, not configured.
+    //
+    // Spawn resting directly on the surface (feet one block above the highest solid).
+    // We used to spawn ~12 blocks up and free-fall, but that gave gravity a chance to
+    // build speed and tunnel the player through the ground during a spawn-time frame
+    // hitch (the mesh/upload storm). No fall = no tunnel. The generator is deterministic,
+    // so this measured height matches the async-generated chunk exactly.
+    private PlayerState defaultSpawn() {
+        PlayerConfig p = cfg.player();
+        Vector3f start = p.startPosition();
+        int surfaceY = surfaceHeight(
+                worldGen, worldConfig.seed(), registry, (int) Math.floor(start.x()), (int) Math.floor(start.z()));
+        return new PlayerState(start.x(), surfaceY + 1, start.z(), p.startPitch(), p.startYaw());
     }
 
     // Highest solid block in a world column. Generates that column's chunk and scans
