@@ -58,6 +58,6 @@ public class Chunk {
     }
 
     public byte[] serialize() {
-        return this.blocks;
+        return blocks;
     }
 }

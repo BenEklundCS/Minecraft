@@ -13,7 +13,12 @@ import org.joml.Matrix4f;
 public class RenderWorld {
     // opaqueMesh / transparentMesh may be null when a chunk has no geometry of that kind
     // (e.g. an all-stone chunk has no transparent mesh; an all-air chunk has neither).
-    public record Entry(GpuMesh opaqueMesh, GpuMesh transparentMesh, Matrix4f model, AABB bounds) {}
+    public record Entry(GpuMesh opaqueMesh, GpuMesh transparentMesh, Matrix4f model, AABB bounds) {
+        public void delete() {
+            if (opaqueMesh != null) opaqueMesh.delete();
+            if (transparentMesh != null) transparentMesh.delete();
+        }
+    }
 
     private final HashMap<ChunkPos, Entry> meshes = new HashMap<>();
 
@@ -21,13 +26,16 @@ public class RenderWorld {
     public void add(ChunkPos pos, GpuMesh opaqueMesh, GpuMesh transparentMesh) {
         float x = pos.x() * Chunk.SIZE_XZ;
         float z = pos.z() * Chunk.SIZE_XZ;
-        meshes.put(
+        Entry previousMesh = meshes.put(
                 pos,
                 new Entry(
                         opaqueMesh,
                         transparentMesh,
                         new Matrix4f().translation(x, 0, z),
                         new AABB(x, 0, z, x + Chunk.SIZE_XZ, Chunk.SIZE_Y, z + Chunk.SIZE_XZ)));
+        if (previousMesh != null) {
+            previousMesh.delete();
+        }
     }
 
     // Removes and returns the entry so the caller can delete its GL buffers.

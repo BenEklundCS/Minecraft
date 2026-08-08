@@ -13,6 +13,7 @@ import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.IWorldGenerator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.Test;
@@ -54,15 +55,25 @@ class ChunkManagerTest {
 
         // Stub mesher — returns an empty but valid ChunkMeshData so the upload queue receives an item.
         ChunkMesher stubMesher = new ChunkMesher(BlockRegistry.createDefault(), null) {
-            @Override
             public ChunkMeshData mesh(ChunkPos pos, Chunk chunk) {
                 return new ChunkMeshData(pos, new float[0], new int[0], new float[0], new int[0], 0, chunk);
             }
         };
 
+        long seed = 42L;
+        ChunkStore stubChunkStore = new ChunkStore(seed) {
+            @Override
+            public void save(ChunkPos pos, Chunk chunk) {}
+
+            @Override
+            public Optional<Chunk> load(ChunkPos pos) {
+                return Optional.empty();
+            }
+        };
+
         World world = new World(new ConcurrentHashMap<>(), null);
         WorldConfig config = new WorldConfig(42L, 4);
-        ChunkManager manager = new ChunkManager(config, world, stubGen, stubMesher, stubAuthority);
+        ChunkManager manager = new ChunkManager(config, world, stubGen, stubMesher, stubAuthority, stubChunkStore);
 
         // Tick with 10 distinct player positions — each adds new chunks within radius 4 of that position.
         for (int i = 0; i < 10; i++) {

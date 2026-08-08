@@ -132,10 +132,7 @@ public class Game {
             // Free GL buffers for chunks that left the load radius.
             for (var pos : chunkManager.drainUnloadQueue()) {
                 RenderWorld.Entry entry = renderWorld.remove(pos);
-                if (entry != null) {
-                    if (entry.opaqueMesh() != null) entry.opaqueMesh().delete();
-                    if (entry.transparentMesh() != null) entry.transparentMesh().delete();
-                }
+                if (entry != null) entry.delete();
             }
 
             hudRenderer.setHotbar(player.getHotbarSnapshot(), player.getSelectedSlot());

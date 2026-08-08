@@ -7,10 +7,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+// World exists to safely manage a concurrent hashmap of chunks
 public class World {
+    // TODO: Remove inputHandler to decouple input from World's concurrency
     private final InputHandler inputHandler;
-    // ConcurrentHashMap because chunk load/unload happens on worker threads while the
-    // render thread reads this map every frame.
+
     private final ConcurrentHashMap<ChunkPos, Chunk> chunks;
 
     public World(ConcurrentHashMap<ChunkPos, Chunk> chunks, InputHandler inputHandler) {

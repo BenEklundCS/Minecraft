@@ -23,13 +23,16 @@ import java.util.Optional;
 //   [7-9]  r, g, b       biome tint (1,1,1 = no tint)
 public class ChunkMesher {
 
-    public record ChunkNeighbors(Chunk north, Chunk south, Chunk east, Chunk west) {
+    // stores a chunk with its neighbors, north south east west, used to in one-step resolve the chunk we are indexing
+    // into from local coords
+    public record ChunkWithNeighbors(Chunk chunk, Chunk north, Chunk south, Chunk east, Chunk west) {
         public Optional<Chunk> resolve(int nx, int nz) {
-            return (nz < 0)
+            if ((nx >= 0 && nx < Chunk.SIZE_XZ) && (nz >= 0 && nz < Chunk.SIZE_XZ)) {
+                return Optional.ofNullable(chunk);
+            }
+            return (nz < 0) // nz = -1
                     ? o(north)
-                    : (nz >= Chunk.SIZE_XZ)
-                            ? o(south)
-                            : (nx >= Chunk.SIZE_XZ) ? o(east) : (nx < 0) ? o(west) : Optional.empty();
+                    : (nz >= Chunk.SIZE_XZ) ? o(south) : (nx >= Chunk.SIZE_XZ) ? o(east) : o(west);
         }
 
         private Optional<Chunk> o(Chunk c) {
@@ -110,21 +113,21 @@ public class ChunkMesher {
     //
     // Faces are routed into one of two buffers by the block's transparent flag so the
     // renderer can do an opaque pass then a transparent pass (see ChunkRenderable / Renderer).
-    public ChunkMeshData mesh(ChunkPos pos, Chunk chunk, ChunkNeighbors neighbors) {
+    public ChunkMeshData mesh(ChunkPos pos, ChunkWithNeighbors cn) {
         Buffer opaque = new Buffer();
         Buffer transparent = new Buffer();
 
         for (int x = 0; x < Chunk.SIZE_XZ; x++) {
             for (int y = 0; y < Chunk.SIZE_Y; y++) {
                 for (int z = 0; z < Chunk.SIZE_XZ; z++) {
-                    Block blockId = chunk.getBlock(x, y, z);
+                    Block blockId = cn.chunk.getBlock(x, y, z);
                     if (blockId == Block.AIR) continue;
 
                     BlockDef def = registry.get(blockId);
                     Buffer buf = def.transparent() ? transparent : opaque;
 
                     for (Direction dir : DIRECTIONS) {
-                        if (isCulled(chunk, x, y, z, dir, blockId, neighbors)) continue;
+                        if (isCulled(cn, x, y, z, dir, blockId)) continue;
 
                         buf.ensureCapacity();
 
@@ -169,7 +172,7 @@ public class ChunkMesher {
                 Arrays.copyOf(transparent.verts, transparent.vertPos),
                 Arrays.copyOf(transparent.idxs, transparent.idxPos),
                 opaque.vertexBase + transparent.vertexBase,
-                chunk);
+                cn.chunk);
     }
 
     // One growable vertex/index buffer plus its write cursors. We keep two of these per mesh
@@ -189,12 +192,19 @@ public class ChunkMesher {
         }
     }
 
-    // A face is culled if its in-chunk neighbor is solid, or if the neighbor is the same block
+    // A face is culled if its neighbor is solid and opaque, or if the neighbor is the same block
     // (so we don't emit internal surfaces inside a body of water or a pane of glass).
-    // Out-of-chunk neighbors are never culled — the adjacent chunk's mesher handles
-    // its own boundary faces, so we must emit ours to prevent holes at seams.
-    private boolean isCulled(
-            Chunk chunk, int x, int y, int z, Direction dir, Block blockId, ChunkNeighbors chunkNeighbors) {
+    // This applies across chunk boundaries too — resolve() hands back the adjacent chunk and we
+    // cull against it just like an in-chunk neighbor.
+    //
+    // When resolve() comes back empty we don't know what's over there, and the right guess differs
+    // by block type. Opaque terrain gets the face — otherwise you see straight through the world at
+    // the render edge. Transparent blocks don't: a lake spans many chunks, so the neighbor is
+    // nearly always more water, and emitting leaves a water pane standing at the seam that only a
+    // later remesh could clear. Culling is right the moment the neighbor turns out to match, so the
+    // seam looks correct no matter when the neighbor shows up. When it doesn't match we lose a face
+    // on the outermost loaded chunk, which is far cheaper than a wall through the middle of a lake.
+    private boolean isCulled(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, Block blockId) {
         int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
         int nx = x + off[0], ny = y + off[1], nz = z + off[2];
 
@@ -203,11 +213,10 @@ public class ChunkMesher {
             return false;
         }
 
-        boolean inChunk = (nx >= 0 && nx < Chunk.SIZE_XZ) && (nz >= 0 && nz < Chunk.SIZE_XZ);
-        Chunk realChunk = inChunk ? chunk : chunkNeighbors.resolve(nx, nz).orElse(null);
-        if (realChunk == null) return false;
+        Chunk chunk = cn.resolve(nx, nz).orElse(null);
+        if (chunk == null) return registry.get(blockId).transparent();
 
-        Block neighbor = realChunk.getBlock(Math.floorMod(nx, Chunk.SIZE_XZ), ny, Math.floorMod(nz, Chunk.SIZE_XZ));
+        Block neighbor = chunk.getBlock(Math.floorMod(nx, Chunk.SIZE_XZ), ny, Math.floorMod(nz, Chunk.SIZE_XZ));
         BlockDef neighborDef = registry.get(neighbor);
         return (neighborDef.solid() && !neighborDef.transparent()) || neighbor == blockId;
     }

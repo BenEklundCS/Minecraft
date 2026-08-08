@@ -52,7 +52,7 @@ public class ChunkManager {
         meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
         meshJob = (JobInput input) -> {
             if (!input.chunk.tryTransition(ChunkState.MESHING)) return;
-            ChunkMeshData meshData = mesher.mesh(input.pos, input.chunk, neighborsOf(input.pos));
+            ChunkMeshData meshData = mesher.mesh(input.pos, neighborsOf(input.chunk, input.pos));
             if (!input.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
             uploadQueue.add(meshData);
         };
@@ -162,17 +162,30 @@ public class ChunkManager {
     }
 
     // Resolved on the meshing worker rather than at submit time, so a neighbor that finished
-    // generating while this job sat in the queue is still picked up. A null here means "not
-    // loaded" — the mesher emits the boundary face, and markCardinalNeighborsDirty schedules
-    // the remesh that cleans up the seam once the neighbor arrives.
+    // generating while this job sat in the queue is still picked up. A null here means "we don't
+    // know what's there" — see isCulled for how the mesher answers that per block type.
     //
     // Field order matches NEIGHBOR_OFFSETS in ChunkMesher: NORTH is z-1, SOUTH is z+1.
-    private ChunkMesher.ChunkNeighbors neighborsOf(ChunkPos pos) {
-        return new ChunkMesher.ChunkNeighbors(
-                world.getChunk(new ChunkPos(pos.x(), pos.z() - 1)), // NORTH
-                world.getChunk(new ChunkPos(pos.x(), pos.z() + 1)), // SOUTH
-                world.getChunk(new ChunkPos(pos.x() + 1, pos.z())), // EAST
-                world.getChunk(new ChunkPos(pos.x() - 1, pos.z()))); // WEST
+    private ChunkMesher.ChunkWithNeighbors neighborsOf(Chunk chunk, ChunkPos pos) {
+        return new ChunkMesher.ChunkWithNeighbors(
+                chunk, // passthru
+                meshable(new ChunkPos(pos.x(), pos.z() - 1)), // NORTH
+                meshable(new ChunkPos(pos.x(), pos.z() + 1)), // SOUTH
+                meshable(new ChunkPos(pos.x() + 1, pos.z())), // EAST
+                meshable(new ChunkPos(pos.x() - 1, pos.z()))); // WEST
+    }
+
+    // tick() puts a chunk in the world map before generation runs, so a neighbor can be present
+    // and still be entirely AIR. The mesher can't tell that apart from real air and would cull
+    // against blocks that aren't there yet. Report it as null so it lands in isCulled's
+    // unknown-neighbor path instead.
+    private Chunk meshable(ChunkPos pos) {
+        Chunk c = world.getChunk(pos);
+        if (c == null) return null;
+        return switch (c.getState()) {
+            case UNLOADED, QUEUED_GEN, GENERATING -> null;
+            default -> c;
+        };
     }
 
     private record JobInput(Chunk chunk, ChunkPos pos) {}

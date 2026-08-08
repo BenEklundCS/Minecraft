@@ -3,6 +3,7 @@ package com.beneklund.minecraft.integration;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.ChunkManager;
+import com.beneklund.minecraft.infra.ChunkStore;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.player.IPhysicsBody;
 import com.beneklund.minecraft.player.Physics;
@@ -16,6 +17,7 @@ import com.beneklund.minecraft.world.World;
 import com.beneklund.minecraft.world.WorldConfig;
 import com.beneklund.minecraft.world.gen.IGenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Test;
@@ -85,7 +87,6 @@ class FallThroughReproTest {
         int worldX = 8;
         int worldZ = -5;
 
-        // ground truth: what the generator actually produces for this column
         WorldGenerator probeGen = new WorldGenerator(registry, IGenerationSpec.DEFAULT_WORLD_GENERATION);
         Chunk probeChunk = new Chunk();
         ChunkPos probePos = new ChunkPos(Math.floorDiv(worldX, Chunk.SIZE_XZ), Math.floorDiv(worldZ, Chunk.SIZE_XZ));
@@ -112,7 +113,16 @@ class FallThroughReproTest {
             WorldGenerator worldGen = new WorldGenerator(registry, IGenerationSpec.DEFAULT_WORLD_GENERATION);
             ChunkMesher mesher = new ChunkMesher(registry, null);
             WorldConfig config = new WorldConfig(seed, 4);
-            ChunkManager chunkManager = new ChunkManager(config, world, worldGen, mesher, authority);
+            ChunkStore chunkStore = new ChunkStore(seed) {
+                @Override
+                public void save(ChunkPos pos, Chunk chunk) {}
+
+                @Override
+                public Optional<Chunk> load(ChunkPos pos) {
+                    return Optional.empty();
+                }
+            };
+            ChunkManager chunkManager = new ChunkManager(config, world, worldGen, mesher, authority, chunkStore);
 
             FakeBody body = new FakeBody(new Vector3f(worldX, trueSurfaceY + 12, worldZ));
             Physics physics = new Physics();
