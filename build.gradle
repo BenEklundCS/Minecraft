@@ -74,14 +74,30 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// Unit tests: fast, no real ChunkManager, no thread pools. This is what `check`/`build`
+// and therefore CI run on every push.
 test {
     useJUnitPlatform()
     jvmArgs '--enable-preview'
     // Inherits the project toolchain above; no separate launcher needed.
-    // Default 512m isn't enough for integration tests that spin up a real
-    // ChunkManager — generating+meshing its full load-radius footprint runs
-    // into multiple hundred MB.
+    exclude '**/integration/**'
+}
+
+// Integration tests: minutes, not seconds, and they spin up real ChunkManagers.
+// Deliberately not wired into `check`, so `./gradlew build` never picks them up —
+// run them by hand when you're touching the chunk pipeline.
+tasks.register('integrationTest', Test) {
+    description = 'Runs the slow integration suite (not part of check/build).'
+    group = 'verification'
+    useJUnitPlatform()
+    jvmArgs '--enable-preview'
+    include '**/integration/**'
+    // Default 512m isn't enough here — generating+meshing a full load-radius
+    // footprint runs into multiple hundred MB.
     maxHeapSize = '2g'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    shouldRunAfter test
 }
 
 spotless {

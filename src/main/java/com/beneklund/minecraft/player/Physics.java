@@ -77,17 +77,30 @@ public class Physics {
 
         AABB box = body.getBoundingBox();
         float height = box.maxY() - box.minY(); // position.y is the feet; the box extends up
+
+        // Take the cell we actually hit, not the first one iteration happens to reach.
+        // getBlocksOverlapping() walks y ascending, so breaking on the first solid cell
+        // gives the lowest one — fine going up into a ceiling, wrong coming down. One
+        // slow tick drops us through two solid cells at once, and snapping to the lower
+        // cell's top face leaves the feet a block inside the floor. Falling wants the
+        // highest solid cell, rising wants the lowest.
+        boolean falling = velocity.y < 0;
+        boolean hit = false;
+        int hitY = 0;
         for (Vector3i cell : box.getBlocksOverlapping()) {
             if (!isSolid(world, cell)) continue;
-            if (velocity.y > 0) {
-                position.y = cell.y - height; // bonked our head: top face to the block's bottom
-            } else if (velocity.y < 0) {
-                position.y = cell.y + 1; // landed: feet to the block's top face
-                body.setOnGround(true);
-            }
-            velocity.y = 0;
-            break;
+            if (!hit || (falling ? cell.y > hitY : cell.y < hitY)) hitY = cell.y;
+            hit = true;
         }
+        if (!hit) return;
+
+        if (velocity.y > 0) {
+            position.y = hitY - height; // bonked our head: top face to the block's bottom
+        } else if (velocity.y < 0) {
+            position.y = hitY + 1; // landed: feet to the block's top face
+            body.setOnGround(true);
+        }
+        velocity.y = 0;
     }
 
     private boolean isSolid(IWorldAuthority world, Vector3i cell) {
