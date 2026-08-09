@@ -6,6 +6,7 @@ import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.ChunkWithNeighbors;
 import org.junit.jupiter.api.Test;
 
 class ChunkMesherTest {
@@ -20,8 +21,13 @@ class ChunkMesherTest {
     // No adjacent chunks loaded. Opaque blocks still emit their boundary faces; transparent
     // ones cull theirs (see isCulled), so tests that aren't about boundary policy should keep
     // their blocks off the chunk edge.
-    private static ChunkMesher.ChunkWithNeighbors noNeighbors(Chunk chunk) {
-        return new ChunkMesher.ChunkWithNeighbors(chunk, null, null, null, null);
+    private static ChunkWithNeighbors noNeighbors(Chunk chunk) {
+        return new ChunkWithNeighbors(chunk, null, null, null, null, null, null, null, null);
+    }
+
+    // Cardinals only; the four diagonals stay unloaded. Order is (north, south, east, west).
+    private static ChunkWithNeighbors cardinals(Chunk chunk, Chunk north, Chunk south, Chunk east, Chunk west) {
+        return new ChunkWithNeighbors(chunk, north, south, east, west, null, null, null, null);
     }
 
     // a single isolated block has no solid neighbors → all 6 faces emitted
@@ -114,7 +120,7 @@ class ChunkMesherTest {
         Chunk chunk = emptyChunk();
         chunk.setBlock(0, 64, 0, Block.WATER);
 
-        var cn = new ChunkMesher.ChunkWithNeighbors(chunk, emptyChunk(), null, null, emptyChunk());
+        var cn = cardinals(chunk, emptyChunk(), null, null, emptyChunk());
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), cn);
 
         assertEquals(24, data.vertexCount(), "6 quads — a loaded air neighbor means the face is really visible");
@@ -130,7 +136,7 @@ class ChunkMesherTest {
         // west's adjoining column is x=15 (floorMod(-1, 16)); north stays air so only one face culls
         Chunk west = emptyChunk();
         west.setBlock(15, 64, 0, Block.WATER);
-        var cn = new ChunkMesher.ChunkWithNeighbors(chunk, emptyChunk(), null, null, west);
+        var cn = cardinals(chunk, emptyChunk(), null, null, west);
 
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), cn);
 

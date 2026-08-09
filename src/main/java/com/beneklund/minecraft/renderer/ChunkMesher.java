@@ -7,9 +7,9 @@ import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.Direction;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.ChunkWithNeighbors;
 import com.beneklund.minecraft.world.gen.Biome;
 import java.util.Arrays;
-import java.util.Optional;
 
 // Converts a Chunk's block data into a ChunkMeshData (float[] vertices, int[] indices).
 // No GL calls — safe to run on any worker thread. The caller uploads the result to the
@@ -22,24 +22,6 @@ import java.util.Optional;
 //   [6]    faceId        0=UP, 1=side, 2=DOWN (drives brightness bands in chunk.frag)
 //   [7-9]  r, g, b       biome tint (1,1,1 = no tint)
 public class ChunkMesher {
-
-    // stores a chunk with its neighbors, north south east west, used to in one-step resolve the chunk we are indexing
-    // into from local coords
-    public record ChunkWithNeighbors(Chunk chunk, Chunk north, Chunk south, Chunk east, Chunk west) {
-        public Optional<Chunk> resolve(int nx, int nz) {
-            if ((nx >= 0 && nx < Chunk.SIZE_XZ) && (nz >= 0 && nz < Chunk.SIZE_XZ)) {
-                return Optional.ofNullable(chunk);
-            }
-            return (nz < 0) // nz = -1
-                    ? o(north)
-                    : (nz >= Chunk.SIZE_XZ) ? o(south) : (nx >= Chunk.SIZE_XZ) ? o(east) : o(west);
-        }
-
-        private Optional<Chunk> o(Chunk c) {
-            return Optional.ofNullable(c);
-        }
-    }
-
     // 4 corner offsets per face, CCW winding when viewed from outside the block.
     // Indexed by Direction.ordinal(): UP=0, DOWN=1, NORTH=2, SOUTH=3, EAST=4, WEST=5.
     // Each row is one face; each entry is (dx, dy, dz) added to the block's origin.
@@ -120,7 +102,7 @@ public class ChunkMesher {
         for (int x = 0; x < Chunk.SIZE_XZ; x++) {
             for (int y = 0; y < Chunk.SIZE_Y; y++) {
                 for (int z = 0; z < Chunk.SIZE_XZ; z++) {
-                    Block blockId = cn.chunk.getBlock(x, y, z);
+                    Block blockId = cn.center().getBlock(x, y, z);
                     if (blockId == Block.AIR) continue;
 
                     BlockDef def = registry.get(blockId);
@@ -172,7 +154,7 @@ public class ChunkMesher {
                 Arrays.copyOf(transparent.verts, transparent.vertPos),
                 Arrays.copyOf(transparent.idxs, transparent.idxPos),
                 opaque.vertexBase + transparent.vertexBase,
-                cn.chunk);
+                cn.center());
     }
 
     // One growable vertex/index buffer plus its write cursors. We keep two of these per mesh

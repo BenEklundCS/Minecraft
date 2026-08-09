@@ -50,7 +50,7 @@ class ChunkManagerTest {
             }
 
             @Override
-            public void markCardinalNeighborsDirty(ChunkPos pos) {}
+            public void markNeighborsDirty(ChunkPos pos) {}
         };
 
         // Stub mesher — returns an empty but valid ChunkMeshData so the upload queue receives an item.
@@ -59,8 +59,8 @@ class ChunkManagerTest {
         // drive the real mesher. @Override is what keeps that from happening again.
         ChunkMesher stubMesher = new ChunkMesher(BlockRegistry.createDefault(), null) {
             @Override
-            public ChunkMeshData mesh(ChunkPos pos, ChunkMesher.ChunkWithNeighbors cn) {
-                return new ChunkMeshData(pos, new float[0], new int[0], new float[0], new int[0], 0, cn.chunk());
+            public ChunkMeshData mesh(ChunkPos pos, ChunkWithNeighbors cn) {
+                return new ChunkMeshData(pos, new float[0], new int[0], new float[0], new int[0], 0, cn.center());
             }
         };
 

@@ -39,7 +39,7 @@ class RaycastTest {
                 return List.of();
             }
 
-            public void markCardinalNeighborsDirty(ChunkPos pos) {}
+            public void markNeighborsDirty(ChunkPos pos) {}
         };
     }
 

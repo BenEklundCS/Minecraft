@@ -5,7 +5,7 @@
         </encoder>
     </appender>
 
-    <logger name="minecraft" level="DEBUG"/>
+    <logger name="minecraft" level="INFO"/>
 
     <root level="WARN">
         <appender-ref ref="CONSOLE"/>

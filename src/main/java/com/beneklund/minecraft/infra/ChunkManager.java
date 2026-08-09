@@ -73,7 +73,7 @@ public class ChunkManager {
                 // need persisting (regen produces the same bytes). Clear the flag so only real
                 // player edits trigger a disk write.
                 in.chunk.clearNeedsPersisting();
-                authority.markCardinalNeighborsDirty(in.pos);
+                authority.markNeighborsDirty(in.pos);
                 if (!in.chunk.tryTransition(ChunkState.QUEUED_MESH)) return;
                 meshingPool.execute(() -> meshJob.accept(new JobInput(in.chunk, in.pos)));
             } catch (Throwable t) {
@@ -180,13 +180,17 @@ public class ChunkManager {
     // know what's there" — see isCulled for how the mesher answers that per block type.
     //
     // Field order matches NEIGHBOR_OFFSETS in ChunkMesher: NORTH is z-1, SOUTH is z+1.
-    private ChunkMesher.ChunkWithNeighbors neighborsOf(Chunk chunk, ChunkPos pos) {
-        return new ChunkMesher.ChunkWithNeighbors(
+    private ChunkWithNeighbors neighborsOf(Chunk chunk, ChunkPos pos) {
+        return new ChunkWithNeighbors(
                 chunk, // passthru
                 meshable(new ChunkPos(pos.x(), pos.z() - 1)), // NORTH
                 meshable(new ChunkPos(pos.x(), pos.z() + 1)), // SOUTH
                 meshable(new ChunkPos(pos.x() + 1, pos.z())), // EAST
-                meshable(new ChunkPos(pos.x() - 1, pos.z()))); // WEST
+                meshable(new ChunkPos(pos.x() - 1, pos.z())), // WEST
+                meshable(new ChunkPos(pos.x() + 1, pos.z() - 1)), // NORTH EAST
+                meshable(new ChunkPos(pos.x() - 1, pos.z() - 1)), // NORTH WEST
+                meshable(new ChunkPos(pos.x() + 1, pos.z() + 1)), // SOUTH EAST
+                meshable(new ChunkPos(pos.x() - 1, pos.z() + 1))); // SOUTH WEST
     }
 
     // tick() puts a chunk in the world map before generation runs, so a neighbor can be present

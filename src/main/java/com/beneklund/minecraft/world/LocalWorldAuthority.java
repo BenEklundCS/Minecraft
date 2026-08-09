@@ -38,17 +38,19 @@ public class LocalWorldAuthority implements IWorldAuthority {
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
         chunk.setBlock(chunkCoordinates.x, y, chunkCoordinates.z, block);
         chunk.tryTransition(ChunkState.DIRTY);
-        // edit occured on border, mark cardinals dirty if they're uploaded
+        // edit occured on border, mark neighbors dirty if they're uploaded
         if (atChunkBorder(chunkCoordinates)) {
-            markCardinalNeighborsDirty(pos);
+            markNeighborsDirty(pos);
         }
     }
 
-    public void markCardinalNeighborsDirty(ChunkPos pos) {
-        List<Chunk> cardinalNeighbors = getCardinalNeighbors(pos);
-        for (Chunk neighbor : cardinalNeighbors) {
+    // All 8 surrounding chunks, not just the 4 cardinals: a block in a chunk corner is one of the
+    // AO samples for the vertex the diagonal neighbor shares with it, so that neighbor's mesh is
+    // stale too.
+    public void markNeighborsDirty(ChunkPos pos) {
+        for (Chunk neighbor : getNeighbors(pos)) {
             if (neighbor.getState() == ChunkState.UPLOADED) {
-                if (!neighbor.tryTransition(ChunkState.DIRTY)) continue;
+                neighbor.tryTransition(ChunkState.DIRTY);
             }
         }
     }
@@ -80,14 +82,21 @@ public class LocalWorldAuthority implements IWorldAuthority {
         return new ChunkCoordinates(chunkX, chunkZ);
     }
 
-    private List<Chunk> getCardinalNeighbors(ChunkPos pos) {
-        List<Chunk> cardinalNeighbors = new ArrayList<>();
-        cardinalNeighbors.add(getChunk(pos.x() + 1, pos.z()));
-        cardinalNeighbors.add(getChunk(pos.x() - 1, pos.z()));
-        cardinalNeighbors.add(getChunk(pos.x(), pos.z() + 1));
-        cardinalNeighbors.add(getChunk(pos.x(), pos.z() - 1));
-        cardinalNeighbors.removeIf(Objects::isNull);
-        return cardinalNeighbors;
+    // Takes chunk coordinates, so it goes through the ChunkPos overload of getChunk. The int
+    // overload divides by SIZE_XZ because it expects world coordinates — handing it pos.x() + 1
+    // resolves to whatever chunk contains world column 1, not the neighbor.
+    private List<Chunk> getNeighbors(ChunkPos pos) {
+        List<Chunk> neighbors = new ArrayList<>();
+        neighbors.add(getChunk(new ChunkPos(pos.x(), pos.z() - 1))); // NORTH
+        neighbors.add(getChunk(new ChunkPos(pos.x(), pos.z() + 1))); // SOUTH
+        neighbors.add(getChunk(new ChunkPos(pos.x() + 1, pos.z()))); // EAST
+        neighbors.add(getChunk(new ChunkPos(pos.x() - 1, pos.z()))); // WEST
+        neighbors.add(getChunk(new ChunkPos(pos.x() + 1, pos.z() - 1))); // NORTH EAST
+        neighbors.add(getChunk(new ChunkPos(pos.x() - 1, pos.z() - 1))); // NORTH WEST
+        neighbors.add(getChunk(new ChunkPos(pos.x() + 1, pos.z() + 1))); // SOUTH EAST
+        neighbors.add(getChunk(new ChunkPos(pos.x() - 1, pos.z() + 1))); // SOUTH WEST
+        neighbors.removeIf(Objects::isNull);
+        return neighbors;
     }
 
     private boolean atChunkBorder(ChunkCoordinates coords) {
