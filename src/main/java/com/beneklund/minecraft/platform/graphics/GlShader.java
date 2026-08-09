@@ -8,6 +8,7 @@ import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
 
 /*
@@ -55,6 +56,12 @@ public class GlShader {
         int location = location(name);
         if (location < 0) return;
         glUniform1f(location, value);
+    }
+
+    public void setVec3(String name, Vector3f vec3) {
+        int location = location(name);
+        if (location < 0) return;
+        glUniform3f(location, vec3.x(), vec3.y(), vec3.z());
     }
 
     public void setMatrix4(String name, Matrix4f matrix) {

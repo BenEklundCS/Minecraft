@@ -8,9 +8,12 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 public class DebugRenderer implements IRenderable {
+    private static final String VERT_PATH = "/shaders/debug.vert";
+    private static final String FRAG_PATH = "/shaders/debug.frag";
     private static final float REACH = 8.0f;
-    private static final ShaderProgram DEBUG_SHADER = new ShaderProgram("/shaders/debug.vert", "/shaders/debug.frag");
     private static final Matrix4f IDENTITY = new Matrix4f();
+
+    private final ShaderProgram debugShader;
 
     private LineMesh laserMesh;
     private LineMesh targetMesh;
@@ -18,6 +21,10 @@ public class DebugRenderer implements IRenderable {
     private boolean laserDirty = true;
     private Vector3f laserStart;
     private Vector3f laserEnd;
+
+    public DebugRenderer() {
+        debugShader = new ShaderProgram(VERT_PATH, FRAG_PATH);
+    }
 
     public void setLaser(Vector3f start, Vector3f end) {
         laserStart = new Vector3f(start);
@@ -109,17 +116,22 @@ public class DebugRenderer implements IRenderable {
         if (targetMesh == null) rebuildTargetMesh();
         List<DrawCall> calls = new ArrayList<>();
         if (laserMesh != null) {
-            calls.add(new DrawCall(laserMesh, IDENTITY, DEBUG_SHADER));
+            calls.add(new DrawCall(laserMesh, IDENTITY, debugShader));
         }
         if (targetTransform != null) {
-            calls.add(new DrawCall(targetMesh, targetTransform, DEBUG_SHADER));
+            calls.add(new DrawCall(targetMesh, targetTransform, debugShader));
         }
         return calls;
     }
 
     @Override
+    public void reload() {
+        debugShader.reload();
+    }
+
+    @Override
     public void delete() {
-        DEBUG_SHADER.delete();
+        debugShader.delete();
         if (laserMesh != null) laserMesh.delete();
     }
 }

@@ -22,10 +22,10 @@ public record ContainerConfig(
                 1200,
                 800,
                 false,
-                Color.SKY,
+                Color.FOG,
                 70.0f,
                 42L,
-                4,
+                8,
                 "/packs/faithful/pack.json",
                 new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 0.0f, 4.3f, 8.4f, 8.0f),
                 5L);

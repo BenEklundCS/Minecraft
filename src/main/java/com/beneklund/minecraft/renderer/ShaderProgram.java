@@ -1,35 +1,61 @@
 package com.beneklund.minecraft.renderer;
 
+import static com.beneklund.minecraft.util.Log.LOGGER;
+
 import com.beneklund.minecraft.platform.graphics.GlShader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 public class ShaderProgram {
-    private final GlShader shader;
+    private static final Path DEV_SHADER_ROOT = Path.of("src/main/resources");
+
+    private final String vertexShaderPath;
+    private final String fragmentShaderPath;
+    private GlShader shader;
 
     // Paths must start with '/' to be resolved from the classpath root.
     // Without the leading slash, getResourceAsStream() looks relative to this class's package.
     public ShaderProgram(String vertexShaderPath, String fragmentShaderPath) {
+        this.vertexShaderPath = vertexShaderPath;
+        this.fragmentShaderPath = fragmentShaderPath;
+        shader = new GlShader(loadSource(vertexShaderPath), loadSource(fragmentShaderPath));
+    }
+
+    public boolean reload() {
+        GlShader next;
         try {
-            String vertexShaderSource;
-            try (InputStream vertexShaderStream = getClass().getResourceAsStream(vertexShaderPath)) {
-                if (vertexShaderStream == null) {
-                    throw new IOException("Failed to load vertex shader from path: %s".formatted(vertexShaderPath));
-                }
-                vertexShaderSource = new String(vertexShaderStream.readAllBytes(), StandardCharsets.UTF_8);
-            }
+            next = new GlShader(loadSource(vertexShaderPath), loadSource(fragmentShaderPath));
+        } catch (RuntimeException e) {
+            LOGGER.error("reload failed for {}, keeping the previous program", fragmentShaderPath, e);
+            return false;
+        }
+        shader.delete();
+        shader = next;
+        LOGGER.info("reloaded {}", fragmentShaderPath);
+        return true;
+    }
 
-            String fragmentShaderSource;
-            try (InputStream fragmentShaderStream = getClass().getResourceAsStream(fragmentShaderPath)) {
-                if (fragmentShaderStream == null) {
-                    throw new IOException("Failed to load fragment shader from path: %s".formatted(fragmentShaderPath));
-                }
-                fragmentShaderSource = new String(fragmentShaderStream.readAllBytes(), StandardCharsets.UTF_8);
+    private String loadSource(String path) {
+        Path onDisk = DEV_SHADER_ROOT.resolve(path.startsWith("/") ? path.substring(1) : path);
+        if (Files.isRegularFile(onDisk)) {
+            try {
+                LOGGER.debug("shader source from disk: {}", onDisk);
+                return Files.readString(onDisk, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to read shader from disk: %s".formatted(onDisk), e);
             }
-
-            shader = new GlShader(vertexShaderSource, fragmentShaderSource);
+        }
+        try (InputStream stream = getClass().getResourceAsStream(path)) {
+            if (stream == null) {
+                throw new IOException("Failed to load shader from path: %s".formatted(path));
+            }
+            LOGGER.debug("shader source from classpath: {}", path);
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new RuntimeException("Failed to load shader program: ", e);
         }
@@ -37,6 +63,14 @@ public class ShaderProgram {
 
     public void bind() {
         shader.use();
+    }
+
+    public void setUniformFloat(String name, float value) {
+        shader.setFloat(name, value);
+    }
+
+    public void setUniformVec3(String name, Vector3f vec3) {
+        shader.setVec3(name, vec3);
     }
 
     public void setUniformMat4(String name, Matrix4f matrix) {

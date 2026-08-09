@@ -74,6 +74,19 @@ public class HudRenderer implements IRenderable {
                 new DrawCall(crosshair, ortho, HUD_COLOR, Optional.empty(), RenderPass.HUD));
     }
 
+    // Clearing lastWindowSize is not optional. Uniform values live on the GL program object,
+    // and a reload builds a brand new one where every uniform starts at its default — for a
+    // mat4 that's all zeros. uOrtho is the only uniform in the codebase written once and left
+    // there (getDrawCalls only sets it when the window size changes), so after a reload every
+    // HUD vertex gets multiplied by a zero matrix and collapses to the origin. Nulling this
+    // makes the next getDrawCalls take the resize branch and re-upload it.
+    @Override
+    public void reload() {
+        HUD_COLOR.reload();
+        HUD_TEXTURE.reload();
+        lastWindowSize = null;
+    }
+
     private void rebuildHotBar() {
         if (hotBar != null) {
             hotBar.delete();

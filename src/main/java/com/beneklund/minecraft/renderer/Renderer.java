@@ -2,20 +2,30 @@ package com.beneklund.minecraft.renderer;
 
 import static org.lwjgl.opengl.GL11.*;
 
+import com.beneklund.minecraft.util.Color;
 import java.util.ArrayList;
 import java.util.List;
+import org.joml.Vector2f;
 
 // Collects DrawCalls from all Renderables each frame and submits them to the GPU,
 // opaque pass first then transparent pass (see draw()).
 public class Renderer {
     private final List<IRenderable> registered;
+    private final Color fogColor;
+    private final Vector2f fogRange;
 
-    public Renderer(List<IRenderable> registered) {
+    public Renderer(List<IRenderable> registered, Color fogColor, Vector2f fogRange) {
         this.registered = registered;
+        this.fogColor = fogColor;
+        this.fogRange = fogRange;
     }
 
     public void delete() {
         for (IRenderable r : registered) r.delete();
+    }
+
+    public void reloadAll() {
+        for (IRenderable r : registered) r.reload();
     }
 
     public void draw(Camera camera) {
@@ -63,6 +73,9 @@ public class Renderer {
         call.shader().setUniformMat4("uView", camera.getViewMatrix());
         call.shader().setUniformMat4("uProjection", camera.getProjectionMatrix());
         call.shader().setUniformMat4("uModel", call.transform());
+        call.shader().setUniformVec3("uFogColor", fogColor.toRgbVec3());
+        call.shader().setUniformFloat("uFogStart", fogRange.x);
+        call.shader().setUniformFloat("uFogEnd", fogRange.y);
         call.mesh().render();
     }
 }

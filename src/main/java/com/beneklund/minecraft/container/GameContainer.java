@@ -28,6 +28,7 @@ import com.beneklund.minecraft.world.gen.WorldGenerator;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import org.joml.Vector2f;
 import org.joml.Vector3f;
 
 // Composition root — the only place that wires concrete types together.
@@ -142,7 +143,10 @@ public class GameContainer {
         ChunkRenderable chunkRenderable = new ChunkRenderable(renderWorld, atlas);
         debugRenderer = new DebugRenderer();
         hudRenderer = new HudRenderer(registry, atlas);
-        renderer = new Renderer(List.of(chunkRenderable, debugRenderer, hudRenderer));
+        float end = 0.9f * cfg.renderDistance() * Chunk.SIZE_XZ;
+        float start = 0.55f * end;
+        Vector2f fogRange = new Vector2f(start, end);
+        renderer = new Renderer(List.of(chunkRenderable, debugRenderer, hudRenderer), cfg.clearColor(), fogRange);
     }
 
     private void initAudio() {

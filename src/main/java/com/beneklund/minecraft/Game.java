@@ -82,6 +82,10 @@ public class Game {
                 window.close();
             }
 
+            if (actions.contains(IInputAction.Simple.RELOAD_SHADERS)) {
+                renderer.reloadAll();
+            }
+
             world.update(actions, delta.getDelta());
             chunkManager.tick(player.getChunkPos());
 

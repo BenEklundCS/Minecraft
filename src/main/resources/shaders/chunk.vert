@@ -13,9 +13,13 @@ out vec2  vUV;
 out float vAO;
 out float vFaceId;
 out vec3  vTint;
+out vec3  vViewPos;
 
 void main() {
-    gl_Position = uProjection * uView * uModel * vec4(aPos, 1.0);
+    vec4 viewPos = uView * uModel * vec4(aPos, 1.0);
+    vViewPos = viewPos.xyz;
+
+    gl_Position = uProjection * viewPos;
     vUV     = aUV;
     vAO     = aAO;
     vFaceId = aFaceId;
