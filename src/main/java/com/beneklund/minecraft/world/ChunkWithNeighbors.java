@@ -1,15 +1,25 @@
 package com.beneklund.minecraft.world;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
-import org.joml.Vector2i;
 
 // stores a chunk with its neighbors, north south east west, used to in one-step resolve the chunk we are indexing
 // into from local coords
 // central chunk must never be null, but all neighbors can be
+//
+// Snapshot of references, not of contents. The Chunks behind these keep being written by other
+// threads while a meshing worker reads them, so a stale read is possible — it costs one wrong
+// face, corrected on the next remesh. Don't add locking here; the remesh is the correction.
 public class ChunkWithNeighbors {
-    private static final Vector2i CENTER = new Vector2i(1, 1);
+    // Index of the center row and column in the 3x3 below. Not a coordinate — 0 is the low
+    // neighbor on that axis, 2 is the high one.
+    private static final int CENTER = 1;
+
     private final Chunk[][] chunks;
 
+    // Public because tests build these from nine chunks they already have in hand, which is the
+    // readable shape for pinning the layout. Production never calls this — around() does.
     public ChunkWithNeighbors(
             Chunk chunk,
             Chunk north,
@@ -24,6 +34,39 @@ public class ChunkWithNeighbors {
         chunks = new Chunk[][] {{northWest, west, southWest}, {north, chunk, south}, {northEast, east, southEast}};
     }
 
+    // The offsets live here rather than at the call sites so they can't drift from the array
+    // above. lookup answers with null for a chunk that isn't loaded or isn't ready yet, which
+    // the neighbor slots accept and the center does not.
+    public static ChunkWithNeighbors around(ChunkPos pos, ChunkLookup lookup) {
+        return new ChunkWithNeighbors(
+                lookup.at(pos),
+                lookup.at(pos.offset(0, -1)), // NORTH
+                lookup.at(pos.offset(0, 1)), // SOUTH
+                lookup.at(pos.offset(1, 0)), // EAST
+                lookup.at(pos.offset(-1, 0)), // WEST
+                lookup.at(pos.offset(1, -1)), // NORTH EAST
+                lookup.at(pos.offset(-1, -1)), // NORTH WEST
+                lookup.at(pos.offset(1, 1)), // SOUTH EAST
+                lookup.at(pos.offset(-1, 1))); // SOUTH WEST
+    }
+
+    public static ChunkWithNeighbors noNeighbors(Chunk chunk) {
+        return new ChunkWithNeighbors(chunk, null, null, null, null, null, null, null, null);
+    }
+
+    // Every neighbor that's actually there, for callers that want to touch all of them rather
+    // than locate one. Order isn't promised — use resolve() if position matters.
+    public List<Chunk> neighbors() {
+        List<Chunk> neighbors = new ArrayList<>();
+        for (int x = 0; x < chunks.length; x++) {
+            for (int z = 0; z < chunks[x].length; z++) {
+                if (x == CENTER && z == CENTER) continue;
+                if (chunks[x][z] != null) neighbors.add(chunks[x][z]);
+            }
+        }
+        return neighbors;
+    }
+
     // resolve translates a center local x and local z chunk coordinate into the correct chunk
     // assume centerLocalX and centerLocalZ are either 0-15 (in center) or -1 or 16 (off center)
     public Optional<Chunk> resolve(int centerLocalX, int centerLocalZ) {
@@ -33,7 +76,7 @@ public class ChunkWithNeighbors {
     }
 
     public Chunk center() {
-        return chunks[CENTER.x()][CENTER.y()];
+        return chunks[CENTER][CENTER];
     }
 
     private Optional<Chunk> wrap(Chunk c) {
@@ -41,11 +84,6 @@ public class ChunkWithNeighbors {
     }
 
     private int normalize(int i) {
-        if (i < 0) {
-            return 0;
-        } else if (i < Chunk.SIZE_XZ) {
-            return 1;
-        }
-        return 2;
+        return (i < 0) ? 0 : (i < Chunk.SIZE_XZ) ? 1 : 2;
     }
 }

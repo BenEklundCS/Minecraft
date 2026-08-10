@@ -2,6 +2,8 @@ package com.beneklund.minecraft.world;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 // Nine same-typed constructor arguments and a 3x3 array behind them — nothing here is
@@ -59,7 +61,7 @@ class ChunkWithNeighborsTest {
     // "it's air" — see isCulled in ChunkMesher for why the mesher needs to tell those apart.
     @Test
     void resolve_returnsEmptyForAnUnloadedNeighbor() {
-        var onlyCenter = new ChunkWithNeighbors(center, null, null, null, null, null, null, null, null);
+        var onlyCenter = ChunkWithNeighbors.noNeighbors(center);
 
         assertTrue(onlyCenter.resolve(LOW, LOW).isEmpty());
         assertTrue(onlyCenter.resolve(HIGH, MID).isEmpty());
@@ -71,13 +73,64 @@ class ChunkWithNeighborsTest {
         assertSame(center, cn.center());
     }
 
-    // center() has no Optional because callers shouldn't have to check — the constructor is what
-    // makes that true.
+    // around() is the only production construction path, and its offset table is the one thing
+    // that can silently disagree with the array layout above. Built away from the origin on
+    // purpose — at (0,0) broken chunk arithmetic and correct chunk arithmetic often land on the
+    // same cell, which is how the floorDiv bug in markNeighborsDirty stayed hidden.
     @Test
-    void constructor_rejectsANullCenter() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new ChunkWithNeighbors(
-                        null, north, south, east, west, northEast, northWest, southEast, southWest));
+    void around_wiresEveryOffsetToTheRightSlot() {
+        ChunkPos origin = new ChunkPos(4, -7);
+        Map<ChunkPos, Chunk> loaded = Map.of(
+                origin,
+                center,
+                origin.offset(0, -1),
+                north,
+                origin.offset(0, 1),
+                south,
+                origin.offset(1, 0),
+                east,
+                origin.offset(-1, 0),
+                west,
+                origin.offset(1, -1),
+                northEast,
+                origin.offset(-1, -1),
+                northWest,
+                origin.offset(1, 1),
+                southEast,
+                origin.offset(-1, 1),
+                southWest);
+
+        var built = ChunkWithNeighbors.around(origin, loaded::get);
+
+        assertSame(center, built.center());
+        assertSame(northWest, built.resolve(LOW, LOW).orElseThrow());
+        assertSame(north, built.resolve(MID, LOW).orElseThrow());
+        assertSame(northEast, built.resolve(HIGH, LOW).orElseThrow());
+        assertSame(west, built.resolve(LOW, MID).orElseThrow());
+        assertSame(east, built.resolve(HIGH, MID).orElseThrow());
+        assertSame(southWest, built.resolve(LOW, HIGH).orElseThrow());
+        assertSame(south, built.resolve(MID, HIGH).orElseThrow());
+        assertSame(southEast, built.resolve(HIGH, HIGH).orElseThrow());
+    }
+
+    @Test
+    void neighbors_returnsTheEightSurroundingChunks() {
+        List<Chunk> found = cn.neighbors();
+
+        assertEquals(8, found.size());
+        assertFalse(found.contains(center), "a chunk is not its own neighbor");
+        assertTrue(found.containsAll(List.of(north, south, east, west, northEast, northWest, southEast, southWest)));
+    }
+
+    // markNeighborsDirty iterates this, so an unloaded neighbor has to drop out rather than
+    // arrive as a null to trip over.
+    @Test
+    void neighbors_omitsUnloadedOnes() {
+        var sparse = new ChunkWithNeighbors(center, north, null, null, null, null, null, null, southWest);
+
+        List<Chunk> found = sparse.neighbors();
+
+        assertEquals(2, found.size());
+        assertTrue(found.containsAll(List.of(north, southWest)));
     }
 }

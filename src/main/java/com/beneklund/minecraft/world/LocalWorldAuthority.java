@@ -5,9 +5,7 @@ import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.util.AABB;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class LocalWorldAuthority implements IWorldAuthority {
     private record ChunkCoordinates(int x, int z) {}
@@ -47,8 +45,13 @@ public class LocalWorldAuthority implements IWorldAuthority {
     // All 8 surrounding chunks, not just the 4 cardinals: a block in a chunk corner is one of the
     // AO samples for the vertex the diagonal neighbor shares with it, so that neighbor's mesh is
     // stale too.
+    //
+    // The early return is what lets this reuse ChunkWithNeighbors, which refuses a null center.
+    // A generation job can outlive its chunk — tick() may have unloaded it by the time this runs
+    // — and there are no neighbors to mark for a chunk that's gone anyway.
     public void markNeighborsDirty(ChunkPos pos) {
-        for (Chunk neighbor : getNeighbors(pos)) {
+        if (getChunk(pos) == null) return;
+        for (Chunk neighbor : ChunkWithNeighbors.around(pos, this::getChunk).neighbors()) {
             if (neighbor.getState() == ChunkState.UPLOADED) {
                 neighbor.tryTransition(ChunkState.DIRTY);
             }
@@ -80,23 +83,6 @@ public class LocalWorldAuthority implements IWorldAuthority {
         int chunkX = Math.floorMod(worldX, Chunk.SIZE_XZ);
         int chunkZ = Math.floorMod(worldZ, Chunk.SIZE_XZ);
         return new ChunkCoordinates(chunkX, chunkZ);
-    }
-
-    // Takes chunk coordinates, so it goes through the ChunkPos overload of getChunk. The int
-    // overload divides by SIZE_XZ because it expects world coordinates — handing it pos.x() + 1
-    // resolves to whatever chunk contains world column 1, not the neighbor.
-    private List<Chunk> getNeighbors(ChunkPos pos) {
-        List<Chunk> neighbors = new ArrayList<>();
-        neighbors.add(getChunk(new ChunkPos(pos.x(), pos.z() - 1))); // NORTH
-        neighbors.add(getChunk(new ChunkPos(pos.x(), pos.z() + 1))); // SOUTH
-        neighbors.add(getChunk(new ChunkPos(pos.x() + 1, pos.z()))); // EAST
-        neighbors.add(getChunk(new ChunkPos(pos.x() - 1, pos.z()))); // WEST
-        neighbors.add(getChunk(new ChunkPos(pos.x() + 1, pos.z() - 1))); // NORTH EAST
-        neighbors.add(getChunk(new ChunkPos(pos.x() - 1, pos.z() - 1))); // NORTH WEST
-        neighbors.add(getChunk(new ChunkPos(pos.x() + 1, pos.z() + 1))); // SOUTH EAST
-        neighbors.add(getChunk(new ChunkPos(pos.x() - 1, pos.z() + 1))); // SOUTH WEST
-        neighbors.removeIf(Objects::isNull);
-        return neighbors;
     }
 
     private boolean atChunkBorder(ChunkCoordinates coords) {

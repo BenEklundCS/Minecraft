@@ -18,13 +18,6 @@ class ChunkMesherTest {
         return new Chunk();
     }
 
-    // No adjacent chunks loaded. Opaque blocks still emit their boundary faces; transparent
-    // ones cull theirs (see isCulled), so tests that aren't about boundary policy should keep
-    // their blocks off the chunk edge.
-    private static ChunkWithNeighbors noNeighbors(Chunk chunk) {
-        return new ChunkWithNeighbors(chunk, null, null, null, null, null, null, null, null);
-    }
-
     // Cardinals only; the four diagonals stay unloaded. Order is (north, south, east, west).
     private static ChunkWithNeighbors cardinals(Chunk chunk, Chunk north, Chunk south, Chunk east, Chunk west) {
         return new ChunkWithNeighbors(chunk, north, south, east, west, null, null, null, null);
@@ -36,7 +29,7 @@ class ChunkMesherTest {
         Chunk chunk = emptyChunk();
         chunk.setBlock(0, 64, 0, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(chunk));
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
         assertEquals(24 * 10, data.opaqueVerts().length, "24 vertices × 10 floats");
@@ -53,7 +46,7 @@ class ChunkMesherTest {
         // neighbors and get culled, which is a boundary question, not a routing one.
         chunk.setBlock(1, 64, 1, Block.WATER);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(chunk));
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
         assertEquals(24 * 10, data.transparentVerts().length, "water lives in the transparent buffer");
@@ -69,7 +62,7 @@ class ChunkMesherTest {
         chunk.setBlock(0, 64, 0, Block.STONE);
         chunk.setBlock(1, 64, 0, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(chunk));
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(40, data.vertexCount(), "10 quads × 4 vertices");
         assertEquals(60, data.opaqueIdx().length, "10 quads × 6 indices");
@@ -78,7 +71,7 @@ class ChunkMesherTest {
     // all-air chunk produces no geometry
     @Test
     void allAirChunk_producesEmptyMesh() {
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(emptyChunk()));
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(emptyChunk()));
 
         assertEquals(0, data.vertexCount());
         assertEquals(0, data.opaqueVerts().length);
@@ -95,7 +88,7 @@ class ChunkMesherTest {
         Chunk chunk = emptyChunk();
         chunk.setBlock(0, 64, 0, Block.WATER);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(chunk));
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(16, data.vertexCount(), "4 quads — both seam faces culled, no pane standing in the lake");
         assertEquals(24, data.transparentIdx().length, "4 quads × 6 indices");
@@ -107,7 +100,7 @@ class ChunkMesherTest {
         Chunk chunk = emptyChunk();
         chunk.setBlock(0, 64, 0, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(chunk));
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(24, data.vertexCount(), "6 quads — opaque emits, or you see through the render edge");
         assertEquals(36, data.opaqueIdx().length);
@@ -153,7 +146,7 @@ class ChunkMesherTest {
             for (int y = 0; y < Chunk.SIZE_Y; y++)
                 for (int z = 0; z < Chunk.SIZE_XZ; z++) chunk.setBlock(x, y, z, Block.STONE);
 
-        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), noNeighbors(chunk));
+        ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         // outer shell: 2 caps (16×16 each) + 4 sides (16×256 each)
         int expectedFaces = 2 * (16 * 16) + 4 * (16 * 256); // = 16896

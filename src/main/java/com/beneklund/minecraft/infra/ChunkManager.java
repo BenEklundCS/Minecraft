@@ -55,7 +55,11 @@ public class ChunkManager {
         meshJob = (JobInput in) -> {
             try {
                 if (!in.chunk.tryTransition(ChunkState.MESHING)) return;
-                ChunkMeshData meshData = mesher.mesh(in.pos, neighborsOf(in.chunk, in.pos));
+                // Neighbors resolve here on the worker rather than at submit time, so one that
+                // finished generating while this job sat in the queue is still picked up.
+                // The center comes back through meshable() too: MESHING can't transition to
+                // UNLOADING, so the chunk is still in the world map and meshable() can't null it.
+                ChunkMeshData meshData = mesher.mesh(in.pos, ChunkWithNeighbors.around(in.pos, this::meshable));
                 if (!in.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
                 uploadQueue.add(meshData);
             } catch (Throwable t) {
@@ -173,24 +177,6 @@ public class ChunkManager {
             batch.add(item);
         }
         return batch;
-    }
-
-    // Resolved on the meshing worker rather than at submit time, so a neighbor that finished
-    // generating while this job sat in the queue is still picked up. A null here means "we don't
-    // know what's there" — see isCulled for how the mesher answers that per block type.
-    //
-    // Field order matches NEIGHBOR_OFFSETS in ChunkMesher: NORTH is z-1, SOUTH is z+1.
-    private ChunkWithNeighbors neighborsOf(Chunk chunk, ChunkPos pos) {
-        return new ChunkWithNeighbors(
-                chunk, // passthru
-                meshable(new ChunkPos(pos.x(), pos.z() - 1)), // NORTH
-                meshable(new ChunkPos(pos.x(), pos.z() + 1)), // SOUTH
-                meshable(new ChunkPos(pos.x() + 1, pos.z())), // EAST
-                meshable(new ChunkPos(pos.x() - 1, pos.z())), // WEST
-                meshable(new ChunkPos(pos.x() + 1, pos.z() - 1)), // NORTH EAST
-                meshable(new ChunkPos(pos.x() - 1, pos.z() - 1)), // NORTH WEST
-                meshable(new ChunkPos(pos.x() + 1, pos.z() + 1)), // SOUTH EAST
-                meshable(new ChunkPos(pos.x() - 1, pos.z() + 1))); // SOUTH WEST
     }
 
     // tick() puts a chunk in the world map before generation runs, so a neighbor can be present
