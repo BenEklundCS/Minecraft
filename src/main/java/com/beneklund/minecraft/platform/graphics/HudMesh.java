@@ -3,6 +3,7 @@ package com.beneklund.minecraft.platform.graphics;
 import static org.lwjgl.opengl.GL11C.*;
 
 public class HudMesh implements Mesh {
+    private static final VertexFormat vf = VertexFormat.HUD;
     private final GlVertexArray vao;
     private final IGlVertexArrayBuffer vbo;
     private final IGlElementArrayBuffer ebo;
@@ -20,12 +21,7 @@ public class HudMesh implements Mesh {
         vao.bind();
         vbo.upload(vertices);
         ebo.upload(indices);
-        // vec2 aPos
-        vao.attribPointer(0, 2, 32, 0L);
-        // vec4 aColor
-        vao.attribPointer(1, 4, 32, 8L);
-        // vec2 aUV
-        vao.attribPointer(2, 2, 32, 24L);
+        vf.describe(vao);
         vao.unbind();
         indexCount = indices.length;
     }

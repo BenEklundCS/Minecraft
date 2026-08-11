@@ -76,15 +76,16 @@ public class BlockRegistry {
                 Map.entry(
                         Block.WATER,
                         BlockDef.build(
-                                true,
-                                true,
-                                true,
-                                "water_still",
-                                "water_still",
-                                "water_flowing",
-                                "water_flowing",
-                                "water_flowing",
-                                "water_flowing")),
+                                        true,
+                                        true,
+                                        true,
+                                        "water_still",
+                                        "water_still",
+                                        "water_flowing",
+                                        "water_flowing",
+                                        "water_flowing",
+                                        "water_flowing")
+                                .withBlending()),
                 Map.entry(
                         Block.COBBLE,
                         BlockDef.build(

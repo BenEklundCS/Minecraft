@@ -4,20 +4,20 @@ import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
 import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
 import static org.lwjgl.opengl.GL11.glDrawElements;
 
-// Holds the VAO/VBO/EBO for one uploaded chunk mesh. Must only be created and deleted
+// Holds the VAO/VBO/EBO for one uploaded mesh. Must only be created and deleted
 // on the main (GL) thread. Workers produce ChunkMeshData; this class is the GL result.
-public class GpuMesh implements Mesh {
-
+public class ChunkMesh implements Mesh {
+    private static final VertexFormat vf = VertexFormat.CHUNK;
     private final GlVertexArray vao;
     private final IGlVertexArrayBuffer vbo;
     private final IGlElementArrayBuffer ebo;
     private final int indexCount;
 
-    // Vertex format: 10 floats per vertex — x, y, z, u, v, ao, faceId, r, g, b. Stride = 40 bytes.
-    public GpuMesh(float[] vertices, int[] indices) {
+    public ChunkMesh(float[] vertices, int[] indices) {
         if (!Thread.currentThread().getName().equals("main"))
             throw new IllegalStateException("GpuMesh must be created on the main thread, was: "
                     + Thread.currentThread().getName());
+        vf.checkVertexCount(vertices.length);
         vao = new GlVertexArray();
         vbo = new IGlVertexArrayBuffer();
         ebo = new IGlElementArrayBuffer();
@@ -26,11 +26,7 @@ public class GpuMesh implements Mesh {
         vao.bind();
         vbo.upload(vertices);
         ebo.upload(indices); // must happen inside vao.bind() — EBO binding is part of VAO state
-        vao.attribPointer(0, 3, 40, 0L); // position: xyz
-        vao.attribPointer(1, 2, 40, 12L); // uv
-        vao.attribPointer(2, 1, 40, 20L); // ao
-        vao.attribPointer(3, 1, 40, 24L); // faceId
-        vao.attribPointer(4, 3, 40, 28L); // tint: rgb
+        vf.describe(vao);
         vao.unbind();
     }
 

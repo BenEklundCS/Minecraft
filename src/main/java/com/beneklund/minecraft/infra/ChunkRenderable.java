@@ -1,12 +1,6 @@
 package com.beneklund.minecraft.infra;
 
-import com.beneklund.minecraft.renderer.Camera;
-import com.beneklund.minecraft.renderer.DrawCall;
-import com.beneklund.minecraft.renderer.Frustum;
-import com.beneklund.minecraft.renderer.IRenderable;
-import com.beneklund.minecraft.renderer.RenderPass;
-import com.beneklund.minecraft.renderer.ShaderProgram;
-import com.beneklund.minecraft.renderer.TextureAtlas;
+import com.beneklund.minecraft.renderer.*;
 import java.util.ArrayList;
 import java.util.List;
 

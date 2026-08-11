@@ -3,13 +3,14 @@ package com.beneklund.minecraft;
 import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.IInputAction;
-import com.beneklund.minecraft.platform.graphics.GpuMesh;
+import com.beneklund.minecraft.platform.graphics.ChunkMesh;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.player.Interaction;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.*;
+import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.util.RaycastResult;
 import com.beneklund.minecraft.world.Chunk;
@@ -137,9 +138,10 @@ public class Game {
             // Skip empty buffers so chunks with no opaque (or no transparent) geometry don't
             // allocate a zero-length VAO; null means "nothing to draw for this pass".
             for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {
-                GpuMesh opaque = data.opaqueIdx().length > 0 ? new GpuMesh(data.opaqueVerts(), data.opaqueIdx()) : null;
-                GpuMesh transparent = data.transparentIdx().length > 0
-                        ? new GpuMesh(data.transparentVerts(), data.transparentIdx())
+                ChunkMesh opaque =
+                        data.opaqueIdx().length > 0 ? new ChunkMesh(data.opaqueVerts(), data.opaqueIdx()) : null;
+                ChunkMesh transparent = data.transparentIdx().length > 0
+                        ? new ChunkMesh(data.transparentVerts(), data.transparentIdx())
                         : null;
                 renderWorld.add(data.pos(), opaque, transparent);
                 data.chunk().tryTransition(ChunkState.UPLOADED);

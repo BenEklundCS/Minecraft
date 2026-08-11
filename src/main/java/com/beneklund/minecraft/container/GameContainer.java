@@ -17,6 +17,7 @@ import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.renderer.*;
+import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;

@@ -3,6 +3,7 @@ package com.beneklund.minecraft.renderer;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
+import com.beneklund.minecraft.platform.graphics.VertexFormat;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.Direction;
 import com.beneklund.minecraft.world.Chunk;
@@ -55,7 +56,7 @@ public class ChunkMesher {
     };
 
     private static final int VERTICES_PER_QUAD = 4;
-    private static final int FLOATS_PER_VERTEX = 10;
+    private static final int FLOATS_PER_VERTEX = VertexFormat.CHUNK.floatsPerVertex();
     private static final int INDICES_PER_QUAD = 6;
     // Starting capacity covers a typical surface chunk without needing to grow.
     private static final int INITIAL_FACE_CAPACITY = 8192;
@@ -116,7 +117,7 @@ public class ChunkMesher {
                     if (blockId == Block.AIR) continue;
 
                     BlockDef def = registry.get(blockId);
-                    ChunkMeshingBuffer buf = def.transparent() ? transparent : opaque;
+                    ChunkMeshingBuffer buf = def.blended() ? transparent : opaque;
 
                     for (Direction dir : DIRECTIONS) {
                         if (isCulled(cn, x, y, z, dir, blockId)) continue;
@@ -217,27 +218,11 @@ public class ChunkMesher {
         int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
         float[] c = FACE_VERTICES[dir.ordinal()][corner];
 
-        int n = (off[0] != 0) ? 0 : (off[1] != 0) ? 1 : 2; // normal axis
-        int a = (n == 0) ? 1 : 0; // first corner axis
-        int b = (n == 2) ? 1 : 2; // second corner axis
+        AoSample frame = getAoSample(off, c);
 
-        int sa = 2 * (int) c[a] - 1; // 0 → -1, 1 → +1
-        int sb = 2 * (int) c[b] - 1;
-
-        int[] side1 = new int[3];
-        side1[n] = off[n];
-        side1[a] = sa;
-        side1[b] = 0;
-
-        int[] side2 = new int[3];
-        side2[n] = off[n];
-        side2[a] = 0;
-        side2[b] = sb;
-
-        int[] diag = new int[3];
-        diag[n] = off[n];
-        diag[a] = sa;
-        diag[b] = sb;
+        int[] side1 = getOffset(frame, frame.sa(), 0);
+        int[] side2 = getOffset(frame, 0, frame.sb());
+        int[] diag = getOffset(frame, frame.sa(), frame.sb());
 
         boolean opaqueAtSide1 = opaqueAt(cn, x, y, z, side1);
         boolean opaqueAtSide2 = opaqueAt(cn, x, y, z, side2);
@@ -249,6 +234,33 @@ public class ChunkMesher {
     protected static int aoLevelFormula(boolean side1, boolean side2, boolean diag) {
         if (side1 && side2) return 0;
         return 3 - ((side1 ? 1 : 0) + (side2 ? 1 : 0) + (diag ? 1 : 0)); // 3 - (side1 + side2 + corner);
+    }
+
+    private AoSample getAoSample(int[] off, float[] c) {
+        int n = (off[0] != 0) ? 0 : (off[1] != 0) ? 1 : 2; // normal axis
+        int a = (n == 0) ? 1 : 0; // first corner axis
+        int b = (n == 2) ? 1 : 2; // second corner axis
+
+        int sa = 2 * (int) c[a] - 1; // 0 → -1, 1 → +1
+        int sb = 2 * (int) c[b] - 1;
+        return new AoSample(n, a, b, sa, sb, off);
+    }
+
+    // `n`, `a` and `b` are axis indices. `sa` and `sb` are components of an offset.
+    // | **offset**     | `{+1, 1, 0}`  | how far to *move*. Added to a coordinate.                         |
+    // | -------------- | ------------- | ----------------------------------------------------------------- |
+    // | **axis index** | `0`, `1`, `2` | which *slot* of a 3-element array. |
+    private record AoSample(int n, int a, int b, int sa, int sb, int[] off) {}
+
+    // offset for side1 - pass 0 to sb
+    // offset for side2 - pass 0 to sa
+    // offset for diag  - pass sa and sb
+    private int[] getOffset(AoSample f, int stepA, int stepB) {
+        int[] arr = new int[3];
+        arr[f.n()] = f.off()[f.n()];
+        arr[f.a()] = stepA;
+        arr[f.b()] = stepB;
+        return arr;
     }
 
     private static float faceIdFor(Direction dir) {

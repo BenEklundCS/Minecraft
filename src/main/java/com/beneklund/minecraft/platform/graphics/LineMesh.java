@@ -5,6 +5,7 @@ import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
 import static org.lwjgl.opengl.GL11.glDrawElements;
 
 public class LineMesh implements Mesh {
+    private static final VertexFormat vf = VertexFormat.LINE;
     private final GlVertexArray vao;
     private final IGlVertexArrayBuffer vbo;
     private final IGlElementArrayBuffer ebo;
@@ -22,8 +23,7 @@ public class LineMesh implements Mesh {
         vao.bind();
         vbo.upload(vertices);
         ebo.upload(indices);
-        vao.attribPointer(0, 3, 24, 0L);
-        vao.attribPointer(1, 3, 24, 12L);
+        vf.describe(vao);
         vao.unbind();
         indexCount = indices.length;
     }

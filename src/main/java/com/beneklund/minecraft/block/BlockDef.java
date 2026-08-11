@@ -3,7 +3,15 @@ package com.beneklund.minecraft.block;
 import com.beneklund.minecraft.util.Direction;
 
 // tileNames is indexed by Direction.ordinal() — the ordering must stay in sync with the Direction enum.
-public record BlockDef(boolean solid, boolean transparent, boolean breakable, String[] tileNames) {
+public record BlockDef(boolean solid, boolean transparent, boolean blended, boolean breakable, String[] tileNames) {
+    public BlockDef(boolean solid, boolean transparent, boolean breakable, String[] tileNames) {
+        this(solid, transparent, false, breakable, tileNames);
+    }
+
+    public BlockDef withBlending() {
+        return new BlockDef(solid, transparent, true, breakable, tileNames);
+    }
+
     // Explicit ordinal mapping so Direction reordering can't silently corrupt tile lookups.
     public static BlockDef build(
             boolean solid,
