@@ -9,7 +9,6 @@ import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.ChunkWithNeighbors;
 import com.beneklund.minecraft.world.gen.Biome;
-import java.util.Arrays;
 
 // Converts a Chunk's block data into a ChunkMeshData (float[] vertices, int[] indices).
 // No GL calls — safe to run on any worker thread. The caller uploads the result to the
@@ -33,6 +32,17 @@ public class ChunkMesher {
         {{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}, // EAST  — x+1 surface
         {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}, // WEST  — x=0 surface
     };
+
+    // indexed by AO level, 0 == deepest inside corner, 3 == fully exposed
+    private static final float[] AO_RAMP = {0.45f, 0.68f, 0.82f, 1.0f};
+
+    // Which of the quad's 4 vertices each of the 6 indices refers to. The GPU interpolates per
+    // triangle, so a lone dark corner that isn't on the split diagonal only shades one of the two
+    // triangles and you get a hard line across the face. Picking the diagonal that runs through
+    // the darker pair puts that corner in both triangles and the gradient covers the whole quad.
+    // Both orderings walk the same ring, so winding stays CCW from outside either way.
+    private static final int[] QUAD_DIAGONAL_02 = {0, 1, 2, 2, 3, 0};
+    private static final int[] QUAD_DIAGONAL_13 = {1, 2, 3, 3, 0, 1};
 
     // Block-space step to reach the neighbor in each direction.
     private static final int[][] NEIGHBOR_OFFSETS = {
@@ -96,8 +106,8 @@ public class ChunkMesher {
     // Faces are routed into one of two buffers by the block's transparent flag so the
     // renderer can do an opaque pass then a transparent pass (see ChunkRenderable / Renderer).
     public ChunkMeshData mesh(ChunkPos pos, ChunkWithNeighbors cn) {
-        Buffer opaque = new Buffer();
-        Buffer transparent = new Buffer();
+        ChunkMeshingBuffer opaque = getBuffer();
+        ChunkMeshingBuffer transparent = getBuffer();
 
         for (int x = 0; x < Chunk.SIZE_XZ; x++) {
             for (int y = 0; y < Chunk.SIZE_Y; y++) {
@@ -106,12 +116,12 @@ public class ChunkMesher {
                     if (blockId == Block.AIR) continue;
 
                     BlockDef def = registry.get(blockId);
-                    Buffer buf = def.transparent() ? transparent : opaque;
+                    ChunkMeshingBuffer buf = def.transparent() ? transparent : opaque;
 
                     for (Direction dir : DIRECTIONS) {
                         if (isCulled(cn, x, y, z, dir, blockId)) continue;
 
-                        buf.ensureCapacity();
+                        buf.ensureQuadCapacity();
 
                         float[] uvs = getUVs(def, dir);
                         Color tint = getTint(blockId, dir);
@@ -120,28 +130,15 @@ public class ChunkMesher {
                         float uMin = uvs[0], vMin = uvs[1], uMax = uvs[2], vMax = uvs[3];
                         float[] fracs = FACE_UV_FRACS[dir.ordinal()];
 
-                        for (int i = 0; i < VERTICES_PER_QUAD; i++) {
-                            float[] c = corners[i];
-                            buf.verts[buf.vertPos++] = x + c[0];
-                            buf.verts[buf.vertPos++] = y + c[1];
-                            buf.verts[buf.vertPos++] = z + c[2];
-                            buf.verts[buf.vertPos++] = fracs[i * 2] == 0 ? uMin : uMax;
-                            buf.verts[buf.vertPos++] = fracs[i * 2 + 1] == 0 ? vMin : vMax;
-                            buf.verts[buf.vertPos++] = 1.0f; // ao placeholder
-                            buf.verts[buf.vertPos++] = faceId;
-                            buf.verts[buf.vertPos++] = tint.red();
-                            buf.verts[buf.vertPos++] = tint.green();
-                            buf.verts[buf.vertPos++] = tint.blue();
-                        }
+                        int[] ao = new int[VERTICES_PER_QUAD];
+                        for (int i = 0; i < VERTICES_PER_QUAD; i++) ao[i] = aoLevel(cn, x, y, z, dir, i);
 
-                        // Two triangles sharing the diagonal: 0-1-2 and 2-3-0
-                        buf.idxs[buf.idxPos++] = buf.vertexBase;
-                        buf.idxs[buf.idxPos++] = buf.vertexBase + 1;
-                        buf.idxs[buf.idxPos++] = buf.vertexBase + 2;
-                        buf.idxs[buf.idxPos++] = buf.vertexBase + 2;
-                        buf.idxs[buf.idxPos++] = buf.vertexBase + 3;
-                        buf.idxs[buf.idxPos++] = buf.vertexBase;
-                        buf.vertexBase += VERTICES_PER_QUAD;
+                        for (int i = 0; i < VERTICES_PER_QUAD; i++) {
+                            float u = fracs[i * 2] == 0 ? uMin : uMax;
+                            float v = fracs[i * 2 + 1] == 0 ? vMin : vMax;
+                            fillBufferVerts(buf, corners[i], x, y, z, u, v, AO_RAMP[ao[i]], faceId, tint);
+                        }
+                        fillBufferIdxs(buf, ao);
                     }
                 }
             }
@@ -149,29 +146,37 @@ public class ChunkMesher {
 
         return new ChunkMeshData(
                 pos,
-                Arrays.copyOf(opaque.verts, opaque.vertPos),
-                Arrays.copyOf(opaque.idxs, opaque.idxPos),
-                Arrays.copyOf(transparent.verts, transparent.vertPos),
-                Arrays.copyOf(transparent.idxs, transparent.idxPos),
-                opaque.vertexBase + transparent.vertexBase,
+                opaque.copyVertices(),
+                opaque.copyIndices(),
+                transparent.copyVertices(),
+                transparent.copyIndices(),
+                opaque.base() + transparent.base(),
                 cn.center());
     }
 
-    // One growable vertex/index buffer plus its write cursors. We keep two of these per mesh
-    // (opaque + transparent) so a single emit loop can write into whichever the block belongs to.
-    private static final class Buffer {
-        float[] verts = new float[INITIAL_FACE_CAPACITY * VERTICES_PER_QUAD * FLOATS_PER_VERTEX];
-        int[] idxs = new int[INITIAL_FACE_CAPACITY * INDICES_PER_QUAD];
-        int vertPos = 0;
-        int idxPos = 0;
-        int vertexBase = 0;
+    private void fillBufferVerts(
+            ChunkMeshingBuffer buf, float[] c, int x, int y, int z, float u, float v, float ao, float f, Color t) {
+        buf.writeVert(x + c[0]);
+        buf.writeVert(y + c[1]);
+        buf.writeVert(z + c[2]);
+        buf.writeVert(u);
+        buf.writeVert(v);
+        buf.writeVert(ao);
+        buf.writeVert(f);
+        buf.writeVert(t.red());
+        buf.writeVert(t.green());
+        buf.writeVert(t.blue());
+    }
 
-        // Grow before writing one more quad's worth of vertices/indices.
-        void ensureCapacity() {
-            if (vertPos + VERTICES_PER_QUAD * FLOATS_PER_VERTEX > verts.length)
-                verts = Arrays.copyOf(verts, verts.length * 2);
-            if (idxPos + INDICES_PER_QUAD > idxs.length) idxs = Arrays.copyOf(idxs, idxs.length * 2);
-        }
+    private void fillBufferIdxs(ChunkMeshingBuffer buf, int[] ao) {
+        for (int corner : quadOrder(ao)) buf.writeIdx(buf.base() + corner);
+        buf.advance();
+    }
+
+    // Compare on the levels rather than the ramped floats — same answer since the ramp is
+    // monotonic, but integers make it exact.
+    protected static int[] quadOrder(int[] ao) {
+        return (ao[0] + ao[2] > ao[1] + ao[3]) ? QUAD_DIAGONAL_13 : QUAD_DIAGONAL_02;
     }
 
     // A face is culled if its neighbor is solid and opaque, or if the neighbor is the same block
@@ -190,17 +195,60 @@ public class ChunkMesher {
         int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
         int nx = x + off[0], ny = y + off[1], nz = z + off[2];
 
-        // above or below chunk out of bounds check
         if (ny < 0 || ny >= Chunk.SIZE_Y) {
             return false;
         }
 
-        Chunk chunk = cn.resolve(nx, nz).orElse(null);
-        if (chunk == null) return registry.get(blockId).transparent();
+        if (cn.resolve(nx, nz).isEmpty()) return registry.get(blockId).transparent();
+        Block neighbor = cn.blockAt(nx, ny, nz);
+        return isOpaque(neighbor) || neighbor == blockId;
+    }
 
-        Block neighbor = chunk.getBlock(Math.floorMod(nx, Chunk.SIZE_XZ), ny, Math.floorMod(nz, Chunk.SIZE_XZ));
-        BlockDef neighborDef = registry.get(neighbor);
-        return (neighborDef.solid() && !neighborDef.transparent()) || neighbor == blockId;
+    private boolean isOpaque(Block block) {
+        BlockDef blockDef = registry.get(block);
+        return blockDef.solid() && !blockDef.transparent();
+    }
+
+    private boolean opaqueAt(ChunkWithNeighbors cn, int x, int y, int z, int[] offset) {
+        return isOpaque(cn.blockAt(x + offset[0], y + offset[1], z + offset[2]));
+    }
+
+    private int aoLevel(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, int corner) {
+        int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
+        float[] c = FACE_VERTICES[dir.ordinal()][corner];
+
+        int n = (off[0] != 0) ? 0 : (off[1] != 0) ? 1 : 2; // normal axis
+        int a = (n == 0) ? 1 : 0; // first corner axis
+        int b = (n == 2) ? 1 : 2; // second corner axis
+
+        int sa = 2 * (int) c[a] - 1; // 0 → -1, 1 → +1
+        int sb = 2 * (int) c[b] - 1;
+
+        int[] side1 = new int[3];
+        side1[n] = off[n];
+        side1[a] = sa;
+        side1[b] = 0;
+
+        int[] side2 = new int[3];
+        side2[n] = off[n];
+        side2[a] = 0;
+        side2[b] = sb;
+
+        int[] diag = new int[3];
+        diag[n] = off[n];
+        diag[a] = sa;
+        diag[b] = sb;
+
+        boolean opaqueAtSide1 = opaqueAt(cn, x, y, z, side1);
+        boolean opaqueAtSide2 = opaqueAt(cn, x, y, z, side2);
+        boolean opaqueAtDiag = opaqueAt(cn, x, y, z, diag);
+
+        return aoLevelFormula(opaqueAtSide1, opaqueAtSide2, opaqueAtDiag);
+    }
+
+    protected static int aoLevelFormula(boolean side1, boolean side2, boolean diag) {
+        if (side1 && side2) return 0;
+        return 3 - ((side1 ? 1 : 0) + (side2 ? 1 : 0) + (diag ? 1 : 0)); // 3 - (side1 + side2 + corner);
     }
 
     private static float faceIdFor(Direction dir) {
@@ -222,5 +270,9 @@ public class ChunkMesher {
     private float[] getUVs(BlockDef def, Direction dir) {
         if (atlas == null) return DEFAULT_UV; // null atlas = test mode, no GL context
         return atlas.getFaceUVs(def, dir);
+    }
+
+    private ChunkMeshingBuffer getBuffer() {
+        return new ChunkMeshingBuffer(INITIAL_FACE_CAPACITY, VERTICES_PER_QUAD, FLOATS_PER_VERTEX, INDICES_PER_QUAD);
     }
 }

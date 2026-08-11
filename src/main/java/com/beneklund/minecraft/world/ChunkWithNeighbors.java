@@ -1,10 +1,12 @@
 package com.beneklund.minecraft.world;
 
+import com.beneklund.minecraft.block.Block;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-// stores a chunk with its neighbors, north south east west, used to in one-step resolve the chunk we are indexing
+// stores a chunk with its neighbors, north south east west, (and diagonals), used to in one-step resolve the chunk we
+// are indexing
 // into from local coords
 // central chunk must never be null, but all neighbors can be
 //
@@ -65,6 +67,16 @@ public class ChunkWithNeighbors {
             }
         }
         return neighbors;
+    }
+
+    public Block blockAt(int centerLocalX, int y, int centerLocalZ) {
+        // SIZE_Y is the length, so 255 is the last valid index. At y == 256 Chunk.index() lands
+        // exactly one past the end of the array and getBlock throws — it has no bounds guard.
+        if (y < 0 || y >= Chunk.SIZE_Y) return Block.AIR;
+        Chunk chunk = resolve(centerLocalX, centerLocalZ).orElse(null);
+        if (chunk == null) return Block.AIR;
+        return chunk.getBlock(
+                Math.floorMod(centerLocalX, Chunk.SIZE_XZ), y, Math.floorMod(centerLocalZ, Chunk.SIZE_XZ));
     }
 
     // resolve translates a center local x and local z chunk coordinate into the correct chunk

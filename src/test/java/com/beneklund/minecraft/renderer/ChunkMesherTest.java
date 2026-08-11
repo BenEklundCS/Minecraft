@@ -153,4 +153,17 @@ class ChunkMesherTest {
         assertEquals(expectedFaces * 4, data.vertexCount(), "only outer-shell faces emitted");
         assertEquals(expectedFaces * 6, data.opaqueIdx().length);
     }
+
+    @Test
+    void aoLevelForuma_truthTable() {
+        assertEquals(3, ChunkMesher.aoLevelFormula(false, false, false)); // open ground
+        assertEquals(2, ChunkMesher.aoLevelFormula(false, false, true)); // 1 block touching on corner
+        assertEquals(2, ChunkMesher.aoLevelFormula(true, false, false)); // 1 block touching side
+        assertEquals(2, ChunkMesher.aoLevelFormula(false, true, false)); // same on the other axis
+        assertEquals(1, ChunkMesher.aoLevelFormula(true, false, true)); // wall plus diagonal
+        assertEquals(1, ChunkMesher.aoLevelFormula(false, true, true)); // same on the other axis
+        assertEquals(0, ChunkMesher.aoLevelFormula(true, true, false)); // two walls meeting - inside corner
+        assertEquals(
+                0, ChunkMesher.aoLevelFormula(true, true, true)); // two walls meeting - inside corner with diag, same
+    }
 }
