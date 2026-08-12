@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.infra;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.IO;
 
 import com.beneklund.minecraft.player.IPlayerStore;
 import com.beneklund.minecraft.player.PlayerState;
@@ -35,7 +35,7 @@ public class PlayerStore implements IPlayerStore {
         try {
             SaveFile.write(basePath, MAGIC, VERSION, buf.array());
         } catch (IOException e) {
-            LOGGER.error("Failed to save player state.");
+            IO.error("Failed to save player state.");
         }
     }
 
@@ -51,7 +51,7 @@ public class PlayerStore implements IPlayerStore {
                                 buf.getFloat(), buf.getFloat(), buf.getFloat(), buf.getFloat(), buf.getFloat());
                     });
         } catch (IOException e) {
-            LOGGER.error("Failed to load player state.");
+            IO.error("Failed to load player state.");
             return Optional.empty();
         }
     }

@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.platform.resources;
 
+import static com.beneklund.minecraft.util.Log.IO;
+
 import com.beneklund.minecraft.platform.images.IImageLoader;
 import com.beneklund.minecraft.platform.images.ImageData;
 import com.google.gson.JsonObject;
@@ -38,6 +40,13 @@ public class JsonResourcePack implements IResourcePack {
         for (var entry : root.getAsJsonObject("tiles").entrySet()) {
             tilePaths.put(entry.getKey(), baseDir + entry.getValue().getAsString());
         }
+        IO.info(
+                "resource pack \"{}\" by {} ({}), {} tile(s) at {}px",
+                name,
+                author,
+                license,
+                tilePaths.size(),
+                tileSize);
     }
 
     @Override
@@ -65,6 +74,7 @@ public class JsonResourcePack implements IResourcePack {
         // LinkedHashMap preserves insertion order, which keeps atlas stitching deterministic.
         Map<String, ImageData> data = new LinkedHashMap<>();
         for (var entry : tilePaths.entrySet()) {
+            IO.trace("decoding tile {} from {}", entry.getKey(), entry.getValue());
             data.put(entry.getKey(), loader.load(entry.getValue()));
         }
         return data;

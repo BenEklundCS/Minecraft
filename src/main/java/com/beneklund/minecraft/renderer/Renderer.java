@@ -1,5 +1,6 @@
 package com.beneklund.minecraft.renderer;
 
+import static com.beneklund.minecraft.util.Log.RENDER;
 import static org.lwjgl.opengl.GL11.*;
 
 import com.beneklund.minecraft.util.Color;
@@ -21,10 +22,12 @@ public class Renderer {
     }
 
     public void delete() {
+        RENDER.debug("deleting {} renderable(s)", registered.size());
         for (IRenderable r : registered) r.delete();
     }
 
     public void reloadAll() {
+        RENDER.info("reloading {} renderable(s)", registered.size());
         for (IRenderable r : registered) r.reload();
     }
 
@@ -35,6 +38,17 @@ public class Renderer {
         // NOTE: getDrawCalls must not set GL state — Renderer owns it entirely.
         List<DrawCall> calls = new ArrayList<>();
         for (IRenderable renderable : registered) calls.addAll(renderable.getDrawCalls(camera));
+
+        // Guarded because this runs every frame — without the check we'd walk the call list three
+        // extra times per frame just to build a message nobody is listening to.
+        if (RENDER.isTraceEnabled()) {
+            RENDER.trace(
+                    "{} draw call(s): {} opaque, {} transparent, {} hud",
+                    calls.size(),
+                    countPass(calls, RenderPass.OPAQUE),
+                    countPass(calls, RenderPass.TRANSPARENT),
+                    countPass(calls, RenderPass.HUD));
+        }
 
         // Opaque pass: full depth test + write, no blending.
         glEnable(GL_DEPTH_TEST);
@@ -64,6 +78,10 @@ public class Renderer {
         glEnable(GL_DEPTH_TEST);
         glDepthMask(true);
         glDisable(GL_BLEND);
+    }
+
+    private static long countPass(List<DrawCall> calls, RenderPass pass) {
+        return calls.stream().filter(c -> c.pass() == pass).count();
     }
 
     private void submit(DrawCall call, Camera camera) {

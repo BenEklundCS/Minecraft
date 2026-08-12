@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.player;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.PLAYER;
 
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.container.PlayerConfig;
@@ -187,7 +187,7 @@ public class Player implements IPhysicsBody {
             if (now - lastJumpPressNanos < DOUBLE_TAP_NANOS) {
                 flyMode = !flyMode;
                 velocity.y = 0;
-                LOGGER.info("Fly mode {}", flyMode ? "ON" : "OFF");
+                PLAYER.info("Fly mode {}", flyMode ? "ON" : "OFF");
             }
             lastJumpPressNanos = now;
         }
@@ -252,7 +252,7 @@ public class Player implements IPhysicsBody {
         Vector3i placementPosition =
                 targetedBlock.blockPos().add(targetedBlock.hitFace().normal());
         if (this.getBoundingBox().getBlocksOverlapping().contains(placementPosition)) {
-            LOGGER.info(
+            PLAYER.info(
                     "Player overlaps block, cannot place at ({}, {}, {})",
                     placementPosition.x,
                     placementPosition.y,
@@ -264,7 +264,7 @@ public class Player implements IPhysicsBody {
     }
 
     private void logRaycast() {
-        LOGGER.info(
+        PLAYER.info(
                 "Raycast hit={} blockPos={} face={} distance={}",
                 targetedBlock.hit(),
                 targetedBlock.blockPos(),

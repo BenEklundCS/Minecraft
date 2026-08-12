@@ -1,5 +1,10 @@
 package com.beneklund.minecraft.container;
 
+import static com.beneklund.minecraft.util.Log.AUDIO;
+import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.PLAYER;
+import static com.beneklund.minecraft.util.Log.WORLD;
+
 import com.beneklund.minecraft.Game;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
@@ -84,30 +89,51 @@ public class GameContainer {
     }
 
     public void run() throws IOException {
+        long startedAt = System.nanoTime();
+        LOGGER.info("starting up");
+
         // 1. Game Config - pure data, no platform deps.
         initConfig();
+        phaseDone("config", startedAt);
         // 2. Input plumbing - pure Java, no GLFW/GL yet.
         initInput();
         // 3. Pre-init platform objects - constructed but not yet active.
         initPlatform();
+        phaseDone("input+platform", startedAt);
 
         // 4. window.init() - creates the GLFW window and makes the GL context current.
         //    Nothing that calls GL or uploads to the GPU may run before this line.
         window.init();
+        phaseDone("window", startedAt);
 
         // 5. GL resources - shaders, VAOs, textures. Requires active GL context.
         initRenderer();
+        phaseDone("renderer", startedAt);
         // 6. Audio - OpenAL is lazy-initialized on first play(), but construct after GL
         //    so the window is confirmed healthy before we open the audio device.
         initAudio();
         // 7. Game logic - depends on input and the GL renderer being ready.
         initWorld();
         initPlayer();
+        phaseDone("world+player", startedAt);
+
+        LOGGER.info("startup complete in {} ms, entering game loop", millisSince(startedAt));
 
         buildGame().run();
 
         // 8. Shutdown - see the ordering note on shutdown().
+        LOGGER.info("game loop exited, shutting down");
         shutdown();
+    }
+
+    // Cumulative rather than per-phase: what you actually want to know is how far into startup
+    // you are when something hangs, and cumulative survives phases being reordered.
+    private static void phaseDone(String phase, long startedAt) {
+        LOGGER.debug("init {} done at {} ms", phase, millisSince(startedAt));
+    }
+
+    private static long millisSince(long nanos) {
+        return (System.nanoTime() - nanos) / 1_000_000;
     }
 
     private void initConfig() {
@@ -121,6 +147,7 @@ public class GameContainer {
                 localConfig.debugEnabled());
         cameraConfig = new CameraConfig(cfg.fov());
         worldConfig = new WorldConfig(cfg.seed(), cfg.renderDistance());
+        LOGGER.info("seed={} renderDistance={} fov={}", cfg.seed(), cfg.renderDistance(), cfg.fov());
     }
 
     private void initInput() {
@@ -152,7 +179,14 @@ public class GameContainer {
 
     private void initAudio() {
         music = new AudioPlayer(new StbAudioLoader());
-        localConfig.startupDisc().ifPresent(music::play);
+        localConfig
+                .startupDisc()
+                .ifPresentOrElse(
+                        disc -> {
+                            AUDIO.info("startup disc: {}", disc);
+                            music.play(disc);
+                        },
+                        () -> AUDIO.debug("no startup disc configured, audio device stays closed"));
     }
 
     private void initWorld() {
@@ -164,13 +198,17 @@ public class GameContainer {
         ChunkStore store = new ChunkStore(worldConfig.seed());
         chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store);
         physics = new Physics();
+        WORLD.debug("world ready: {} generation spec(s), seed {}", generationSpecs.size(), worldConfig.seed());
     }
 
     private void initPlayer() {
         playerStore = new PlayerStore(worldConfig.seed());
         player = new Player(cfg.player(), camera, authority);
 
-        PlayerState spawn = playerStore.load().orElseGet(this::defaultSpawn);
+        PlayerState saved = playerStore.load().orElse(null);
+        PlayerState spawn = saved != null ? saved : defaultSpawn();
+        PLAYER.info(
+                "spawn {} at ({}, {}, {})", saved != null ? "restored" : "measured", spawn.x(), spawn.y(), spawn.z());
         player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
         player.setOrientation(spawn.pitch(), spawn.yaw());
     }
@@ -197,10 +235,12 @@ public class GameContainer {
     // Stop chunk workers before flushing so no async setBlock can dirty a chunk
     // after we've already persisted it.
     private void shutdown() {
+        long startedAt = System.nanoTime();
         savePlayerState();
         try {
             chunkManager.shutdown(cfg.shutdownTimeoutSeconds());
         } catch (InterruptedException e) {
+            LOGGER.warn("interrupted waiting for chunk workers, some chunks may not have flushed");
             Thread.currentThread().interrupt();
         }
         chunkManager.flushAllDirty();
@@ -208,6 +248,7 @@ public class GameContainer {
         renderer.delete();
         atlas.delete();
         window.shutdown();
+        LOGGER.info("shutdown complete in {} ms", millisSince(startedAt));
     }
 
     private void savePlayerState() {

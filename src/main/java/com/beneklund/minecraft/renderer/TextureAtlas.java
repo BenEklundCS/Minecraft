@@ -1,5 +1,6 @@
 package com.beneklund.minecraft.renderer;
 
+import static com.beneklund.minecraft.util.Log.RENDER;
 import static org.lwjgl.system.MemoryUtil.memAlloc;
 import static org.lwjgl.system.MemoryUtil.memFree;
 
@@ -50,6 +51,11 @@ public class TextureAtlas {
         // -> glTexImage2D. Use GL_NEAREST for both filters (pixel art, no blurring).
         // After glTexImage2D the GPU owns the data - free the CPU buffer with memFree.
         upload(atlasBuf, atlasW, atlasH);
+        RENDER.info(
+                "atlas {}x{} from {} tile(s) at {}px ({} grid)", atlasW, atlasH, count, tileSize, cols + "x" + rows);
+        if (RENDER.isDebugEnabled()) {
+            RENDER.debug("atlas tiles: {}", uvCache.keySet());
+        }
     }
 
     // Copy one tile's pixels into the right slot in the atlas buffer.
@@ -114,6 +120,7 @@ public class TextureAtlas {
     }
 
     public void delete() {
+        RENDER.debug("deleting atlas texture");
         textureAtlas.delete();
     }
 }

@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.renderer;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.RENDER;
 
 import com.beneklund.minecraft.platform.graphics.GlShader;
 import java.io.IOException;
@@ -31,12 +31,12 @@ public class ShaderProgram {
         try {
             next = new GlShader(loadSource(vertexShaderPath), loadSource(fragmentShaderPath));
         } catch (RuntimeException e) {
-            LOGGER.error("reload failed for {}, keeping the previous program", fragmentShaderPath, e);
+            RENDER.error("reload failed for {}, keeping the previous program", fragmentShaderPath, e);
             return false;
         }
         shader.delete();
         shader = next;
-        LOGGER.info("reloaded {}", fragmentShaderPath);
+        RENDER.info("reloaded {}", fragmentShaderPath);
         return true;
     }
 
@@ -44,7 +44,7 @@ public class ShaderProgram {
         Path onDisk = DEV_SHADER_ROOT.resolve(path.startsWith("/") ? path.substring(1) : path);
         if (Files.isRegularFile(onDisk)) {
             try {
-                LOGGER.debug("shader source from disk: {}", onDisk);
+                RENDER.debug("shader source from disk: {}", onDisk);
                 return Files.readString(onDisk, StandardCharsets.UTF_8);
             } catch (IOException e) {
                 throw new RuntimeException("Failed to read shader from disk: %s".formatted(onDisk), e);
@@ -54,7 +54,7 @@ public class ShaderProgram {
             if (stream == null) {
                 throw new IOException("Failed to load shader from path: %s".formatted(path));
             }
-            LOGGER.debug("shader source from classpath: {}", path);
+            RENDER.debug("shader source from classpath: {}", path);
             return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new RuntimeException("Failed to load shader program: ", e);

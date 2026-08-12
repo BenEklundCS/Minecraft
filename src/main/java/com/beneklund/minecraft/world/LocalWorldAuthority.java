@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.world;
 
+import static com.beneklund.minecraft.util.Log.WORLD;
+
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
@@ -36,8 +38,12 @@ public class LocalWorldAuthority implements IWorldAuthority {
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
         chunk.setBlock(chunkCoordinates.x, y, chunkCoordinates.z, block);
         chunk.tryTransition(ChunkState.DIRTY);
+        // This is the player-edit path only — world generation writes straight into the Chunk — so
+        // one line per edit is the right granularity, not thousands per generated chunk.
+        WORLD.debug("setBlock {} at world ({}, {}, {}) in chunk {}", block, x, y, z, pos);
         // edit occured on border, mark neighbors dirty if they're uploaded
         if (atChunkBorder(chunkCoordinates)) {
+            WORLD.trace("edit on chunk border, marking neighbours of {} dirty", pos);
             markNeighborsDirty(pos);
         }
     }

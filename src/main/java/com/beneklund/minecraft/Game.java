@@ -1,5 +1,8 @@
 package com.beneklund.minecraft;
 
+import static com.beneklund.minecraft.util.Log.PERF;
+import static com.beneklund.minecraft.util.Log.RENDER;
+
 import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.IInputAction;
@@ -41,6 +44,9 @@ public class Game {
     private final InputMapper mapper;
     private final DebugRenderer debugRenderer;
     private final HudRenderer hudRenderer;
+
+    private int uploadsThisSecond;
+    private int deletesThisSecond;
 
     public Game(
             Window window,
@@ -103,7 +109,16 @@ public class Game {
     private void processTitle() {
         delta.tick();
         if (delta.timePassed(1.0f)) {
-            window.setTitle("Minecraft FPS: %d".formatted(delta.getFrames()));
+            int fps = delta.getFrames();
+            window.setTitle("Minecraft FPS: %d".formatted(fps));
+            PERF.debug(
+                    "{} fps ({} ms/frame), {} mesh upload(s), {} buffer delete(s)",
+                    fps,
+                    fps == 0 ? 0 : 1000 / fps,
+                    uploadsThisSecond,
+                    deletesThisSecond);
+            uploadsThisSecond = 0;
+            deletesThisSecond = 0;
             delta.reset();
         }
     }
@@ -171,12 +186,18 @@ public class Game {
             ChunkMesh transparent = data.transparent().isEmpty() ? null : new ChunkMesh(data.transparent());
             renderWorld.add(data.pos(), opaque, transparent);
             data.chunk().tryTransition(ChunkState.UPLOADED);
+            uploadsThisSecond++;
+            RENDER.trace("uploaded {} (opaque={}, transparent={})", data.pos(), opaque != null, transparent != null);
         }
 
         // Free GL buffers for chunks that left the load radius.
         for (var pos : chunkManager.drainUnloadQueue()) {
             RenderWorld.Entry entry = renderWorld.remove(pos);
-            if (entry != null) entry.delete();
+            if (entry != null) {
+                entry.delete();
+                deletesThisSecond++;
+                RENDER.trace("freed GL buffers for {}", pos);
+            }
         }
     }
 }

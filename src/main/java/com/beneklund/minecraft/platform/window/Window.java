@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.platform.window;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.GPU;
 import static org.lwjgl.glfw.Callbacks.glfwFreeCallbacks;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
@@ -97,6 +97,7 @@ public class Window {
     }
 
     public void shutdown() {
+        GPU.info("destroying window and terminating GLFW");
         glfwFreeCallbacks(window);
         glfwDestroyWindow(window);
         glfwTerminate();
@@ -105,7 +106,7 @@ public class Window {
 
     private void initGlfw() {
         glfwSetErrorCallback((error, description) ->
-                LOGGER.error("GLFW [{}]: {}", error, GLFWErrorCallback.getDescription(description)));
+                GPU.error("GLFW [{}]: {}", error, GLFWErrorCallback.getDescription(description)));
         if (!glfwInit()) throw new IllegalStateException("Unable to initialize GLFW");
 
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -133,7 +134,13 @@ public class Window {
         glfwRequestWindowAttention(window);
 
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        System.out.printf("Minecraft started %s!%n", Version.getVersion());
+        GPU.info("Minecraft started {}!", Version.getVersion());
+        GPU.debug(
+                "window {}x{} vsync={} debug={}",
+                config.width(),
+                config.height(),
+                config.vsync(),
+                config.debugEnabled());
     }
 
     private void initOpenGL() {
@@ -141,6 +148,9 @@ public class Window {
         glfwMakeContextCurrent(window);
         glfwSwapInterval(config.vsync() ? 1 : 0);
         GL.createCapabilities();
+        // Which driver you actually got. First thing worth knowing when rendering looks wrong on
+        // one machine and fine on another, and the first thing to paste into a bug report.
+        GPU.info("GL {} | {} | {}", glGetString(GL_VERSION), glGetString(GL_RENDERER), glGetString(GL_VENDOR));
         if (config.debugEnabled()) {
             GLUtil.setupDebugMessageCallback();
         }
@@ -166,6 +176,7 @@ public class Window {
     // from here needs no cross-thread handoff.
     private GLFWFramebufferSizeCallbackI resizeCallback() {
         return (long window, int width, int height) -> {
+            GPU.debug("framebuffer resized to {}x{}, notifying {} listener(s)", width, height, resizeListeners.size());
             glViewport(0, 0, width, height);
             for (IResizeListener listener : resizeListeners) listener.onResize(width, height);
         };

@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.platform.images;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.IO;
 import static org.lwjgl.stb.STBImage.stbi_image_free;
 import static org.lwjgl.stb.STBImage.stbi_load_from_memory;
 import static org.lwjgl.stb.STBImage.stbi_set_flip_vertically_on_load;
@@ -53,7 +53,7 @@ public class StbImageLoader implements IImageLoader {
 
             return new ImageData(pixels, width, height, channels, ON_CLOSE);
         } catch (IOException e) {
-            LOGGER.error("Failed to load texture: {}", classpathPng);
+            IO.error("Failed to load texture: {}", classpathPng);
             throw new RuntimeException(e);
         }
     }

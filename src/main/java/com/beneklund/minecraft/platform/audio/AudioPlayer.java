@@ -1,5 +1,6 @@
 package com.beneklund.minecraft.platform.audio;
 
+import static com.beneklund.minecraft.util.Log.AUDIO;
 import static org.lwjgl.openal.AL10.*;
 import static org.lwjgl.openal.ALC10.*;
 import static org.lwjgl.system.MemoryUtil.*;
@@ -45,6 +46,8 @@ public class AudioPlayer {
         // Reads driver support and makes the AL functions callable.
         ALCCapabilities alcCaps = ALC.createCapabilities(device);
         ALCapabilities alCaps = AL.createCapabilities(alcCaps);
+        AUDIO.info("OpenAL device opened: {}", alcGetString(device, ALC_DEVICE_SPECIFIER));
+        AUDIO.debug("AL10={} ALC11={}", alCaps.OpenAL10, alcCaps.OpenALC11);
     }
 
     public void play(String classpathOgg) {
@@ -61,11 +64,13 @@ public class AudioPlayer {
             alSourcei(source, AL_BUFFER, buffer);
             alSourcei(source, AL_LOOPING, AL_TRUE);
             alSourcePlay(source);
+            AUDIO.debug("playing {} ({} ch, {} Hz, looping)", classpathOgg, data.channels(), data.sampleRate());
         }
     }
 
     public void shutdown() {
         if (device == NULL) return;
+        AUDIO.debug("closing OpenAL device");
         alSourceStop(source);
         alDeleteSources(source);
         alDeleteBuffers(buffer);

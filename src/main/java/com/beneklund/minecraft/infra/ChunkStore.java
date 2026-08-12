@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.infra;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.IO;
 
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
@@ -21,8 +21,9 @@ public class ChunkStore implements IChunkStore {
         basePath = Paths.get("saves/", String.valueOf(seed));
         try {
             Files.createDirectories(basePath);
+            IO.info("save directory: {}", basePath.toAbsolutePath());
         } catch (IOException e) {
-            LOGGER.error("Failed to create save directory.");
+            IO.error("Failed to create save directory.");
             throw new RuntimeException(e);
         }
     }
@@ -31,8 +32,9 @@ public class ChunkStore implements IChunkStore {
     public void save(ChunkPos pos, Chunk chunk) {
         try {
             SaveFile.write(getFullPath(pos), MAGIC, VERSION, chunk.serialize());
+            IO.trace("saved chunk {}", pos);
         } catch (IOException e) {
-            LOGGER.error("Failed to save chunk at {}_{}", pos.x(), pos.z());
+            IO.error("Failed to save chunk at {}_{}", pos.x(), pos.z());
             throw new RuntimeException(e);
         }
     }
@@ -40,11 +42,13 @@ public class ChunkStore implements IChunkStore {
     @Override
     public Optional<Chunk> load(ChunkPos pos) {
         try {
-            return SaveFile.read(getFullPath(pos), MAGIC)
+            Optional<Chunk> loaded = SaveFile.read(getFullPath(pos), MAGIC)
                     .filter(p -> p.version() == VERSION)
                     .map(p -> new Chunk(p.bytes()));
+            IO.trace("chunk {} {} on disk", pos, loaded.isPresent() ? "found" : "not found");
+            return loaded;
         } catch (IOException e) {
-            LOGGER.error("Failed to load chunk at {}_{}", pos.x(), pos.z());
+            IO.error("Failed to load chunk at {}_{}", pos.x(), pos.z());
             throw new RuntimeException(e);
         }
     }

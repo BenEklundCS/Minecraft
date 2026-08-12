@@ -1,11 +1,38 @@
-<configuration>
+<!--
+  scan="true" re-reads this file while the game is running, same idea as the shader hot reload:
+  edit a level below, save, and the next log call picks it up without a restart.
+
+  Every category level is `${log.<name>:-${log.all:-INFO}}`, which reads as: use -Dlog.<name> if
+  it's set, else -Dlog.all, else INFO. That's what makes both of these work as you'd expect:
+
+    -Dlog.all=DEBUG                 everything talks
+    -Dlog.chunk=TRACE               only chunk streaming talks, the rest stay at INFO
+    -Dlog.all=DEBUG -Dlog.perf=OFF  everything except the per-second perf summary
+
+  Without the nested default an explicit child level would pin the child and -Dlog.all would
+  silently skip it.
+-->
+<configuration scan="true" scanPeriod="5 seconds">
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%cyan(%d{HH:mm:ss}) %highlight(%-5level) %msg%n</pattern>
+            <!-- %logger{0} prints only the last segment, so "minecraft.chunk" shows as "chunk".
+                 Not {1} — that shortens the leading segments instead, giving "m.chunk".
+                 The thread column is what tells a chunk-meshing worker apart from main. -->
+            <pattern>%cyan(%d{HH:mm:ss}) %highlight(%-5level) %magenta(%-9.9logger{0}) %gray(%-16.16thread) %msg%n</pattern>
         </encoder>
     </appender>
 
-    <logger name="minecraft" level="INFO"/>
+    <logger name="minecraft" level="${log.all:-INFO}"/>
+
+    <logger name="minecraft.chunk"  level="${log.chunk:-${log.all:-INFO}}"/>
+    <logger name="minecraft.world"  level="${log.world:-${log.all:-INFO}}"/>
+    <logger name="minecraft.render" level="${log.render:-${log.all:-INFO}}"/>
+    <logger name="minecraft.gpu"    level="${log.gpu:-${log.all:-INFO}}"/>
+    <logger name="minecraft.input"  level="${log.input:-${log.all:-INFO}}"/>
+    <logger name="minecraft.player" level="${log.player:-${log.all:-INFO}}"/>
+    <logger name="minecraft.io"     level="${log.io:-${log.all:-INFO}}"/>
+    <logger name="minecraft.audio"  level="${log.audio:-${log.all:-INFO}}"/>
+    <logger name="minecraft.perf"   level="${log.perf:-${log.all:-INFO}}"/>
 
     <root level="WARN">
         <appender-ref ref="CONSOLE"/>

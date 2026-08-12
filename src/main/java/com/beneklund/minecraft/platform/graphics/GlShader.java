@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.platform.graphics;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.GPU;
 import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.system.MemoryStack.stackPush;
 
@@ -96,11 +96,11 @@ public final class GlShader {
         glCompileShader(vertexShader);
         glCompileShader(fragmentShader);
         if (glGetShaderi(vertexShader, GL_COMPILE_STATUS) == GL_FALSE) {
-            LOGGER.error(glGetShaderInfoLog(vertexShader));
+            GPU.error(glGetShaderInfoLog(vertexShader));
             throw new RuntimeException("Failed to compile() vertex shader.");
         }
         if (glGetShaderi(fragmentShader, GL_COMPILE_STATUS) == GL_FALSE) {
-            LOGGER.error(glGetShaderInfoLog(fragmentShader));
+            GPU.error(glGetShaderInfoLog(fragmentShader));
             throw new RuntimeException("Failed to compile() fragment shader.");
         }
     }
@@ -111,7 +111,7 @@ public final class GlShader {
         glAttachShader(programId, fragmentShader);
         glLinkProgram(programId);
         if (glGetProgrami(programId, GL_LINK_STATUS) == GL_FALSE) {
-            LOGGER.error(glGetProgramInfoLog(programId));
+            GPU.error(glGetProgramInfoLog(programId));
             throw new RuntimeException("Failed to link() shader program");
         }
     }

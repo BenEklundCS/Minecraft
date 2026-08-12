@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.input;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.INPUT;
 
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.renderer.Camera;
@@ -22,20 +22,20 @@ public class InputHandler {
     public void handle(List<IInputAction> actions) {
         for (var action : actions) {
             switch (action) {
-                case IInputAction.Simple.JUMP -> LOGGER.debug("JUMP");
-                case IInputAction.Simple.BREAK_BLOCK -> LOGGER.debug("BREAK_BLOCK");
-                case IInputAction.Simple.PLACE_BLOCK -> LOGGER.debug("PLACE_BLOCK");
-                case IInputAction.Simple.SLOT_NEXT -> LOGGER.debug("SLOT_NEXT");
-                case IInputAction.Simple.SLOT_PREV -> LOGGER.debug("SLOT_PREV");
-                case IInputAction.Simple.PAUSE -> LOGGER.debug("PAUSE");
-                case IInputAction.Simple.DEBUG_OVERLAY -> LOGGER.debug("DEBUG_OVERLAY");
-                case IInputAction.Simple.INVENTORY -> LOGGER.debug("INVENTORY");
-                case IInputAction.HotbarAction.Select h -> LOGGER.debug("SLOT_{}", h.slot() + 1);
+                case IInputAction.Simple.JUMP -> INPUT.debug("JUMP");
+                case IInputAction.Simple.BREAK_BLOCK -> INPUT.debug("BREAK_BLOCK");
+                case IInputAction.Simple.PLACE_BLOCK -> INPUT.debug("PLACE_BLOCK");
+                case IInputAction.Simple.SLOT_NEXT -> INPUT.debug("SLOT_NEXT");
+                case IInputAction.Simple.SLOT_PREV -> INPUT.debug("SLOT_PREV");
+                case IInputAction.Simple.PAUSE -> INPUT.debug("PAUSE");
+                case IInputAction.Simple.DEBUG_OVERLAY -> INPUT.debug("DEBUG_OVERLAY");
+                case IInputAction.Simple.INVENTORY -> INPUT.debug("INVENTORY");
+                case IInputAction.HotbarAction.Select h -> INPUT.debug("SLOT_{}", h.slot() + 1);
                 case IInputAction.Simple.EXIT -> window.close();
-                case IInputAction.MoveAction m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
-                case IInputAction.LookAction l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
+                case IInputAction.MoveAction m -> INPUT.debug("MOVE dx={} dz={}", m.dx(), m.dz());
+                case IInputAction.LookAction l -> INPUT.debug("LOOK dx={} dy={}", l.dx(), l.dy());
                 case IInputAction.ScrollAction s -> {
-                    LOGGER.debug("SCROLL delta={}", s.delta());
+                    INPUT.debug("SCROLL delta={}", s.delta());
                 }
                 default -> {}
             }

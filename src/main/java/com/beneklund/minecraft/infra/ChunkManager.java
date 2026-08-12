@@ -1,6 +1,6 @@
 package com.beneklund.minecraft.infra;
 
-import static com.beneklund.minecraft.util.Log.LOGGER;
+import static com.beneklund.minecraft.util.Log.CHUNK;
 
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.ChunkMesher;
@@ -54,6 +54,7 @@ public class ChunkManager {
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
         generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
         meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
+        CHUNK.info("{} generation + {} meshing threads, load radius {}", threads, threads, CHUNK_LOAD_RADIUS);
         meshJob = (JobInput in) -> {
             try {
                 if (!in.chunk.tryTransition(ChunkState.MESHING)) return;
@@ -61,20 +62,24 @@ public class ChunkManager {
                 // finished generating while this job sat in the queue is still picked up.
                 // The center comes back through meshable() too: MESHING can't transition to
                 // UNLOADING, so the chunk is still in the world map and meshable() can't null it.
+                long startedAt = System.nanoTime();
                 ChunkMeshData meshData = mesher.mesh(in.pos, ChunkWithNeighbors.around(in.pos, this::meshable));
                 if (!in.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
                 uploadQueue.add(meshData);
+                CHUNK.trace("meshed {} in {} us", in.pos, (System.nanoTime() - startedAt) / 1_000);
             } catch (Throwable t) {
                 // Throwable, not Exception: an OutOfMemoryError while building a mesh would
                 // otherwise leave the chunk wedged in MESHING with nothing logged.
                 in.chunk.tryTransition(ChunkState.ERROR);
-                LOGGER.error("mesh job failed for chunk {}", in.pos, t);
+                CHUNK.error("mesh job failed for chunk {}", in.pos, t);
             }
         };
         genJob = (JobInput in) -> {
             try {
                 if (!in.chunk.tryTransition(ChunkState.GENERATING)) return;
+                long startedAt = System.nanoTime();
                 generator.generate(in.pos, config.seed(), in.chunk);
+                CHUNK.trace("generated {} in {} us", in.pos, (System.nanoTime() - startedAt) / 1_000);
                 // Generator calls setBlock thousands of times; the deterministic output doesn't
                 // need persisting (regen produces the same bytes). Clear the flag so only real
                 // player edits trigger a disk write.
@@ -84,25 +89,29 @@ public class ChunkManager {
                 meshingPool.execute(() -> meshJob.accept(new JobInput(in.chunk, in.pos)));
             } catch (Throwable t) {
                 in.chunk.tryTransition(ChunkState.ERROR);
-                LOGGER.error("generation job failed for chunk {}", in.pos, t);
+                CHUNK.error("generation job failed for chunk {}", in.pos, t);
             }
         };
     }
 
     public void flushAllDirty() {
+        int saved = 0;
         for (var entry : world.getChunkEntries()) {
             Chunk chunk = entry.getValue();
             if (chunk.needsPersisting()) {
                 chunkStore.save(entry.getKey(), chunk);
                 chunk.clearNeedsPersisting();
+                saved++;
             }
         }
+        CHUNK.info("flushed {} dirty chunk(s) to disk", saved);
     }
 
     public void tick(ChunkPos playerPos) {
         // query list of chunk positions around the player
         List<ChunkPos> chunkPositions = getChunksInRadius(playerPos, CHUNK_LOAD_RADIUS);
         // UNLOAD
+        int unloadsThisTick = 0;
         Set<ChunkPos> worldChunkPositionSet = world.getChunkPositions();
         Set<ChunkPos> nearbyChunkPositionSet = new HashSet<>(chunkPositions);
         for (ChunkPos worldPos : worldChunkPositionSet) {
@@ -116,6 +125,7 @@ public class ChunkManager {
                 }
                 world.removeChunk(worldPos);
                 unloadQueue.add(worldPos);
+                unloadsThisTick++;
             }
         }
         // LOAD: prefer saved chunks (skip gen, go straight to meshing); otherwise queue generation.
@@ -138,14 +148,28 @@ public class ChunkManager {
             loadsThisTick++;
         }
         // DIRTY
+        int remeshesThisTick = 0;
         for (var entry : world.getChunkEntries()) {
             Chunk chunk = entry.getValue();
             ChunkPos pos = entry.getKey();
             if (chunk.getState() == ChunkState.DIRTY) {
                 if (chunk.tryTransition(ChunkState.QUEUED_MESH)) {
                     meshingPool.execute(() -> meshJob.accept(new JobInput(chunk, pos)));
+                    remeshesThisTick++;
                 }
             }
+        }
+
+        // tick() runs every frame, so a summary every frame would be a wall of noise. Only speak up
+        // when the tick actually did something — during steady-state standing still, that's never.
+        if (CHUNK.isDebugEnabled() && (loadsThisTick | unloadsThisTick | remeshesThisTick) != 0) {
+            CHUNK.debug(
+                    "tick @{}: +{} load, -{} unload, {} remesh, {} resident",
+                    playerPos,
+                    loadsThisTick,
+                    unloadsThisTick,
+                    remeshesThisTick,
+                    world.getChunkPositions().size());
         }
     }
 
@@ -154,10 +178,16 @@ public class ChunkManager {
     // mesh job, so shutting meshing down first would get those submissions rejected and
     // leave chunks stuck short of READY_TO_UPLOAD.
     public void shutdown(long timeoutSeconds) throws InterruptedException {
+        CHUNK.debug("draining chunk workers, {}s timeout", timeoutSeconds);
         generationPool.shutdown();
-        generationPool.awaitTermination(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+        boolean genDone = generationPool.awaitTermination(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
         meshingPool.shutdown();
-        meshingPool.awaitTermination(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+        boolean meshDone = meshingPool.awaitTermination(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+        // A timeout here is why a chunk edit sometimes doesn't survive a restart, so say so rather
+        // than swallowing it — the pool is daemon-threaded and the JVM will exit regardless.
+        if (!genDone || !meshDone) {
+            CHUNK.warn("worker drain timed out (generation done={}, meshing done={})", genDone, meshDone);
+        }
     }
 
     // Drains up to max items from the upload queue. Capped per frame to avoid hitching.

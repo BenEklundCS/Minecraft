@@ -1,0 +1,13 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Minecraft" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.beneklund.minecraft.Main" />
+    <module name="Minecraft.main" />
+    <!-- Mirrors the jvmArgs the Gradle JavaExec tasks set. Preview features are required
+         because Main uses an instance main method and compileJava targets 21 preview. -->
+    <option name="VM_PARAMETERS" value="--enable-preview --enable-native-access=ALL-UNNAMED" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
