@@ -14,7 +14,6 @@ import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.IWorldAuthority;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
@@ -39,21 +38,6 @@ public class Player implements IPhysicsBody {
 
     private RaycastResult targetedBlock;
 
-    private final Map<Integer, Block> slotToBlockIdHotbar = Map.ofEntries(
-            Map.entry(1, Block.STONE),
-            Map.entry(2, Block.DIRT),
-            Map.entry(3, Block.GRASS),
-            Map.entry(4, Block.BEDROCK),
-            Map.entry(5, Block.SAND),
-            Map.entry(6, Block.GRAVEL),
-            Map.entry(7, Block.OAK_LOG),
-            Map.entry(8, Block.OAK_PLANK),
-            Map.entry(9, Block.OAK_LEAF));
-
-    // 0-indexed hotbar selection (slot 0 = key '1', matching HotbarAction.Select). The
-    // palette map above is keyed 1-9, so look-ups add 1. Scroll and number keys move this.
-    private int selectedSlot = 0;
-
     private final IWorldAuthority authority;
     private final Vector3f position;
     private final Vector3f velocity;
@@ -65,6 +49,8 @@ public class Player implements IPhysicsBody {
     private float yaw;
     private float pitch;
 
+    private final Hotbar hotbar;
+
     public Player(PlayerConfig config, Camera camera, IWorldAuthority authority) {
         position = config.startPosition();
         velocity = new Vector3f();
@@ -74,6 +60,7 @@ public class Player implements IPhysicsBody {
         this.camera = camera;
         look(config.startYaw(), config.startPitch());
         this.authority = authority;
+        hotbar = new Hotbar();
     }
 
     @Override
@@ -179,19 +166,16 @@ public class Player implements IPhysicsBody {
                     this.placeBlock();
                     interactions.add(new Interaction.BlockInteraction(false, eyePos, lookDir, result));
                 }
-                // Scroll wheel cycles the hotbar; wrap around using the palette size so it
-                // stays correct if the palette grows. Up (positive) advances, down goes back.
+                // Scroll wheel cycles the hotbar. Up (positive) advances, down goes back;
+                // Hotbar owns the wrap-around.
                 case IInputAction.ScrollAction(float delta) -> {
                     if (delta != 0) {
-                        int step = delta > 0 ? 1 : -1;
-                        selectedSlot = Math.floorMod(selectedSlot + step, slotToBlockIdHotbar.size());
-                        logSelectedSlot();
+                        hotbar.scroll(delta > 0 ? 1 : -1);
                     }
                 }
                 // Number keys jump straight to a slot.
                 case IInputAction.HotbarAction.Select(int slot) -> {
-                    selectedSlot = slot;
-                    logSelectedSlot();
+                    hotbar.select(slot);
                 }
                 default -> {}
             }
@@ -232,13 +216,6 @@ public class Player implements IPhysicsBody {
         return flyMode;
     }
 
-    private void logSelectedSlot() {
-        LOGGER.info(
-                "Selected slot {} -> {}",
-                selectedSlot,
-                slotToBlockIdHotbar.get(selectedSlot + 1).name());
-    }
-
     // Apply mouse delta in degrees. -dy so mouse-up looks up; clamp pitch short of vertical.
     public void look(float dxDegrees, float dyDegrees) {
         yaw -= dxDegrees;
@@ -256,21 +233,8 @@ public class Player implements IPhysicsBody {
         return targetedBlock;
     }
 
-    // 0-indexed currently-selected hotbar slot, for the HUD to highlight.
-    public int getSelectedSlot() {
-        return selectedSlot;
-    }
-
-    // Returns the Block in the given 0-indexed slot, or null if empty.
-    public Block getHotbarBlock(int zeroBasedSlot) {
-        return slotToBlockIdHotbar.get(zeroBasedSlot + 1);
-    }
-
-    // Snapshot of all 9 hotbar slots (null = empty) for the HUD to render.
-    public Block[] getHotbarSnapshot() {
-        Block[] slots = new Block[9];
-        for (int i = 0; i < 9; i++) slots[i] = slotToBlockIdHotbar.get(i + 1);
-        return slots;
+    public Hotbar getHotbar() {
+        return hotbar;
     }
 
     private void breakTargetedBlock() {
@@ -295,7 +259,7 @@ public class Player implements IPhysicsBody {
                     placementPosition.z);
             return;
         }
-        Block blockId = slotToBlockIdHotbar.getOrDefault(selectedSlot + 1, Block.STONE);
+        Block blockId = hotbar.blockAt(hotbar.selected());
         authority.setBlock(placementPosition.x, placementPosition.y, placementPosition.z, blockId);
     }
 

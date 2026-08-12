@@ -6,6 +6,7 @@ import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
+import com.beneklund.minecraft.player.Hotbar;
 import com.beneklund.minecraft.player.Interaction;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
@@ -74,8 +75,8 @@ public class Game {
             processInput();
             processPhysics();
             processChunks();
-
-            hudRenderer.setHotbar(player.getHotbarSnapshot(), player.getSelectedSlot());
+            Hotbar hotbar = player.getHotbar();
+            hudRenderer.setHotbar(hotbar.snapshot(), hotbar.selected());
             window.beginFrame();
             renderer.draw(camera);
             window.endFrame();
