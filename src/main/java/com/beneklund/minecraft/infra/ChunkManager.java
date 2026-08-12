@@ -37,7 +37,9 @@ public class ChunkManager {
     private final Consumer<JobInput> genJob;
     private final Consumer<JobInput> meshJob;
 
-    private ChunkPos lastChunkPosition;
+    private record ChunkCacheKey(ChunkPos pos, int radius) {}
+
+    private ChunkCacheKey cache;
     private List<ChunkPos> lastChunksInRadius;
 
     public ChunkManager(
@@ -210,8 +212,11 @@ public class ChunkManager {
     //    dx, dy = -dy, dx
     //    x, y = x+dx, y+dy
 
-    private List<ChunkPos> getChunksInRadius(ChunkPos pos, int radius) {
-        if (pos == lastChunkPosition) return lastChunksInRadius;
+    // Package-private, not private, so ChunkManagerTest can assert the cache hands back the same
+    // list instance. Cache identity isn't observable through tick().
+    List<ChunkPos> getChunksInRadius(ChunkPos pos, int radius) {
+        ChunkCacheKey key = new ChunkCacheKey(pos, radius);
+        if (cache != null && cache.equals(key)) return lastChunksInRadius;
         List<ChunkPos> result = new ArrayList<>();
         int offsetX = 0;
         int offsetZ = 0;
@@ -231,6 +236,7 @@ public class ChunkManager {
             offsetZ = offsetZ + stepZ;
         }
         lastChunksInRadius = result;
+        cache = key;
         return result;
     }
 
