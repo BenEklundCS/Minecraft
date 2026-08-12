@@ -21,16 +21,26 @@ public class Physics {
     private static final float GRAVITY = 32.0f;
     private static final float TERMINAL_VELOCITY = 40.0f;
 
-    public void update(IPhysicsBody body, IWorldAuthority world, float dt) {
+    public void update(IPhysicsBody body, IWorldAuthority world, float dt, boolean flying) {
+        if (flying) {
+            fly(body, dt);
+        } else {
+            nofly(body, world, dt);
+        }
+    }
+
+    private void fly(IPhysicsBody body, float dt) {
+        body.getPosition().add(body.getVelocity().x * dt, body.getVelocity().y * dt, body.getVelocity().z * dt);
+    }
+
+    private void nofly(IPhysicsBody body, IWorldAuthority world, float dt) {
         // gravity accelerates us downward every tick
         Vector3f velocity = body.getVelocity();
         velocity.y -= GRAVITY * dt;
-
         if (velocity.y < -TERMINAL_VELOCITY) velocity.y = -TERMINAL_VELOCITY;
 
         // assume we're airborne; the downward Y sweep re-proves contact if we land
         body.setOnGround(false);
-
         resolveX(body, world, dt);
         resolveZ(body, world, dt);
         resolveY(body, world, dt);

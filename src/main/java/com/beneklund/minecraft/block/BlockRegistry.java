@@ -60,7 +60,8 @@ public class BlockRegistry {
                                 "oak_log_side",
                                 "oak_log_side",
                                 "oak_log_side")),
-                // leaves are non-solid so face culling against them still emits the neighbour face
+                // leaves are solid (you collide with them) but transparent, so isOpaque() is false
+                // and face culling against them still emits the neighbour face
                 Map.entry(
                         Block.OAK_LEAF,
                         BlockDef.build(

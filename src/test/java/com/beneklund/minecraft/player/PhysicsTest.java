@@ -93,7 +93,7 @@ class PhysicsTest {
         IWorldAuthority world = worldWhere(cell -> cell.y < 0);
 
         for (int i = 0; i < 10; i++) {
-            physics.update(body, world, 0.1f);
+            physics.update(body, world, 0.1f, false);
         }
 
         assertEquals(0.0f, body.getPosition().y, 1e-4, "feet should rest on the floor's top face");
@@ -109,7 +109,7 @@ class PhysicsTest {
         FakeBody body = new FakeBody(new Vector3f(0.5f, 50, 0.5f), new Vector3f(10, 0, 0));
         IWorldAuthority world = worldWhere(cell -> cell.x >= 1);
 
-        physics.update(body, world, 0.1f);
+        physics.update(body, world, 0.1f, false);
 
         assertEquals(0.0f, body.getVelocity().x, 1e-4, "horizontal velocity zeroed against the wall");
         // right face = position.x + halfWidth (0.3) should land on the wall face at x=1
@@ -126,7 +126,7 @@ class PhysicsTest {
         FakeBody body = new FakeBody(new Vector3f(3f, 50, 0.5f), new Vector3f(-20, 0, 0));
         IWorldAuthority world = worldWhere(cell -> cell.x <= 1); // slab two cells deep: x=0 and x=1
 
-        physics.update(body, world, 0.1f); // moves -2.0 in one tick, spanning both cells
+        physics.update(body, world, 0.1f, false); // moves -2.0 in one tick, spanning both cells
 
         assertEquals(0.0f, body.getVelocity().x, 1e-4, "horizontal velocity zeroed against the wall");
         // near face is cell 1's right side at x=2; left face = position.x - halfWidth (0.3)
@@ -140,7 +140,7 @@ class PhysicsTest {
         FakeBody body = new FakeBody(new Vector3f(0.5f, 50, 3f), new Vector3f(0, 0, -20));
         IWorldAuthority world = worldWhere(cell -> cell.z <= 1);
 
-        physics.update(body, world, 0.1f);
+        physics.update(body, world, 0.1f, false);
 
         assertEquals(0.0f, body.getVelocity().z, 1e-4, "depth velocity zeroed against the wall");
         assertEquals(2.3f, body.getPosition().z, 1e-4, "snapped to the near face, not through to cell 0");

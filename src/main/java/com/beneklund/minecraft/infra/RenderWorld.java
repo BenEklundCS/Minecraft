@@ -9,7 +9,7 @@ import java.util.HashMap;
 import org.joml.Matrix4f;
 
 // Main-thread-only store of uploaded chunk meshes. Workers never touch this —
-// GpuMesh creation and deletion must happen on the GL thread.
+// ChunkMesh creation and deletion must happen on the GL thread.
 public class RenderWorld {
     // opaqueMesh / transparentMesh may be null when a chunk has no geometry of that kind
     // (e.g. an all-stone chunk has no transparent mesh; an all-air chunk has neither).

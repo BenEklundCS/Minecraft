@@ -1,26 +1,15 @@
 package com.beneklund.minecraft.world;
 
-import com.beneklund.minecraft.input.IInputAction;
-import com.beneklund.minecraft.input.InputHandler;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 // World exists to safely manage a concurrent hashmap of chunks
 public class World {
-    // TODO: Remove inputHandler to decouple input from World's concurrency
-    private final InputHandler inputHandler;
-
     private final ConcurrentHashMap<ChunkPos, Chunk> chunks;
 
-    public World(ConcurrentHashMap<ChunkPos, Chunk> chunks, InputHandler inputHandler) {
+    public World(ConcurrentHashMap<ChunkPos, Chunk> chunks) {
         this.chunks = chunks;
-        this.inputHandler = inputHandler;
-    }
-
-    public void update(List<IInputAction> actions, float dt) {
-        inputHandler.handle(actions);
     }
 
     public Chunk getChunk(ChunkPos pos) {

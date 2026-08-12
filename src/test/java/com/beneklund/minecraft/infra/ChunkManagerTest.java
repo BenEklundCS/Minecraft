@@ -76,7 +76,7 @@ class ChunkManagerTest {
             }
         };
 
-        World world = new World(new ConcurrentHashMap<>(), null);
+        World world = new World(new ConcurrentHashMap<>());
         WorldConfig config = new WorldConfig(42L, 4);
         ChunkManager manager = new ChunkManager(config, world, stubGen, stubMesher, stubAuthority, stubChunkStore);
 

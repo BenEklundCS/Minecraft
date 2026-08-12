@@ -12,14 +12,15 @@ import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.ChunkWithNeighbors;
 import com.beneklund.minecraft.world.gen.Biome;
 
-// Converts a Chunk's block data into a ChunkMeshData (float[] vertices, int[] indices).
-// No GL calls — safe to run on any worker thread. The caller uploads the result to the
-// GPU via GpuMesh on the main thread.
+// Converts a Chunk's block data into a ChunkMeshData — one Geometry for the opaque pass and
+// one for the transparent pass. No GL calls, so this is safe on any worker thread; the caller
+// uploads the result via ChunkMesh on the main thread.
 //
-// Vertex format (10 floats, stride 40 bytes):
+// The layout itself lives in VertexFormat.CHUNK. Don't restate the stride here — it drifts.
+// What the slots mean:
 //   [0-2]  x, y, z       world position
 //   [3-4]  u, v          atlas UV
-//   [5]    ao            ambient occlusion (placeholder 1.0 until Phase 20)
+//   [5]    ao            ambient occlusion, ramped through AO_RAMP
 //   [6]    faceId        0=UP, 1=side, 2=DOWN (drives brightness bands in chunk.frag)
 //   [7-9]  r, g, b       biome tint (1,1,1 = no tint)
 public class ChunkMesher {

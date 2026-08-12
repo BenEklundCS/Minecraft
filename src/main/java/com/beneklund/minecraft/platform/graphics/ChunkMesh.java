@@ -10,7 +10,7 @@ public class ChunkMesh extends Mesh {
 
     private void validate() {
         if (!Thread.currentThread().getName().equals("main"))
-            throw new IllegalStateException("GpuMesh must be created on the main thread, was: %s"
+            throw new IllegalStateException("ChunkMesh must be created on the main thread, was: %s"
                     .formatted(Thread.currentThread().getName()));
     }
 }

@@ -26,7 +26,6 @@ public final class VertexFormat {
     }
 
     public record VertexAttribute(AttributeType type) {}
-    ;
 
     public void describe(GlVertexArray va) {
         List<VertexFormat.VertexAttribute> attributes = attributes();

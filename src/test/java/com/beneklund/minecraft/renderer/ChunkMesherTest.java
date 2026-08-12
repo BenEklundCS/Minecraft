@@ -155,7 +155,7 @@ class ChunkMesherTest {
     }
 
     @Test
-    void aoLevelForuma_truthTable() {
+    void aoLevelFormula_truthTable() {
         assertEquals(3, ChunkMesher.aoLevelFormula(false, false, false)); // open ground
         assertEquals(2, ChunkMesher.aoLevelFormula(false, false, true)); // 1 block touching on corner
         assertEquals(2, ChunkMesher.aoLevelFormula(true, false, false)); // 1 block touching side

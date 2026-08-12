@@ -3,6 +3,7 @@ package com.beneklund.minecraft;
 import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.IInputAction;
+import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
@@ -33,6 +34,7 @@ public class Game {
     private final Camera camera;
     private final Player player;
     private final Physics physics;
+    private final InputHandler inputHandler;
     private final World world;
     private final IWorldAuthority authority;
     private final DeltaTracker delta;
@@ -48,6 +50,7 @@ public class Game {
             Camera camera,
             Player player,
             Physics physics,
+            InputHandler inputHandler,
             World world,
             IWorldAuthority authority,
             DeltaTracker delta,
@@ -61,6 +64,7 @@ public class Game {
         this.camera = camera;
         this.player = player;
         this.physics = physics;
+        this.inputHandler = inputHandler;
         this.world = world;
         this.authority = authority;
         this.delta = delta;
@@ -116,7 +120,7 @@ public class Game {
             renderer.reloadAll();
         }
 
-        world.update(actions, delta.getDelta());
+        inputHandler.handle(actions);
         chunkManager.tick(player.getChunkPos());
 
         List<Interaction> interactions = player.tick(actions);
@@ -152,18 +156,14 @@ public class Game {
         //
         // Backlog: "Fixed timestep for physics" on the warm-up shelf in docs/BACKLOG.md.
         float dt = delta.getDelta();
-        if (physicsReady() && !player.isFlyMode()) {
-            physics.update(player, authority, dt);
-        } else if (player.isFlyMode()) {
-            // Still integrate velocity in fly mode — Player sets it, we move the position.
-            player.getPosition()
-                    .add(player.getVelocity().x * dt, player.getVelocity().y * dt, player.getVelocity().z * dt);
+        if (physicsReady()) {
+            physics.update(player, authority, dt, player.isFlyMode());
         }
         player.syncCamera();
     }
 
     private void processChunks() {
-        // Upload at most MAX_UPLOADS_PER_FRAME new meshes — GpuMesh asserts main thread.
+        // Upload at most MAX_UPLOADS_PER_FRAME new meshes — ChunkMesh asserts main thread.
         // Skip empty buffers so chunks with no opaque (or no transparent) geometry don't
         // allocate a zero-length VAO; null means "nothing to draw for this pass".
         for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {

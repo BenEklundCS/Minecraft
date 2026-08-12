@@ -6,9 +6,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.Test;
 
 class WorldTest {
-    // inputHandler is unused by the storage methods under test, so null is fine here
     private World emptyWorld() {
-        return new World(new ConcurrentHashMap<>(), null);
+        return new World(new ConcurrentHashMap<>());
     }
 
     // addChunk then getChunk hands back the exact instance we stored

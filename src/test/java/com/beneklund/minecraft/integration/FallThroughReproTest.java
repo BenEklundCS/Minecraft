@@ -6,7 +6,6 @@ import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.ChunkStore;
-import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.player.IPhysicsBody;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.renderer.ChunkMesher;
@@ -113,7 +112,7 @@ class FallThroughReproTest {
         int wrongLanding = 0;
 
         for (int trial = 0; trial < trials; trial++) {
-            World world = new World(new ConcurrentHashMap<>(), new InputHandler(null, null));
+            World world = new World(new ConcurrentHashMap<>());
             LocalWorldAuthority authority = new LocalWorldAuthority(world, registry);
             WorldGenerator worldGen = new WorldGenerator(registry, IGenerationSpec.DEFAULT_WORLD_GENERATION);
             ChunkMesher mesher = new ChunkMesher(registry, null);
@@ -144,7 +143,7 @@ class FallThroughReproTest {
                 chunkManager.drainUploadQueue(512);
                 chunkManager.drainUnloadQueue();
                 if (physicsReady(world, body)) {
-                    physics.update(body, authority, dt);
+                    physics.update(body, authority, dt, false);
                     if (body.isOnGround()) {
                         landed = true;
                         break;

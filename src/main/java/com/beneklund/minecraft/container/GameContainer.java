@@ -156,7 +156,7 @@ public class GameContainer {
     }
 
     private void initWorld() {
-        world = new World(new ConcurrentHashMap<>(), inputHandler);
+        world = new World(new ConcurrentHashMap<>());
         authority = new LocalWorldAuthority(world, registry);
         List<IGenerationSpec> generationSpecs = IGenerationSpec.DEFAULT_WORLD_GENERATION;
         worldGen = new WorldGenerator(registry, generationSpecs);
@@ -184,6 +184,7 @@ public class GameContainer {
                 camera,
                 player,
                 physics,
+                inputHandler,
                 world,
                 authority,
                 delta,

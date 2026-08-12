@@ -4,7 +4,7 @@ import com.beneklund.minecraft.platform.graphics.Geometry;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 
-// Plain data bag: produced by ChunkMesher on a worker thread, handed to GpuMesh on the GL thread.
+// Plain data bag: produced by ChunkMesher on a worker thread, handed to ChunkMesh on the GL thread.
 // Carries the Chunk reference so the GL thread can advance its state to UPLOADED after the upload.
 //
 // Geometry is split into two buffers up front so the renderer can draw opaque blocks first
