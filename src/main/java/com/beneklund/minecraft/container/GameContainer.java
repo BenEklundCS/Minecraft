@@ -29,7 +29,9 @@ import com.beneklund.minecraft.world.gen.IGenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 
@@ -40,6 +42,12 @@ import org.joml.Vector3f;
 // an order that respects those rules. The fields exist so the groups can hand objects to
 // each other — nothing outside run() reads them.
 public class GameContainer {
+    // Classloader-relative, no leading slash — StbAudioLoader.listOggs resolves it through the
+    // context classloader, which rejects an absolute-looking name. Searched recursively, so
+    // every album under it is in the pool and none of them is named here: the repo ships one
+    // CC0 folder (CREDITS.txt)
+    private static final String MUSIC_DIR = "music";
+
     private final ContainerConfig cfg;
 
     // config
@@ -174,15 +182,24 @@ public class GameContainer {
     }
 
     private void initAudio() {
-        music = new AudioPlayer(new StbAudioLoader());
-        localConfig
-                .startupDisc()
-                .ifPresentOrElse(
-                        disc -> {
-                            AUDIO.info("startup disc: {}", disc);
-                            music.play(disc);
-                        },
-                        () -> AUDIO.debug("no startup disc configured, audio device stays closed"));
+        StbAudioLoader loader = new StbAudioLoader();
+        music = new AudioPlayer(loader);
+
+        String disc = getLocalConfigAudioPath().orElseGet(() -> getRandomAudioPath(loader));
+        AUDIO.info("startup disc: {}", disc);
+        music.play(disc);
+    }
+
+    private Optional<String> getLocalConfigAudioPath() {
+        return localConfig.startupDisc();
+    }
+
+    private String getRandomAudioPath(StbAudioLoader loader) {
+        List<String> discs = loader.listOggs(MUSIC_DIR).stream()
+                .filter(s -> s.contains(localConfig.preferredAlbum().orElse("")))
+                .toList();
+        if (discs.isEmpty()) throw new IllegalStateException("No .ogg files found under %s".formatted(MUSIC_DIR));
+        return discs.get(ThreadLocalRandom.current().nextInt(discs.size()));
     }
 
     private void initWorld() {

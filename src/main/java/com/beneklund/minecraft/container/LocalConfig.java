@@ -25,6 +25,10 @@ public class LocalConfig {
         return Optional.ofNullable(props.getProperty("startup.disc"));
     }
 
+    public Optional<String> preferredAlbum() {
+        return Optional.ofNullable(props.getProperty("preferred.album"));
+    }
+
     public boolean debugEnabled() {
         Optional<String> prop = Optional.ofNullable(props.getProperty("debug.enabled"));
         if (prop.isPresent()) {
