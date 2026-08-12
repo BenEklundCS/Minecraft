@@ -70,88 +70,10 @@ public class Game {
 
     public void run() {
         while (!window.shouldClose()) {
-            delta.tick();
-            if (delta.timePassed(1.0f)) {
-                window.setTitle("Minecraft FPS: %d".formatted(delta.getFrames()));
-                delta.reset();
-            }
-
-            window.pollEvents();
-            List<IInputAction> actions = mapper.drain(delta.getDelta());
-
-            if (actions.contains(IInputAction.Simple.EXIT)) {
-                window.close();
-            }
-
-            if (actions.contains(IInputAction.Simple.RELOAD_SHADERS)) {
-                renderer.reloadAll();
-            }
-
-            world.update(actions, delta.getDelta());
-            chunkManager.tick(player.getChunkPos());
-
-            List<Interaction> interactions = player.tick(actions);
-            for (Interaction interaction : interactions) {
-                if (interaction
-                        instanceof
-                        Interaction.BlockInteraction(
-                                boolean broken,
-                                Vector3f eye,
-                                Vector3f dir,
-                                RaycastResult result)) {
-                    if (broken) {
-                        debugRenderer.updateFromRaycast(eye, dir, result);
-                    }
-                }
-            }
-
-            debugRenderer.updateTargetedBlock(player.getTargetedBlock());
-
-            // TODO: physics steps once per frame on the raw delta, so the simulation is only as
-            // stable as the frame rate. Collision is discrete — resolveY checks the cells the box
-            // lands in, never the ones it passed through — so a long frame (GC pause, the spawn
-            // mesh-upload storm) can move the player far enough to skip clean through a floor.
-            //
-            // Real engines don't scale dt down to hide this, they stop letting the frame rate set
-            // the step at all. Fixed timestep: bank the elapsed time in an accumulator, run as many
-            // fixed 1/60 sub-steps as the bank affords, carry the remainder into next frame. A 0.25s
-            // hitch becomes 15 small correct steps instead of one huge wrong one, and the sim
-            // becomes deterministic — same inputs, same steps, regardless of machine. That's
-            // Unity's FixedUpdate, Source's tick rate, and Quake before either of them.
-            //
-            // The other half is swept collision: test the path the box travels, not just where it
-            // lands. Unity calls it Continuous collision detection, Box2D calls it a bullet body.
-            // Fixed step is the one to do first — it's what buys determinism.
-            //
-            // Backlog: "Fixed timestep for physics" on the warm-up shelf in docs/BACKLOG.md.
-            float dt = delta.getDelta();
-            if (physicsReady() && !player.isFlyMode()) {
-                physics.update(player, authority, dt);
-            } else if (player.isFlyMode()) {
-                // Still integrate velocity in fly mode — Player sets it, we move the position.
-                player.getPosition()
-                        .add(player.getVelocity().x * dt, player.getVelocity().y * dt, player.getVelocity().z * dt);
-            }
-            player.syncCamera();
-
-            // Upload at most MAX_UPLOADS_PER_FRAME new meshes — GpuMesh asserts main thread.
-            // Skip empty buffers so chunks with no opaque (or no transparent) geometry don't
-            // allocate a zero-length VAO; null means "nothing to draw for this pass".
-            for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {
-                ChunkMesh opaque =
-                        data.opaqueIdx().length > 0 ? new ChunkMesh(data.opaqueVerts(), data.opaqueIdx()) : null;
-                ChunkMesh transparent = data.transparentIdx().length > 0
-                        ? new ChunkMesh(data.transparentVerts(), data.transparentIdx())
-                        : null;
-                renderWorld.add(data.pos(), opaque, transparent);
-                data.chunk().tryTransition(ChunkState.UPLOADED);
-            }
-
-            // Free GL buffers for chunks that left the load radius.
-            for (var pos : chunkManager.drainUnloadQueue()) {
-                RenderWorld.Entry entry = renderWorld.remove(pos);
-                if (entry != null) entry.delete();
-            }
+            processTitle();
+            processInput();
+            processPhysics();
+            processChunks();
 
             hudRenderer.setHotbar(player.getHotbarSnapshot(), player.getSelectedSlot());
             window.beginFrame();
@@ -171,5 +93,89 @@ public class Game {
             case UNLOADED, QUEUED_GEN, GENERATING -> false;
             default -> true;
         };
+    }
+
+    private void processTitle() {
+        delta.tick();
+        if (delta.timePassed(1.0f)) {
+            window.setTitle("Minecraft FPS: %d".formatted(delta.getFrames()));
+            delta.reset();
+        }
+    }
+
+    private void processInput() {
+        window.pollEvents();
+        List<IInputAction> actions = mapper.drain(delta.getDelta());
+
+        if (actions.contains(IInputAction.Simple.EXIT)) {
+            window.close();
+        }
+
+        if (actions.contains(IInputAction.Simple.RELOAD_SHADERS)) {
+            renderer.reloadAll();
+        }
+
+        world.update(actions, delta.getDelta());
+        chunkManager.tick(player.getChunkPos());
+
+        List<Interaction> interactions = player.tick(actions);
+        for (Interaction interaction : interactions) {
+            if (interaction
+                    instanceof
+                    Interaction.BlockInteraction(boolean broken, Vector3f eye, Vector3f dir, RaycastResult result)) {
+                if (broken) {
+                    debugRenderer.updateFromRaycast(eye, dir, result);
+                }
+            }
+        }
+
+        debugRenderer.updateTargetedBlock(player.getTargetedBlock());
+    }
+
+    private void processPhysics() {
+        // TODO: physics steps once per frame on the raw delta, so the simulation is only as
+        // stable as the frame rate. Collision is discrete — resolveY checks the cells the box
+        // lands in, never the ones it passed through — so a long frame (GC pause, the spawn
+        // mesh-upload storm) can move the player far enough to skip clean through a floor.
+        //
+        // Real engines don't scale dt down to hide this, they stop letting the frame rate set
+        // the step at all. Fixed timestep: bank the elapsed time in an accumulator, run as many
+        // fixed 1/60 sub-steps as the bank affords, carry the remainder into next frame. A 0.25s
+        // hitch becomes 15 small correct steps instead of one huge wrong one, and the sim
+        // becomes deterministic — same inputs, same steps, regardless of machine. That's
+        // Unity's FixedUpdate, Source's tick rate, and Quake before either of them.
+        //
+        // The other half is swept collision: test the path the box travels, not just where it
+        // lands. Unity calls it Continuous collision detection, Box2D calls it a bullet body.
+        // Fixed step is the one to do first — it's what buys determinism.
+        //
+        // Backlog: "Fixed timestep for physics" on the warm-up shelf in docs/BACKLOG.md.
+        float dt = delta.getDelta();
+        if (physicsReady() && !player.isFlyMode()) {
+            physics.update(player, authority, dt);
+        } else if (player.isFlyMode()) {
+            // Still integrate velocity in fly mode — Player sets it, we move the position.
+            player.getPosition()
+                    .add(player.getVelocity().x * dt, player.getVelocity().y * dt, player.getVelocity().z * dt);
+        }
+        player.syncCamera();
+    }
+
+    private void processChunks() {
+        // Upload at most MAX_UPLOADS_PER_FRAME new meshes — GpuMesh asserts main thread.
+        // Skip empty buffers so chunks with no opaque (or no transparent) geometry don't
+        // allocate a zero-length VAO; null means "nothing to draw for this pass".
+        for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {
+            ChunkMesh opaque = data.opaque().isEmpty() ? null : new ChunkMesh(data.opaque());
+            ChunkMesh transparent = data.transparent().isEmpty() ? null : new ChunkMesh(data.transparent());
+            renderWorld.add(data.pos(), opaque, transparent);
+            data.chunk().tryTransition(ChunkState.UPLOADED);
+        }
+
+        // Free GL buffers for chunks that left the load radius.
+        for (var pos : chunkManager.drainUnloadQueue()) {
+            RenderWorld.Entry entry = renderWorld.remove(pos);
+            if (entry != null) entry.delete();
+        }
     }
 }

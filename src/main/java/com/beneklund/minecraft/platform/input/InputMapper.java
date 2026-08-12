@@ -18,10 +18,10 @@ public class InputMapper {
     public static final Map<Integer, Binding> DEFAULT_BINDINGS = Map.ofEntries(
             // Movement: each key emits its own ±1 component every frame; Player sums them
             // (W+D -> forward + right -> normalized diagonal) so the input layer stays dumb.
-            Map.entry(GLFW_KEY_W, Binding.hold(new IInputAction.MoveActionI(0, 1), EVERY_FRAME)),
-            Map.entry(GLFW_KEY_S, Binding.hold(new IInputAction.MoveActionI(0, -1), EVERY_FRAME)),
-            Map.entry(GLFW_KEY_A, Binding.hold(new IInputAction.MoveActionI(-1, 0), EVERY_FRAME)),
-            Map.entry(GLFW_KEY_D, Binding.hold(new IInputAction.MoveActionI(1, 0), EVERY_FRAME)),
+            Map.entry(GLFW_KEY_W, Binding.hold(new IInputAction.MoveAction(0, 1), EVERY_FRAME)),
+            Map.entry(GLFW_KEY_S, Binding.hold(new IInputAction.MoveAction(0, -1), EVERY_FRAME)),
+            Map.entry(GLFW_KEY_A, Binding.hold(new IInputAction.MoveAction(-1, 0), EVERY_FRAME)),
+            Map.entry(GLFW_KEY_D, Binding.hold(new IInputAction.MoveAction(1, 0), EVERY_FRAME)),
             Map.entry(GLFW_KEY_SPACE, Binding.hold(IInputAction.Simple.JUMP, EVERY_FRAME)),
             Map.entry(GLFW_KEY_LEFT_SHIFT, Binding.hold(IInputAction.Simple.SNEAK, EVERY_FRAME)),
 
@@ -32,15 +32,15 @@ public class InputMapper {
             // Taps: fire once on release.
             Map.entry(GLFW_KEY_ESCAPE, Binding.tap(IInputAction.Simple.EXIT)),
             Map.entry(GLFW_KEY_X, Binding.tap(IInputAction.Simple.EXIT)),
-            Map.entry(GLFW_KEY_1, Binding.tap(new IInputAction.HotbarActionI.Select(0))),
-            Map.entry(GLFW_KEY_2, Binding.tap(new IInputAction.HotbarActionI.Select(1))),
-            Map.entry(GLFW_KEY_3, Binding.tap(new IInputAction.HotbarActionI.Select(2))),
-            Map.entry(GLFW_KEY_4, Binding.tap(new IInputAction.HotbarActionI.Select(3))),
-            Map.entry(GLFW_KEY_5, Binding.tap(new IInputAction.HotbarActionI.Select(4))),
-            Map.entry(GLFW_KEY_6, Binding.tap(new IInputAction.HotbarActionI.Select(5))),
-            Map.entry(GLFW_KEY_7, Binding.tap(new IInputAction.HotbarActionI.Select(6))),
-            Map.entry(GLFW_KEY_8, Binding.tap(new IInputAction.HotbarActionI.Select(7))),
-            Map.entry(GLFW_KEY_9, Binding.tap(new IInputAction.HotbarActionI.Select(8))),
+            Map.entry(GLFW_KEY_1, Binding.tap(new IInputAction.HotbarAction.Select(0))),
+            Map.entry(GLFW_KEY_2, Binding.tap(new IInputAction.HotbarAction.Select(1))),
+            Map.entry(GLFW_KEY_3, Binding.tap(new IInputAction.HotbarAction.Select(2))),
+            Map.entry(GLFW_KEY_4, Binding.tap(new IInputAction.HotbarAction.Select(3))),
+            Map.entry(GLFW_KEY_5, Binding.tap(new IInputAction.HotbarAction.Select(4))),
+            Map.entry(GLFW_KEY_6, Binding.tap(new IInputAction.HotbarAction.Select(5))),
+            Map.entry(GLFW_KEY_7, Binding.tap(new IInputAction.HotbarAction.Select(6))),
+            Map.entry(GLFW_KEY_8, Binding.tap(new IInputAction.HotbarAction.Select(7))),
+            Map.entry(GLFW_KEY_9, Binding.tap(new IInputAction.HotbarAction.Select(8))),
             Map.entry(GLFW_KEY_I, Binding.tap(IInputAction.Simple.INVENTORY)),
             Map.entry(GLFW_KEY_F3, Binding.tap(IInputAction.Simple.DEBUG_OVERLAY)),
             Map.entry(GLFW_KEY_F5, Binding.tap(IInputAction.Simple.RELOAD_SHADERS)),
@@ -69,10 +69,10 @@ public class InputMapper {
         List<IInputAction> actions = new ArrayList<>();
         for (IRawInputEvent event : queue.drain()) {
             switch (event) {
-                case IRawInputEvent.KeyEventI e -> handleButton(e.key(), e.action(), actions);
-                case IRawInputEvent.MouseButtonEventI e -> handleButton(e.button(), e.action(), actions);
-                case IRawInputEvent.MouseMoveEventI e -> handleMouseMove(e, actions);
-                case IRawInputEvent.ScrollEventI e -> actions.add(new IInputAction.ScrollActionI((float) e.yoffset()));
+                case IRawInputEvent.KeyEvent e -> handleButton(e.key(), e.action(), actions);
+                case IRawInputEvent.MouseButtonEvent e -> handleButton(e.button(), e.action(), actions);
+                case IRawInputEvent.MouseMoveEvent e -> handleMouseMove(e, actions);
+                case IRawInputEvent.ScrollEvent e -> actions.add(new IInputAction.ScrollAction((float) e.yoffset()));
             }
         }
         processHeld(dt, actions);
@@ -113,11 +113,11 @@ public class InputMapper {
         }
     }
 
-    private void handleMouseMove(IRawInputEvent.MouseMoveEventI e, List<IInputAction> actions) {
+    private void handleMouseMove(IRawInputEvent.MouseMoveEvent e, List<IInputAction> actions) {
         if (!Double.isNaN(lastMouseX)) {
             float dx = (float) (e.xpos() - lastMouseX);
             float dy = (float) (e.ypos() - lastMouseY);
-            actions.add(new IInputAction.LookActionI(dx, dy));
+            actions.add(new IInputAction.LookAction(dx, dy));
         }
         lastMouseX = e.xpos();
         lastMouseY = e.ypos();

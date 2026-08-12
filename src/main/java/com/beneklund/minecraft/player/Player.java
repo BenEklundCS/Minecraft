@@ -50,7 +50,7 @@ public class Player implements IPhysicsBody {
             Map.entry(8, Block.OAK_PLANK),
             Map.entry(9, Block.OAK_LEAF));
 
-    // 0-indexed hotbar selection (slot 0 = key '1', matching HotbarActionI.Select). The
+    // 0-indexed hotbar selection (slot 0 = key '1', matching HotbarAction.Select). The
     // palette map above is keyed 1-9, so look-ups add 1. Scroll and number keys move this.
     private int selectedSlot = 0;
 
@@ -161,13 +161,13 @@ public class Player implements IPhysicsBody {
         List<Interaction> interactions = new ArrayList<>();
         for (IInputAction action : actions) {
             switch (action) {
-                case IInputAction.MoveActionI(float dx, float dz) -> {
+                case IInputAction.MoveAction(float dx, float dz) -> {
                     Vector3f forward = getLookDirection();
                     forward.y = 0;
                     if (forward.lengthSquared() > 0) forward.normalize();
                     wish.fma(dz, forward).fma(dx, getRight());
                 }
-                case IInputAction.LookActionI(float dx, float dy) ->
+                case IInputAction.LookAction(float dx, float dy) ->
                     look(dx * MOUSE_SENSITIVITY, dy * MOUSE_SENSITIVITY);
                 case IInputAction.Simple.JUMP -> jumpHeld = true;
                 case IInputAction.Simple.SNEAK -> sneakHeld = true;
@@ -181,7 +181,7 @@ public class Player implements IPhysicsBody {
                 }
                 // Scroll wheel cycles the hotbar; wrap around using the palette size so it
                 // stays correct if the palette grows. Up (positive) advances, down goes back.
-                case IInputAction.ScrollActionI(float delta) -> {
+                case IInputAction.ScrollAction(float delta) -> {
                     if (delta != 0) {
                         int step = delta > 0 ? 1 : -1;
                         selectedSlot = Math.floorMod(selectedSlot + step, slotToBlockIdHotbar.size());
@@ -189,7 +189,7 @@ public class Player implements IPhysicsBody {
                     }
                 }
                 // Number keys jump straight to a slot.
-                case IInputAction.HotbarActionI.Select(int slot) -> {
+                case IInputAction.HotbarAction.Select(int slot) -> {
                     selectedSlot = slot;
                     logSelectedSlot();
                 }

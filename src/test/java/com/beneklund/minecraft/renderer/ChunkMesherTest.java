@@ -32,10 +32,10 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
-        assertEquals(24 * 10, data.opaqueVerts().length, "24 vertices × 10 floats");
-        assertEquals(36, data.opaqueIdx().length, "6 quads × 6 indices");
-        assertEquals(0, data.transparentVerts().length, "stone is opaque — nothing in the transparent buffer");
-        assertEquals(0, data.transparentIdx().length);
+        assertEquals(24 * 10, data.opaque().vertices().length, "24 vertices × 10 floats");
+        assertEquals(36, data.opaque().indices().length, "6 quads × 6 indices");
+        assertEquals(0, data.transparent().vertices().length, "stone is opaque — nothing in the transparent buffer");
+        assertEquals(0, data.transparent().indices().length);
     }
 
     // a transparent block (water) routes all its geometry into the transparent buffer instead
@@ -49,10 +49,10 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
-        assertEquals(24 * 10, data.transparentVerts().length, "water lives in the transparent buffer");
-        assertEquals(36, data.transparentIdx().length);
-        assertEquals(0, data.opaqueVerts().length, "nothing opaque");
-        assertEquals(0, data.opaqueIdx().length);
+        assertEquals(24 * 10, data.transparent().vertices().length, "water lives in the transparent buffer");
+        assertEquals(36, data.transparent().indices().length);
+        assertEquals(0, data.opaque().vertices().length, "nothing opaque");
+        assertEquals(0, data.opaque().indices().length);
     }
 
     // the shared face between two adjacent blocks is culled by both — 10 quads not 12
@@ -65,7 +65,7 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(40, data.vertexCount(), "10 quads × 4 vertices");
-        assertEquals(60, data.opaqueIdx().length, "10 quads × 6 indices");
+        assertEquals(60, data.opaque().indices().length, "10 quads × 6 indices");
     }
 
     // all-air chunk produces no geometry
@@ -74,10 +74,10 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(emptyChunk()));
 
         assertEquals(0, data.vertexCount());
-        assertEquals(0, data.opaqueVerts().length);
-        assertEquals(0, data.opaqueIdx().length);
-        assertEquals(0, data.transparentVerts().length);
-        assertEquals(0, data.transparentIdx().length);
+        assertEquals(0, data.opaque().vertices().length);
+        assertEquals(0, data.opaque().indices().length);
+        assertEquals(0, data.transparent().vertices().length);
+        assertEquals(0, data.transparent().indices().length);
     }
 
     // The seam rule that is MC-4 (ChunkMesher.isCulled, the resolve()-came-back-empty branch).
@@ -91,8 +91,8 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(16, data.vertexCount(), "4 quads — both seam faces culled, no pane standing in the lake");
-        assertEquals(24, data.transparentIdx().length, "4 quads × 6 indices");
-        assertEquals(0, data.opaqueIdx().length);
+        assertEquals(24, data.transparent().indices().length, "4 quads × 6 indices");
+        assertEquals(0, data.opaque().indices().length);
     }
 
     @Test
@@ -103,7 +103,7 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(24, data.vertexCount(), "6 quads — opaque emits, or you see through the render edge");
-        assertEquals(36, data.opaqueIdx().length);
+        assertEquals(36, data.opaque().indices().length);
     }
 
     // A loaded neighbor is a real answer rather than a guess, so the type-based fallback
@@ -117,7 +117,7 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), cn);
 
         assertEquals(24, data.vertexCount(), "6 quads — a loaded air neighbor means the face is really visible");
-        assertEquals(36, data.transparentIdx().length);
+        assertEquals(36, data.transparent().indices().length);
     }
 
     // ...and matching water across the seam culls it, which is the case the whole rule exists for.
@@ -134,7 +134,7 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), cn);
 
         assertEquals(20, data.vertexCount(), "5 quads — the west seam face culls, the north one survives");
-        assertEquals(30, data.transparentIdx().length);
+        assertEquals(30, data.transparent().indices().length);
     }
 
     // interior blocks of a fully solid chunk are completely culled;
@@ -151,7 +151,7 @@ class ChunkMesherTest {
         // outer shell: 2 caps (16×16 each) + 4 sides (16×256 each)
         int expectedFaces = 2 * (16 * 16) + 4 * (16 * 256); // = 16896
         assertEquals(expectedFaces * 4, data.vertexCount(), "only outer-shell faces emitted");
-        assertEquals(expectedFaces * 6, data.opaqueIdx().length);
+        assertEquals(expectedFaces * 6, data.opaque().indices().length);
     }
 
     @Test

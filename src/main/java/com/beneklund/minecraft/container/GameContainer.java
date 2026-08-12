@@ -6,11 +6,11 @@ import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.*;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
-import com.beneklund.minecraft.platform.audio.StbIAudioLoader;
-import com.beneklund.minecraft.platform.images.StbIImageLoader;
+import com.beneklund.minecraft.platform.audio.StbAudioLoader;
+import com.beneklund.minecraft.platform.images.StbImageLoader;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
-import com.beneklund.minecraft.platform.resources.JsonIResourcePack;
+import com.beneklund.minecraft.platform.resources.JsonResourcePack;
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.player.IPlayerStore;
 import com.beneklund.minecraft.player.Physics;
@@ -137,7 +137,7 @@ public class GameContainer {
     }
 
     private void initRenderer() throws IOException {
-        JsonIResourcePack resourcePack = new JsonIResourcePack(cfg.resourcePack(), new StbIImageLoader());
+        JsonResourcePack resourcePack = new JsonResourcePack(cfg.resourcePack(), new StbImageLoader());
         atlas = new TextureAtlas(resourcePack);
         registry = BlockRegistry.createDefault();
         renderWorld = new RenderWorld();
@@ -151,7 +151,7 @@ public class GameContainer {
     }
 
     private void initAudio() {
-        music = new AudioPlayer(new StbIAudioLoader());
+        music = new AudioPlayer(new StbAudioLoader());
         localConfig.startupDisc().ifPresent(music::play);
     }
 

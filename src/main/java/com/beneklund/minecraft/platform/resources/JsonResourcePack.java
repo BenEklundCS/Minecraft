@@ -11,7 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public class JsonIResourcePack implements IResourcePack {
+public class JsonResourcePack implements IResourcePack {
     private final IImageLoader loader;
     private final String name;
     private final int tileSize;
@@ -19,7 +19,7 @@ public class JsonIResourcePack implements IResourcePack {
     private final String license;
     private final Map<String, String> tilePaths = new LinkedHashMap<>();
 
-    public JsonIResourcePack(String classpathJson, IImageLoader loader) throws IOException {
+    public JsonResourcePack(String classpathJson, IImageLoader loader) throws IOException {
         this.loader = loader;
         InputStream stream = Objects.requireNonNull(
                 getClass().getResourceAsStream(classpathJson), "pack not found: %s".formatted(classpathJson));

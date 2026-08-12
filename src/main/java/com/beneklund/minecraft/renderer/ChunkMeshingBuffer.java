@@ -9,6 +9,7 @@ public final class ChunkMeshingBuffer {
     private final int indicesPerQuad;
 
     private int vertPos = 0;
+    private int quadStart = 0;
     private int idxPos = 0;
     private int vertexBase = 0;
 
@@ -36,7 +37,14 @@ public final class ChunkMeshingBuffer {
     }
 
     public void advance() {
-        vertexBase += verticesPerQuad;
+        int actual = vertPos - quadStart;
+        int expect = getQuadVertexFloats();
+        if (actual == expect) {
+            quadStart = vertPos;
+            vertexBase += verticesPerQuad;
+        } else {
+            throw new IllegalStateException("expected: %d actual: %d".formatted(expect, actual));
+        }
     }
 
     public void writeVert(float v) {
@@ -55,8 +63,12 @@ public final class ChunkMeshingBuffer {
         return Arrays.copyOf(indices, idxPos);
     }
 
+    private int getQuadVertexFloats() {
+        return verticesPerQuad * floatsPerVertex;
+    }
+
     private float[] emptyVertices() {
-        return new float[initialFaceCapacity * verticesPerQuad * floatsPerVertex];
+        return new float[initialFaceCapacity * getQuadVertexFloats()];
     }
 
     private int[] emptyIndices() {

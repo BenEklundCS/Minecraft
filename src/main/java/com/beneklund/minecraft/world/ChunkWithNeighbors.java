@@ -39,7 +39,7 @@ public class ChunkWithNeighbors {
     // The offsets live here rather than at the call sites so they can't drift from the array
     // above. lookup answers with null for a chunk that isn't loaded or isn't ready yet, which
     // the neighbor slots accept and the center does not.
-    public static ChunkWithNeighbors around(ChunkPos pos, ChunkLookup lookup) {
+    public static ChunkWithNeighbors around(ChunkPos pos, IChunkLookup lookup) {
         return new ChunkWithNeighbors(
                 lookup.at(pos),
                 lookup.at(pos.offset(0, -1)), // NORTH

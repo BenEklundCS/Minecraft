@@ -37,19 +37,19 @@ class InputMapperTest {
     void keyHeld_emitsMoveActionEveryFrame(WasdCase tc) {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = mapper(queue);
-        queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.KeyEvent(tc.key(), 0, GLFW_PRESS, 0));
 
         List<IInputAction> actions = mapper.drain(FRAME);
 
         assertEquals(1, actions.size());
-        assertEquals(new IInputAction.MoveActionI(tc.expectedDx(), tc.expectedDz()), actions.getFirst());
+        assertEquals(new IInputAction.MoveAction(tc.expectedDx(), tc.expectedDz()), actions.getFirst());
     }
 
     @Test
     void spaceHeld_emitsJumpOnPress() {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = mapper(queue);
-        queue.offer(new IRawInputEvent.KeyEventI(GLFW_KEY_SPACE, 0, GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.KeyEvent(GLFW_KEY_SPACE, 0, GLFW_PRESS, 0));
 
         assertEquals(List.of(Simple.JUMP), mapper.drain(FRAME));
     }
@@ -59,10 +59,10 @@ class InputMapperTest {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = mapper(queue);
 
-        queue.offer(new IRawInputEvent.KeyEventI(GLFW_KEY_W, 0, GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.KeyEvent(GLFW_KEY_W, 0, GLFW_PRESS, 0));
         assertEquals(1, mapper.drain(FRAME).size()); // fires while held
 
-        queue.offer(new IRawInputEvent.KeyEventI(GLFW_KEY_W, 0, GLFW_RELEASE, 0));
+        queue.offer(new IRawInputEvent.KeyEvent(GLFW_KEY_W, 0, GLFW_RELEASE, 0));
         assertTrue(mapper.drain(FRAME).isEmpty()); // nothing once released
     }
 
@@ -84,7 +84,7 @@ class InputMapperTest {
     void keyRelease_returnsTapAction(TapKeyCase tc) {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = mapper(queue);
-        queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_RELEASE, 0));
+        queue.offer(new IRawInputEvent.KeyEvent(tc.key(), 0, GLFW_RELEASE, 0));
 
         assertEquals(List.of(tc.expected()), mapper.drain(FRAME));
     }
@@ -93,7 +93,7 @@ class InputMapperTest {
     void tapKeyPress_emitsNothing() {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = mapper(queue);
-        queue.offer(new IRawInputEvent.KeyEventI(GLFW_KEY_ESCAPE, 0, GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.KeyEvent(GLFW_KEY_ESCAPE, 0, GLFW_PRESS, 0));
 
         assertTrue(mapper.drain(FRAME).isEmpty());
     }
@@ -120,9 +120,9 @@ class InputMapperTest {
     void keyRelease_returnsHotbarSelect(HotbarCase tc) {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = mapper(queue);
-        queue.offer(new IRawInputEvent.KeyEventI(tc.key(), 0, GLFW_RELEASE, 0));
+        queue.offer(new IRawInputEvent.KeyEvent(tc.key(), 0, GLFW_RELEASE, 0));
 
-        assertEquals(List.of(new IInputAction.HotbarActionI.Select(tc.expectedSlot())), mapper.drain(FRAME));
+        assertEquals(List.of(new IInputAction.HotbarAction.Select(tc.expectedSlot())), mapper.drain(FRAME));
     }
 
     // --- Mouse buttons: now held, fire on press, repeat on a delay ---
@@ -140,7 +140,7 @@ class InputMapperTest {
     void mouseButtonPress_firesActionImmediately(MouseCase tc) {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = mapper(queue);
-        queue.offer(new IRawInputEvent.MouseButtonEventI(tc.button(), GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.MouseButtonEvent(tc.button(), GLFW_PRESS, 0));
 
         assertEquals(List.of(tc.expected()), mapper.drain(FRAME));
     }
@@ -151,7 +151,7 @@ class InputMapperTest {
         InputMapper mapper = mapper(queue);
 
         // press: first hit lands immediately
-        queue.offer(new IRawInputEvent.MouseButtonEventI(GLFW_MOUSE_BUTTON_1, GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.MouseButtonEvent(GLFW_MOUSE_BUTTON_1, GLFW_PRESS, 0));
         assertTrue(mapper.drain(0.01f).contains(Simple.BREAK_BLOCK), "first hit on press");
 
         // not enough time has passed for a repeat
@@ -167,8 +167,8 @@ class InputMapperTest {
     void scroll_emitsScrollAction() {
         InputEventQueue queue = new InputEventQueue();
         InputMapper mapper = mapper(queue);
-        queue.offer(new IRawInputEvent.ScrollEventI(0, 1.0));
+        queue.offer(new IRawInputEvent.ScrollEvent(0, 1.0));
 
-        assertEquals(List.of(new IInputAction.ScrollActionI(1.0f)), mapper.drain(FRAME));
+        assertEquals(List.of(new IInputAction.ScrollAction(1.0f)), mapper.drain(FRAME));
     }
 }

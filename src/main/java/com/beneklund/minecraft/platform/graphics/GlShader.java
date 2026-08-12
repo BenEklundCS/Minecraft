@@ -24,7 +24,7 @@ import org.lwjgl.system.MemoryStack;
  *
  * Lifecycle: new -> use() each frame -> delete() on shutdown.
  */
-public class GlShader {
+public final class GlShader {
     private int programId;
     private final String vertexShaderSource;
     private final String fragmentShaderSource;

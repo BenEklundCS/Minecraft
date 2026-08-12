@@ -49,7 +49,7 @@ public class Window {
     private long window;
     private final InputEventQueue queue;
     private final WindowConfig config;
-    private final List<ResizeListener> resizeListeners = new ArrayList<>();
+    private final List<IResizeListener> resizeListeners = new ArrayList<>();
 
     public Window(WindowConfig config, InputEventQueue queue) {
         this.config = config;
@@ -88,7 +88,7 @@ public class Window {
 
     // Register interest in framebuffer resizes. Window never learns who's listening - the
     // composition root decides (e.g. the Camera, so its aspect ratio tracks the window).
-    public void addResizeListener(ResizeListener listener) {
+    public void addResizeListener(IResizeListener listener) {
         resizeListeners.add(listener);
     }
 
@@ -155,10 +155,10 @@ public class Window {
     }
 
     private void initCallbacks() {
-        glfwSetKeyCallback(window, IRawInputEvent.KeyEventI.callback(queue));
-        glfwSetMouseButtonCallback(window, IRawInputEvent.MouseButtonEventI.callback(queue));
-        glfwSetCursorPosCallback(window, IRawInputEvent.MouseMoveEventI.callback(queue));
-        glfwSetScrollCallback(window, IRawInputEvent.ScrollEventI.callback(queue));
+        glfwSetKeyCallback(window, IRawInputEvent.KeyEvent.callback(queue));
+        glfwSetMouseButtonCallback(window, IRawInputEvent.MouseButtonEvent.callback(queue));
+        glfwSetCursorPosCallback(window, IRawInputEvent.MouseMoveEvent.callback(queue));
+        glfwSetScrollCallback(window, IRawInputEvent.ScrollEvent.callback(queue));
         glfwSetFramebufferSizeCallback(window, resizeCallback());
     }
 
@@ -167,7 +167,7 @@ public class Window {
     private GLFWFramebufferSizeCallbackI resizeCallback() {
         return (long window, int width, int height) -> {
             glViewport(0, 0, width, height);
-            for (ResizeListener listener : resizeListeners) listener.onResize(width, height);
+            for (IResizeListener listener : resizeListeners) listener.onResize(width, height);
         };
     }
 }

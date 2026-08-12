@@ -4,7 +4,7 @@ import static org.lwjgl.opengl.GL11.*;
 
 import com.beneklund.minecraft.platform.images.IImageLoader;
 import com.beneklund.minecraft.platform.images.ImageData;
-import com.beneklund.minecraft.platform.images.StbIImageLoader;
+import com.beneklund.minecraft.platform.images.StbImageLoader;
 import java.nio.ByteBuffer;
 
 /*
@@ -21,8 +21,8 @@ import java.nio.ByteBuffer;
  *
  * Lifecycle: new -> load() -> upload() -> bind() each frame -> delete() on shutdown.
  */
-public class GlTexture {
-    private static final IImageLoader LOADER = new StbIImageLoader();
+public final class GlTexture {
+    private static final IImageLoader LOADER = new StbImageLoader();
 
     private int id;
     private ImageData data;

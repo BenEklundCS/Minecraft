@@ -1,5 +1,5 @@
 package com.beneklund.minecraft.world;
 
-public interface ChunkLookup {
+public interface IChunkLookup {
     Chunk at(ChunkPos pos);
 }

@@ -21,7 +21,7 @@ import static org.lwjgl.opengl.GL30.*;
  *
  * Lifecycle: new -> bind() -> attribPointer() per attribute -> unbind() -> bind() each frame -> delete() on shutdown.
  */
-public class GlVertexArray {
+public final class GlVertexArray {
     private final int vertexArray;
 
     public GlVertexArray() {
@@ -41,13 +41,13 @@ public class GlVertexArray {
         glDeleteVertexArrays(vertexArray);
     }
 
-    public void attribPointer(int index, int size, int stride, long offset) {
+    public void attribPointer(int index, int size, int glType, boolean normalized, int stride, long offset) {
         // Must be called while this VAO is bound - the VAO records this description.
         // index = attribute slot (matches layout(location = N) in the vertex shader)
         // size = number of floats for this attribute
         // stride = total bytes per vertex across all attributes
         // offset = byte offset to where this attribute starts within a vertex
-        glVertexAttribPointer(index, size, GL_FLOAT, false, stride, offset);
+        glVertexAttribPointer(index, size, glType, normalized, stride, offset);
         glEnableVertexAttribArray(index);
     }
 }

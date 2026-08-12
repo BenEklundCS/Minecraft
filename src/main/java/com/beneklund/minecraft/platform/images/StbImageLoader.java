@@ -16,7 +16,7 @@ import org.lwjgl.system.MemoryStack;
 
 // Loads PNGs from the classpath via STB. Flips vertically on load so that V=0 is the
 // bottom of the image and V=1 is the top — standard OpenGL UV convention throughout.
-public class StbIImageLoader implements IImageLoader {
+public class StbImageLoader implements IImageLoader {
     // Shared close handler — all ImageData instances point to this rather than allocating a lambda each time.
     private static final Consumer<ImageData> ON_CLOSE = data -> stbi_image_free(data.pixels());
 

@@ -1,5 +1,6 @@
 package com.beneklund.minecraft.renderer;
 
+import com.beneklund.minecraft.platform.graphics.Geometry;
 import com.beneklund.minecraft.platform.graphics.LineMesh;
 import com.beneklund.minecraft.util.RaycastResult;
 import java.util.ArrayList;
@@ -67,11 +68,15 @@ public class DebugRenderer implements IRenderable {
     0--------1
       */
     private void rebuildTargetMesh() {
-        float lo = -0.002f, hi = 1.002f;
         if (targetMesh != null) {
             targetMesh.delete();
             targetMesh = null;
         }
+        targetMesh = new LineMesh(getTargetGeometry());
+    }
+
+    private Geometry getTargetGeometry() {
+        float lo = -0.002f, hi = 1.002f;
         float[] vertices = {
             lo, lo, lo, 1f, 0f, 0f, // 0
             hi, lo, lo, 1f, 0f, 0f, // 1
@@ -87,8 +92,7 @@ public class DebugRenderer implements IRenderable {
             4, 5, 5, 6, 6, 7, 7, 4, // top square
             0, 4, 1, 5, 2, 6, 3, 7, // verticals
         };
-        targetMesh = new LineMesh();
-        targetMesh.upload(vertices, indices);
+        return new Geometry(vertices, indices);
     }
 
     private void rebuildLaserMesh() {
@@ -100,14 +104,17 @@ public class DebugRenderer implements IRenderable {
             laserDirty = false;
             return;
         }
+        laserMesh = new LineMesh(getLaserGeometry());
+        laserDirty = false;
+    }
+
+    private Geometry getLaserGeometry() {
         float[] vertices = {
             laserStart.x, laserStart.y, laserStart.z, 1.0f, 0.0f, 0.0f,
             laserEnd.x, laserEnd.y, laserEnd.z, 1.0f, 0.0f, 0.0f,
         };
         int[] indices = {0, 1};
-        laserMesh = new LineMesh();
-        laserMesh.upload(vertices, indices);
-        laserDirty = false;
+        return new Geometry(vertices, indices);
     }
 
     @Override

@@ -30,11 +30,11 @@ public class InputHandler {
                 case IInputAction.Simple.PAUSE -> LOGGER.debug("PAUSE");
                 case IInputAction.Simple.DEBUG_OVERLAY -> LOGGER.debug("DEBUG_OVERLAY");
                 case IInputAction.Simple.INVENTORY -> LOGGER.debug("INVENTORY");
-                case IInputAction.HotbarActionI.Select h -> LOGGER.debug("SLOT_{}", h.slot() + 1);
+                case IInputAction.HotbarAction.Select h -> LOGGER.debug("SLOT_{}", h.slot() + 1);
                 case IInputAction.Simple.EXIT -> window.close();
-                case IInputAction.MoveActionI m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
-                case IInputAction.LookActionI l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
-                case IInputAction.ScrollActionI s -> {
+                case IInputAction.MoveAction m -> LOGGER.debug("MOVE dx={} dz={}", m.dx(), m.dz());
+                case IInputAction.LookAction l -> LOGGER.debug("LOOK dx={} dy={}", l.dx(), l.dy());
+                case IInputAction.ScrollAction s -> {
                     LOGGER.debug("SCROLL delta={}", s.delta());
                 }
                 default -> {}

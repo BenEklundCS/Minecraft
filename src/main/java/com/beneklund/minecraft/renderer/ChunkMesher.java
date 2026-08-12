@@ -3,6 +3,7 @@ package com.beneklund.minecraft.renderer;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
+import com.beneklund.minecraft.platform.graphics.Geometry;
 import com.beneklund.minecraft.platform.graphics.VertexFormat;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.Direction;
@@ -145,14 +146,11 @@ public class ChunkMesher {
             }
         }
 
+        Geometry opaqueGeometry = new Geometry(opaque.copyVertices(), opaque.copyIndices());
+        Geometry transparentGeometry = new Geometry(transparent.copyVertices(), transparent.copyIndices());
+
         return new ChunkMeshData(
-                pos,
-                opaque.copyVertices(),
-                opaque.copyIndices(),
-                transparent.copyVertices(),
-                transparent.copyIndices(),
-                opaque.base() + transparent.base(),
-                cn.center());
+                pos, opaqueGeometry, transparentGeometry, opaque.base() + transparent.base(), cn.center());
     }
 
     private void fillBufferVerts(

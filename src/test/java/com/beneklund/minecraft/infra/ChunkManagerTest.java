@@ -6,6 +6,7 @@ import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.entity.Entity;
+import com.beneklund.minecraft.platform.graphics.Geometry;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.util.AABB;
@@ -60,7 +61,7 @@ class ChunkManagerTest {
         ChunkMesher stubMesher = new ChunkMesher(BlockRegistry.createDefault(), null) {
             @Override
             public ChunkMeshData mesh(ChunkPos pos, ChunkWithNeighbors cn) {
-                return new ChunkMeshData(pos, new float[0], new int[0], new float[0], new int[0], 0, cn.center());
+                return new ChunkMeshData(pos, Geometry.EMPTY, Geometry.EMPTY, 0, cn.center());
             }
         };
 

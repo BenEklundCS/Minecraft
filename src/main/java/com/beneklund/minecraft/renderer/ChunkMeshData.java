@@ -1,5 +1,6 @@
 package com.beneklund.minecraft.renderer;
 
+import com.beneklund.minecraft.platform.graphics.Geometry;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 
@@ -9,11 +10,4 @@ import com.beneklund.minecraft.world.ChunkPos;
 // Geometry is split into two buffers up front so the renderer can draw opaque blocks first
 // (depth write on) and transparent blocks (water, glass, leaves) second (depth write off, blending).
 // vertexCount is the combined total across both buffers — used by tests as a sanity check.
-public record ChunkMeshData(
-        ChunkPos pos,
-        float[] opaqueVerts,
-        int[] opaqueIdx,
-        float[] transparentVerts,
-        int[] transparentIdx,
-        int vertexCount,
-        Chunk chunk) {}
+public record ChunkMeshData(ChunkPos pos, Geometry opaque, Geometry transparent, int vertexCount, Chunk chunk) {}

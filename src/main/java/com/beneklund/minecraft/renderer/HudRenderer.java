@@ -3,6 +3,7 @@ package com.beneklund.minecraft.renderer;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
+import com.beneklund.minecraft.platform.graphics.Geometry;
 import com.beneklund.minecraft.platform.graphics.HudMesh;
 import com.beneklund.minecraft.util.Direction;
 import java.util.Arrays;
@@ -21,7 +22,7 @@ public class HudRenderer implements IRenderable {
 
     private static final ShaderProgram HUD_COLOR = new ShaderProgram("/shaders/hud.vert", "/shaders/hud_color.frag");
     private static final ShaderProgram HUD_TEXTURE = new ShaderProgram("/shaders/hud.vert", "/shaders/hud.frag");
-    private Vector2f lastWindowSize;
+    private Vector2f lastWindowSize = new Vector2f();
     private Matrix4f ortho = new Matrix4f();
     private boolean layoutDirty = false;
 
@@ -36,8 +37,8 @@ public class HudRenderer implements IRenderable {
     public HudRenderer(BlockRegistry blocks, TextureAtlas atlas) {
         this.blocks = blocks;
         this.atlas = atlas;
-        hotBar = new HudMesh();
-        crosshair = new HudMesh();
+        rebuildHotBar();
+        rebuildCrosshair();
     }
 
     public void setHotbar(Block[] slots, int selected) {
@@ -92,11 +93,29 @@ public class HudRenderer implements IRenderable {
             hotBar.delete();
             hotBar = null;
         }
+        hotBar = new HudMesh(getHotbarGeometry());
+    }
 
+    private void rebuildHighlightedSlot() {
+        if (highlightedSlot != null) {
+            highlightedSlot.delete();
+            highlightedSlot = null;
+        }
+        highlightedSlot = new HudMesh(getHighlightedSlotGeometry());
+    }
+
+    private void rebuildCrosshair() {
+        if (crosshair != null) {
+            crosshair.delete();
+            crosshair = null;
+        }
+        crosshair = new HudMesh(getCrosshairGeometry());
+    }
+
+    private Geometry getHotbarGeometry() {
         float totalWidth = SLOT_COUNT * SLOT_SIZE + (SLOT_COUNT - 1) * SLOT_GAP;
         float startX = (lastWindowSize.x - totalWidth) / 2f;
         float startY = lastWindowSize.y - SLOT_SIZE - SLOT_MARGIN;
-
         float[] vertices = new float[SLOT_COUNT * 4 * 8];
         int[] indices = new int[SLOT_COUNT * 6];
         int count = 0;
@@ -154,27 +173,12 @@ public class HudRenderer implements IRenderable {
             indices[iBase + 5] = v + 2;
             count++;
         }
-
-        hotBar = new HudMesh();
-        hotBar.upload(Arrays.copyOf(vertices, count * 4 * 8), Arrays.copyOf(indices, count * 6));
+        return new Geometry(vertices, indices);
     }
 
-    private void rebuildHighlightedSlot() {
-        if (highlightedSlot != null) {
-            highlightedSlot.delete();
-            highlightedSlot = null;
-        }
-
+    private Geometry getHighlightedSlotGeometry() {
         float totalWidth = SLOT_COUNT * SLOT_SIZE + (SLOT_COUNT - 1) * SLOT_GAP;
         float startX = (lastWindowSize.x - totalWidth) / 2f;
-        float[] vertices = getHighlightedSlotVertices(startX);
-        int[] indices = {0, 1, 2, 1, 3, 2};
-
-        highlightedSlot = new HudMesh();
-        highlightedSlot.upload(vertices, indices);
-    }
-
-    private float[] getHighlightedSlotVertices(float startX) {
         float startY = lastWindowSize.y - SLOT_SIZE - SLOT_MARGIN;
 
         float x = startX + selectedSlot * (SLOT_SIZE + SLOT_GAP) - 2f;
@@ -183,19 +187,18 @@ public class HudRenderer implements IRenderable {
 
         float r = 0.5f, g = 0.5f, b = 0.5f, a = 1.0f, u = 0.0f, v = 0.0f;
 
-        return new float[] {
+        float[] vertices = {
             x, y, r, g, b, a, u, v, // TL
             x + S, y, r, g, b, a, u, v, // TR
             x, y + S, r, g, b, a, u, v, // BL
             x + S, y + S, r, g, b, a, u, v, // BR
         };
+        int[] indices = new int[] {0, 1, 2, 1, 3, 2};
+
+        return new Geometry(vertices, indices);
     }
 
-    private void rebuildCrosshair() {
-        if (crosshair != null) {
-            crosshair.delete();
-            crosshair = null;
-        }
+    private Geometry getCrosshairGeometry() {
         float cx = lastWindowSize.x / 2f, cy = lastWindowSize.y / 2f;
         float half = 8f;
         float thick = 1.5f;
@@ -268,8 +271,7 @@ public class HudRenderer implements IRenderable {
             u,
             v, // BR
         };
-        int[] indices = {0, 1, 2, 1, 3, 2, 4, 5, 6, 5, 7, 6};
-        crosshair = new HudMesh();
-        crosshair.upload(vertices, indices);
+        int[] indices = new int[] {0, 1, 2, 1, 3, 2, 4, 5, 6, 5, 7, 6};
+        return new Geometry(vertices, indices);
     }
 }
