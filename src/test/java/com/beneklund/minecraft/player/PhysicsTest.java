@@ -145,4 +145,67 @@ class PhysicsTest {
         assertEquals(0.0f, body.getVelocity().z, 1e-4, "depth velocity zeroed against the wall");
         assertEquals(2.3f, body.getPosition().z, 1e-4, "snapped to the near face, not through to cell 0");
     }
+
+    // Fly mode used to be integrated inline in Game, which meant two places moved the player and
+    // only one of them was Physics. These four pin the flying branch hard enough that nothing
+    // outside Physics needs to move a body again — that's what "exactly one code path" buys.
+
+    // The regression that matters. Player.tick sets velocity.y = 0 when you're hovering (neither
+    // ascending nor descending), so if gravity is applied before the flying branch you accumulate
+    // -GRAVITY*dt every tick and sink about half a block per second while apparently holding still.
+    @Test
+    void flying_hovering_holdsAltitude() {
+        Physics physics = new Physics();
+        FakeBody body = new FakeBody(new Vector3f(0.5f, 80, 0.5f), new Vector3f());
+        IWorldAuthority world = worldWhere(cell -> cell.y < 0);
+
+        for (int i = 0; i < 60; i++) {
+            body.getVelocity().set(0, 0, 0); // what Player.tick does every frame while hovering
+            physics.update(body, world, 1f / 60f, true);
+        }
+
+        assertEquals(80f, body.getPosition().y, 1e-4, "a hovering second must not lose altitude");
+    }
+
+    // Ascending is where a gravity leak hides: 50 - 32*(1/60) is still ~49.5, so the position looks
+    // right and only the velocity shows the drag. Assert the velocity too.
+    @Test
+    void flying_ascending_isNotDraggedDownByGravity() {
+        Physics physics = new Physics();
+        FakeBody body = new FakeBody(new Vector3f(0.5f, 80, 0.5f), new Vector3f(0, 50, 0));
+        IWorldAuthority world = worldWhere(cell -> cell.y < 0);
+
+        physics.update(body, world, 0.1f, true);
+
+        assertEquals(85f, body.getPosition().y, 1e-4, "moved by exactly velocity * dt");
+        assertEquals(50f, body.getVelocity().y, 1e-4, "velocity untouched — no gravity in fly mode");
+    }
+
+    // No collision either: fly mode is noclip, so a solid world doesn't stop or snap the body.
+    @Test
+    void flying_passesThroughSolidBlocks() {
+        Physics physics = new Physics();
+        FakeBody body = new FakeBody(new Vector3f(0.5f, 50, 0.5f), new Vector3f(10, 0, 0));
+        IWorldAuthority world = worldWhere(cell -> true); // solid everywhere
+
+        physics.update(body, world, 0.1f, true);
+
+        assertEquals(1.5f, body.getPosition().x, 1e-4, "no snapping to a face");
+        assertEquals(10f, body.getVelocity().x, 1e-4, "no velocity zeroed against a wall");
+    }
+
+    // Physics is still the thing that moves the body in fly mode — the point of the whole change.
+    // A body with velocity on all three axes advances on all three.
+    @Test
+    void flying_movesOnEveryAxis() {
+        Physics physics = new Physics();
+        FakeBody body = new FakeBody(new Vector3f(0, 50, 0), new Vector3f(3, -4, 5));
+        IWorldAuthority world = worldWhere(cell -> cell.y < 0);
+
+        physics.update(body, world, 2f, true);
+
+        assertEquals(6f, body.getPosition().x, 1e-4);
+        assertEquals(42f, body.getPosition().y, 1e-4);
+        assertEquals(10f, body.getPosition().z, 1e-4);
+    }
 }

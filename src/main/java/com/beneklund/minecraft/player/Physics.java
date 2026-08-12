@@ -30,6 +30,7 @@ public class Physics {
     }
 
     private void fly(IPhysicsBody body, float dt) {
+        body.setOnGround(false);
         body.getPosition().add(body.getVelocity().x * dt, body.getVelocity().y * dt, body.getVelocity().z * dt);
     }
 
