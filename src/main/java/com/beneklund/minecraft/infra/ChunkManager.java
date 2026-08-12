@@ -18,13 +18,13 @@ import java.util.function.Consumer;
 // load/unload work. Sits between the game loop and ChunkStore so the loop
 // never blocks on I/O or generation.
 public class ChunkManager {
-    private static final int CHUNK_LOAD_RADIUS = 10;
     // Cap how many new chunks we kick off per tick so a large radius fills in over several
     // frames instead of allocating + queueing the whole square at once. Spiral order means
     // the nearest missing chunks always win the budget first. Real backpressure (bounded
     // upload queue, in-flight cap, eviction) is a later phase.
     private static final int MAX_LOADS_PER_TICK = 8;
 
+    private final WorldConfig worldConfig;
     private final World world;
     private final IChunkStore chunkStore;
 
@@ -52,13 +52,14 @@ public class ChunkManager {
             IWorldAuthority authority,
             IChunkStore chunkStore,
             LightEngine lightEngine) {
+        worldConfig = config;
         this.world = world;
         this.chunkStore = chunkStore;
         this.lightEngine = lightEngine;
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
         generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
         meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
-        CHUNK.info("{} generation + {} meshing threads, load radius {}", threads, threads, CHUNK_LOAD_RADIUS);
+        CHUNK.info("{} generation + {} meshing threads, load radius {}", threads, threads, worldConfig.loadRadius());
         meshJob = (JobInput in) -> {
             try {
                 if (!in.chunk.tryTransition(ChunkState.MESHING)) return;
@@ -106,7 +107,7 @@ public class ChunkManager {
 
     public void tick(ChunkPos playerPos) {
         // query list of chunk positions around the player
-        List<ChunkPos> chunkPositions = getChunksInRadius(playerPos, CHUNK_LOAD_RADIUS);
+        List<ChunkPos> chunkPositions = getChunksInRadius(playerPos, worldConfig.loadRadius());
         // UNLOAD
         int unloadsThisTick = 0;
         Set<ChunkPos> worldChunkPositionSet = world.getChunkPositions();

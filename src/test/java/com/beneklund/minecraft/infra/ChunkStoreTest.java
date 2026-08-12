@@ -90,7 +90,7 @@ class ChunkStoreTest {
         ChunkPos pos = new ChunkPos(0, 0);
         store.save(pos, new Chunk()); // creates the directory
 
-        Files.write(chunkFile(pos), new byte[Chunk.SIZE_XZ * Chunk.SIZE_Y * Chunk.SIZE_XZ]);
+        Files.write(chunkFile(pos), new byte[Chunk.size()]);
 
         assertTrue(store.load(pos).isEmpty(), "pre-header saves must be rejected, not misread");
     }

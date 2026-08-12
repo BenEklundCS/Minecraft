@@ -22,7 +22,7 @@ void main() {
     float faceBrightness = (vFaceId < 0.5) ? 1.0
                          : (vFaceId < 2.5) ? 0.8 : 0.6;
 
-    float light = max(vLight.x, vLight.y);
+    float light = max(vLight.x, vLight.y); // max of the two light channels, handles brightest between cases like a torch block which is under a sun-lit sky
     vec3 lit = texColor.rgb * vAO * light * faceBrightness * vTint;
     float dist = length(vViewPos);
     float fogFactor = clamp((dist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);

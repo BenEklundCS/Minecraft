@@ -7,15 +7,40 @@ import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.ChunkWithNeighbors;
+import com.beneklund.minecraft.world.LightEngine;
 import org.junit.jupiter.api.Test;
 
 class ChunkMesherTest {
 
+    // slots 10 and 11 of the 12-float stride, per VertexFormat.CHUNK
+    private static final int FLOATS_PER_VERTEX = 12;
+    private static final int SKY_SLOT = 10;
+    private static final int BLOCK_SLOT = 11;
+
     // null atlas → getUVs falls back to DEFAULT_UV; no GL context needed in tests
     private final ChunkMesher mesher = new ChunkMesher(BlockRegistry.createDefault(), null);
+    private final LightEngine lightEngine = new LightEngine(BlockRegistry.createDefault());
 
     private Chunk emptyChunk() {
         return new Chunk();
+    }
+
+    private float sky(float[] verts, int vertex) {
+        return verts[vertex * FLOATS_PER_VERTEX + SKY_SLOT];
+    }
+
+    // Slot 1 of the stride — vertex world Y, used to pick out one block's quads when the scene
+    // has more than one block in it.
+    private static float posY(float[] verts, int vertex) {
+        return verts[vertex * FLOATS_PER_VERTEX + 1];
+    }
+
+    // Light then mesh, the same order ChunkManager's mesh job uses — mesh() reads the LightMap
+    // the engine leaves on the chunk.
+    private ChunkMeshData meshLit(Chunk chunk) {
+        ChunkWithNeighbors cn = ChunkWithNeighbors.noNeighbors(chunk);
+        chunk.setLightData(lightEngine.compute(cn));
+        return mesher.mesh(new ChunkPos(0, 0), cn);
     }
 
     // Cardinals only; the four diagonals stay unloaded. Order is (north, south, east, west).
@@ -152,6 +177,81 @@ class ChunkMesherTest {
         int expectedFaces = 2 * (16 * 16) + 4 * (16 * 256); // = 16896
         assertEquals(expectedFaces * 4, data.vertexCount(), "only outer-shell faces emitted");
         assertEquals(expectedFaces * 6, data.opaque().indices().length);
+    }
+
+    // Lighting is per-vertex, not per-face: each corner averages the four cells touching it on the
+    // outside of the face. So a single shadowed column among those four reads 0.75, not 0 — one
+    // sample out of four went dark. Only a shadow wide enough to cover all four reaches 0, which
+    // is what skylight_underAFullRoof_isFullyDark pins.
+    //
+    // Quads come out in Direction.values() order — UP, DOWN, NORTH, SOUTH, EAST, WEST — so for a
+    // block with all six faces showing, quad n is vertices 4n..4n+3.
+    private static final float ONE_CORNER_SHADOWED = 0.75f;
+
+    @Test
+    void skylight_floatingBlock_shadowsItsOwnUnderside() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(1, 64, 1, Block.STONE);
+
+        float[] verts = meshLit(chunk).opaque().vertices();
+
+        for (int v = 0; v < 4; v++) assertEquals(1.0f, sky(verts, v), "UP looks into lit air");
+        // The block stops its own column, so one of the four cells under each bottom corner is
+        // dark; the other three are open sky beside it.
+        for (int v = 4; v < 8; v++)
+            assertEquals(ONE_CORNER_SHADOWED, sky(verts, v), "DOWN looks into the block's own shadow");
+        for (int v = 8; v < 24; v++) assertEquals(1.0f, sky(verts, v), "sides face open columns the sun reached");
+    }
+
+    // A 1x1 roof only darkens the one column beneath it, so it dims the top face by a quarter
+    // rather than blacking it out. The sides never sample that column at all.
+    @Test
+    void skylight_faceUnderOverhang_isDimmed() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(1, 70, 1, Block.STONE); // roof
+        chunk.setBlock(1, 64, 1, Block.STONE); // sits in its shadow
+
+        float[] verts = meshLit(chunk).opaque().vertices();
+
+        for (int v = 0; v < 4; v++) assertEquals(ONE_CORNER_SHADOWED, sky(verts, v), "UP is under the roof");
+        for (int v = 8; v < 24; v++) assertEquals(1.0f, sky(verts, v), "sides still see open sky");
+    }
+
+    // The case the whole feature exists for. Roof the entire chunk and the block below it loses
+    // every sample, so all six of its faces go fully dark.
+    //
+    // Asserted by vertex position rather than quad index: the roof emits faces too, and it sorts
+    // ahead of the buried block in the mesher's x -> y -> z walk. Only the block at y=64 has
+    // vertices at or below y=65. Its own samples stay inside the chunk, so none of them hit the
+    // unloaded-neighbor path that reads as full sky.
+    @Test
+    void skylight_underAFullRoof_isFullyDark() {
+        Chunk chunk = emptyChunk();
+        for (int x = 0; x < Chunk.SIZE_XZ; x++)
+            for (int z = 0; z < Chunk.SIZE_XZ; z++) chunk.setBlock(x, 70, z, Block.STONE);
+        chunk.setBlock(1, 64, 1, Block.STONE);
+
+        float[] verts = meshLit(chunk).opaque().vertices();
+
+        int checked = 0;
+        for (int v = 0; v < verts.length / FLOATS_PER_VERTEX; v++) {
+            if (posY(verts, v) > 65.0f) continue;
+            assertEquals(0.0f, sky(verts, v), "vertex " + v + " is under a full roof");
+            checked++;
+        }
+        assertEquals(24, checked, "all six faces of the buried block should have been checked");
+    }
+
+    // block light is unimplemented, so slot 11 must stay 0 — frag takes max(sky, block) and any
+    // nonzero here pins every fragment bright
+    @Test
+    void blockLightSlot_isZero() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(1, 64, 1, Block.STONE);
+
+        float[] verts = meshLit(chunk).opaque().vertices();
+
+        for (int v = 0; v < 24; v++) assertEquals(0.0f, verts[v * FLOATS_PER_VERTEX + BLOCK_SLOT], "vertex " + v);
     }
 
     @Test

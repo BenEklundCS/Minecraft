@@ -102,11 +102,11 @@ class ChunkManagerTest {
     }
 
     // getChunksInRadius touches no collaborator — it's pure spiral arithmetic over its two
-    // arguments — and the constructor only stores its dependencies. The one place a constructor
-    // argument is dereferenced is config.seed() inside genJob, which nothing here submits. So
-    // nulls are safe, and the cache tests skip building a BlockRegistry to get a real mesher.
+    // arguments. The config is real because the constructor reads loadRadius() for its startup
+    // log; every other dependency is only stored, or dereferenced inside a job none of these
+    // tests submit. So the rest stay null and the cache tests skip building a real mesher.
     private static ChunkManager cacheOnlyManager() {
-        return new ChunkManager(null, null, null, null, null, null, null);
+        return new ChunkManager(new WorldConfig(0L, 10), null, null, null, null, null, null);
     }
 
     // The card's acceptance criterion. Two ChunkPos values that are equal but not the same

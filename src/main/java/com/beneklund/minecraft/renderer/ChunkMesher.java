@@ -10,7 +10,9 @@ import com.beneklund.minecraft.util.Direction;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.ChunkWithNeighbors;
+import com.beneklund.minecraft.world.LightMap;
 import com.beneklund.minecraft.world.gen.Biome;
+import java.util.List;
 
 // Converts a Chunk's block data into a ChunkMeshData — one Geometry for the opaque pass and
 // one for the transparent pass. No GL calls, so this is safe on any worker thread; the caller
@@ -126,6 +128,10 @@ public class ChunkMesher {
 
                         buf.ensureQuadCapacity();
 
+                        float[] sky = new float[VERTICES_PER_QUAD];
+                        for (int i = 0; i < VERTICES_PER_QUAD; i++)
+                            sky[i] = vertexSkyLightLevel(cn, x, y, z, dir, i) / (float) LightMap.MAX_LEVEL;
+
                         float[] uvs = getUVs(def, dir);
                         Color tint = getTint(blockId, dir);
                         float[][] corners = FACE_VERTICES[dir.ordinal()];
@@ -134,12 +140,13 @@ public class ChunkMesher {
                         float[] fracs = FACE_UV_FRACS[dir.ordinal()];
 
                         int[] ao = new int[VERTICES_PER_QUAD];
-                        for (int i = 0; i < VERTICES_PER_QUAD; i++) ao[i] = aoLevel(cn, x, y, z, dir, i);
+                        for (int i = 0; i < VERTICES_PER_QUAD; i++) ao[i] = ambientOcclusionLevel(cn, x, y, z, dir, i);
 
                         for (int i = 0; i < VERTICES_PER_QUAD; i++) {
                             float u = fracs[i * 2] == 0 ? uMin : uMax;
                             float v = fracs[i * 2 + 1] == 0 ? vMin : vMax;
-                            fillBufferVerts(buf, corners[i], x, y, z, u, v, AO_RAMP[ao[i]], faceId, tint, 1.0f, 0.0f);
+
+                            fillBufferVerts(buf, corners[i], x, y, z, u, v, AO_RAMP[ao[i]], faceId, tint, sky[i], 0.0f);
                         }
                         fillBufferIdxs(buf, ao);
                     }
@@ -214,33 +221,50 @@ public class ChunkMesher {
 
         if (cn.resolve(nx, nz).isEmpty()) return registry.get(blockId).transparent();
         Block neighbor = cn.blockAt(nx, ny, nz);
-        return isOpaque(neighbor) || neighbor == blockId;
-    }
-
-    private boolean isOpaque(Block block) {
-        BlockDef blockDef = registry.get(block);
-        return blockDef.solid() && !blockDef.transparent();
+        return registry.get(neighbor).opaque() || neighbor == blockId;
     }
 
     private boolean opaqueAt(ChunkWithNeighbors cn, int x, int y, int z, int[] offset) {
-        return isOpaque(cn.blockAt(x + offset[0], y + offset[1], z + offset[2]));
+        return registry.get(cn.blockAt(x + offset[0], y + offset[1], z + offset[2]))
+                .opaque();
     }
 
-    private int aoLevel(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, int corner) {
+    private int ambientOcclusionLevel(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, int corner) {
+        Offsets offsets = getOffsets(dir, corner);
+
+        boolean opaqueAtSide1 = opaqueAt(cn, x, y, z, offsets.side1());
+        boolean opaqueAtSide2 = opaqueAt(cn, x, y, z, offsets.side2());
+        boolean opaqueAtDiagonal = opaqueAt(cn, x, y, z, offsets.diagonal());
+
+        return aoLevelFormula(opaqueAtSide1, opaqueAtSide2, opaqueAtDiagonal);
+    }
+
+    private float vertexSkyLightLevel(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, int corner) {
+        List<int[]> offsets = getOffsets(dir, corner).asList();
+        float accumulator = 0.0f;
+        for (int[] off : offsets) {
+            if (opaqueAt(cn, x, y, z, off)) accumulator += 0;
+            else accumulator += cn.skyLightAt(x, y, z, off);
+        }
+        return accumulator / offsets.size(); // average
+    }
+
+    private record Offsets(int[] off, int[] side1, int[] side2, int[] diagonal) {
+        public List<int[]> asList() {
+            return List.of(off, side1, side2, diagonal);
+        }
+    }
+
+    private Offsets getOffsets(Direction dir, int corner) {
         int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
         float[] c = FACE_VERTICES[dir.ordinal()][corner];
 
-        AoSample frame = getAoSample(off, c);
+        Sample frame = getSample(off, c);
 
         int[] side1 = getOffset(frame, frame.sa(), 0);
         int[] side2 = getOffset(frame, 0, frame.sb());
-        int[] diag = getOffset(frame, frame.sa(), frame.sb());
-
-        boolean opaqueAtSide1 = opaqueAt(cn, x, y, z, side1);
-        boolean opaqueAtSide2 = opaqueAt(cn, x, y, z, side2);
-        boolean opaqueAtDiag = opaqueAt(cn, x, y, z, diag);
-
-        return aoLevelFormula(opaqueAtSide1, opaqueAtSide2, opaqueAtDiag);
+        int[] diagonal = getOffset(frame, frame.sa(), frame.sb());
+        return new Offsets(off, side1, side2, diagonal);
     }
 
     protected static int aoLevelFormula(boolean side1, boolean side2, boolean diag) {
@@ -248,26 +272,26 @@ public class ChunkMesher {
         return 3 - ((side1 ? 1 : 0) + (side2 ? 1 : 0) + (diag ? 1 : 0)); // 3 - (side1 + side2 + corner);
     }
 
-    private AoSample getAoSample(int[] off, float[] c) {
+    private Sample getSample(int[] off, float[] c) {
         int n = (off[0] != 0) ? 0 : (off[1] != 0) ? 1 : 2; // normal axis
         int a = (n == 0) ? 1 : 0; // first corner axis
         int b = (n == 2) ? 1 : 2; // second corner axis
 
         int sa = 2 * (int) c[a] - 1; // 0 → -1, 1 → +1
         int sb = 2 * (int) c[b] - 1;
-        return new AoSample(n, a, b, sa, sb, off);
+        return new Sample(n, a, b, sa, sb, off);
     }
 
     // `n`, `a` and `b` are axis indices. `sa` and `sb` are components of an offset.
     // | **offset**     | `{+1, 1, 0}`  | how far to *move*. Added to a coordinate.                         |
     // | -------------- | ------------- | ----------------------------------------------------------------- |
     // | **axis index** | `0`, `1`, `2` | which *slot* of a 3-element array. |
-    private record AoSample(int n, int a, int b, int sa, int sb, int[] off) {}
+    private record Sample(int n, int a, int b, int sa, int sb, int[] off) {}
 
     // offset for side1 - pass 0 to sb
     // offset for side2 - pass 0 to sa
     // offset for diag  - pass sa and sb
-    private int[] getOffset(AoSample f, int stepA, int stepB) {
+    private int[] getOffset(Sample f, int stepA, int stepB) {
         int[] arr = new int[3];
         arr[f.n()] = f.off()[f.n()];
         arr[f.a()] = stepA;

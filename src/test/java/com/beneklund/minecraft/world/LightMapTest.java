@@ -36,8 +36,8 @@ public class LightMapTest {
 
     @Test
     public void useFullLightMap() {
-        LightMap lightMap = new LightMap(Chunk.SIZE_XZ);
-        assertEquals(Chunk.SIZE_XZ, lightMap.size());
+        LightMap lightMap = new LightMap(Chunk.size());
+        assertEquals(Chunk.size(), lightMap.size());
         for (int i = 0; i < Chunk.SIZE_Y; i++) {
             lightMap.setSky(i, i % LEVEL_COUNT);
             lightMap.setBlock(i, i % LEVEL_COUNT);

@@ -1,6 +1,8 @@
 package com.beneklund.minecraft.world;
 
 public final class LightMap {
+    public static int MAX_LEVEL = 15;
+    public static int MIN_LEVEL = 0;
     private final byte[] light;
     private final int size;
 

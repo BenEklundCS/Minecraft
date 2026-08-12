@@ -70,13 +70,33 @@ public class ChunkWithNeighbors {
     }
 
     public Block blockAt(int centerLocalX, int y, int centerLocalZ) {
-        // SIZE_Y is the length, so 255 is the last valid index. At y == 256 Chunk.index() lands
-        // exactly one past the end of the array and getBlock throws — it has no bounds guard.
-        if (y < 0 || y >= Chunk.SIZE_Y) return Block.AIR;
-        Chunk chunk = resolve(centerLocalX, centerLocalZ).orElse(null);
+        Chunk chunk = resolveInBounds(centerLocalX, y, centerLocalZ);
         if (chunk == null) return Block.AIR;
-        return chunk.getBlock(
-                Math.floorMod(centerLocalX, Chunk.SIZE_XZ), y, Math.floorMod(centerLocalZ, Chunk.SIZE_XZ));
+        return chunk.getBlock(local(centerLocalX), y, local(centerLocalZ));
+    }
+
+    // Raw 0..15, not normalized — callers averaging several samples divide once at the end.
+    //
+    // The two out-of-range answers are deliberately different. Below bedrock is dark. Above the
+    // column, or into a neighbor that isn't loaded, is open sky: an unloaded neighbor is the
+    // render edge, and guessing dark there paints a black seam along the chunk boundary until
+    // the neighbor arrives and triggers a remesh.
+    public int skyLightAt(int centerLocalX, int y, int centerLocalZ) {
+        if (y < 0) return LightMap.MIN_LEVEL;
+        Chunk chunk = resolveInBounds(centerLocalX, y, centerLocalZ);
+        if (chunk == null) return LightMap.MAX_LEVEL;
+        return chunk.getSkyLight(local(centerLocalX), y, local(centerLocalZ));
+    }
+
+    // Sample a cell relative to this one. The {dx, dy, dz} overloads exist so that a caller
+    // walking a list of offsets can't apply the offset to one lookup and forget it on the next —
+    // the two reads it makes about the same cell now look identical at the call site.
+    public Block blockAt(int centerLocalX, int y, int centerLocalZ, int[] off) {
+        return blockAt(centerLocalX + off[0], y + off[1], centerLocalZ + off[2]);
+    }
+
+    public int skyLightAt(int centerLocalX, int y, int centerLocalZ, int[] off) {
+        return skyLightAt(centerLocalX + off[0], y + off[1], centerLocalZ + off[2]);
     }
 
     // resolve translates a center local x and local z chunk coordinate into the correct chunk
@@ -97,5 +117,14 @@ public class ChunkWithNeighbors {
 
     private int normalize(int i) {
         return (i < 0) ? 0 : (i < Chunk.SIZE_XZ) ? 1 : 2;
+    }
+
+    private Chunk resolveInBounds(int centerLocalX, int y, int centerLocalZ) {
+        if (y < 0 || y >= Chunk.SIZE_Y) return null;
+        return resolve(centerLocalX, centerLocalZ).orElse(null);
+    }
+
+    private static int local(int i) {
+        return Math.floorMod(i, Chunk.SIZE_XZ);
     }
 }

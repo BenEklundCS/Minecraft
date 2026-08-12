@@ -36,4 +36,8 @@ public record BlockDef(boolean solid, boolean transparent, boolean blended, bool
     public String getTileFace(Direction direction) {
         return tileNames[direction.ordinal()];
     }
+
+    public boolean opaque() {
+        return solid() && !transparent();
+    }
 }

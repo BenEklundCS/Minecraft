@@ -7,8 +7,8 @@ public class Chunk {
     public static final int SIZE_XZ = 16;
     public static final int SIZE_Y = 256;
     // Storage stays a packed byte[] (1 byte/block) for memory and cache; Block is the API face.
-    private byte[] blocks = new byte[SIZE_XZ * SIZE_XZ * SIZE_Y]; // 16 * 16 * 256 == 65,536
-    private volatile LightMap light = new LightMap(SIZE_XZ * SIZE_XZ * SIZE_Y);
+    private byte[] blocks = new byte[size()];
+    private volatile LightMap light = new LightMap(size());
     private final AtomicReference<ChunkState> state = new AtomicReference<>(ChunkState.UNLOADED);
     // Tracks "has edits not yet written to disk" separately from the mesh-state machine,
     // which uses DIRTY only to signal "needs re-meshing" and clears it on the next tick.
@@ -18,6 +18,10 @@ public class Chunk {
 
     public Chunk(byte[] blocks) {
         this.blocks = blocks;
+    }
+
+    public static int size() {
+        return SIZE_XZ * SIZE_XZ * SIZE_Y; // 16 * 16 * 256 == 65,536
     }
 
     public Block getBlock(int x, int y, int z) {
@@ -37,7 +41,7 @@ public class Chunk {
         needsPersisting = false;
     }
 
-    private static int index(int x, int y, int z) {
+    protected static int index(int x, int y, int z) {
         return x + z * SIZE_XZ + y * SIZE_XZ * SIZE_XZ; // x + z * 16 + y * 256
     }
 
@@ -67,10 +71,10 @@ public class Chunk {
     }
 
     public int getSkyLight(int x, int y, int z) {
-        return 1;
+        return light.sky(index(x, y, z));
     }
 
-    public int getBlockLight() {
-        return 1;
+    public int getBlockLight(int x, int y, int z) {
+        return light.block(index(x, y, z));
     }
 }
