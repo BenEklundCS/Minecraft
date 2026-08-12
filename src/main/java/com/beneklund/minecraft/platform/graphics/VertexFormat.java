@@ -10,7 +10,8 @@ public final class VertexFormat {
             new VertexAttribute(AttributeType.VEC2), // uv
             new VertexAttribute(AttributeType.FLOAT), // ao
             new VertexAttribute(AttributeType.FLOAT), // faceId
-            new VertexAttribute(AttributeType.VEC3))); // tint rgb
+            new VertexAttribute(AttributeType.VEC3), // tint rgb
+            new VertexAttribute(AttributeType.VEC2))); // light: (sky, block), each 0..1
 
     public static final VertexFormat HUD = new VertexFormat(List.of(
             new VertexAttribute(AttributeType.VEC2), // aPos   vec2

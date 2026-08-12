@@ -139,7 +139,7 @@ public class ChunkMesher {
                         for (int i = 0; i < VERTICES_PER_QUAD; i++) {
                             float u = fracs[i * 2] == 0 ? uMin : uMax;
                             float v = fracs[i * 2 + 1] == 0 ? vMin : vMax;
-                            fillBufferVerts(buf, corners[i], x, y, z, u, v, AO_RAMP[ao[i]], faceId, tint);
+                            fillBufferVerts(buf, corners[i], x, y, z, u, v, AO_RAMP[ao[i]], faceId, tint, 1.0f, 0.0f);
                         }
                         fillBufferIdxs(buf, ao);
                     }
@@ -155,7 +155,18 @@ public class ChunkMesher {
     }
 
     private void fillBufferVerts(
-            ChunkMeshingBuffer buf, float[] c, int x, int y, int z, float u, float v, float ao, float f, Color t) {
+            ChunkMeshingBuffer buf,
+            float[] c,
+            int x,
+            int y,
+            int z,
+            float u,
+            float v,
+            float ao,
+            float f,
+            Color t,
+            float sky,
+            float block) {
         buf.writeVert(x + c[0]);
         buf.writeVert(y + c[1]);
         buf.writeVert(z + c[2]);
@@ -166,6 +177,8 @@ public class ChunkMesher {
         buf.writeVert(t.red());
         buf.writeVert(t.green());
         buf.writeVert(t.blue());
+        buf.writeVert(sky);
+        buf.writeVert(block);
     }
 
     private void fillBufferIdxs(ChunkMeshingBuffer buf, int[] ao) {

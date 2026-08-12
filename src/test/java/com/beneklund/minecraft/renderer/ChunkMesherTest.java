@@ -32,7 +32,7 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
-        assertEquals(24 * 10, data.opaque().vertices().length, "24 vertices × 10 floats");
+        assertEquals(24 * 12, data.opaque().vertices().length, "24 vertices × 12 floats");
         assertEquals(36, data.opaque().indices().length, "6 quads × 6 indices");
         assertEquals(0, data.transparent().vertices().length, "stone is opaque — nothing in the transparent buffer");
         assertEquals(0, data.transparent().indices().length);
@@ -49,7 +49,7 @@ class ChunkMesherTest {
         ChunkMeshData data = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk));
 
         assertEquals(24, data.vertexCount(), "6 quads × 4 vertices");
-        assertEquals(24 * 10, data.transparent().vertices().length, "water lives in the transparent buffer");
+        assertEquals(24 * 12, data.transparent().vertices().length, "water lives in the transparent buffer");
         assertEquals(36, data.transparent().indices().length);
         assertEquals(0, data.opaque().vertices().length, "nothing opaque");
         assertEquals(0, data.opaque().indices().length);

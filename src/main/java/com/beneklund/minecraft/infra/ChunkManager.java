@@ -42,15 +42,19 @@ public class ChunkManager {
     private ChunkCacheKey cache;
     private List<ChunkPos> lastChunksInRadius;
 
+    private final LightEngine lightEngine;
+
     public ChunkManager(
             WorldConfig config,
             World world,
             IWorldGenerator generator,
             ChunkMesher mesher,
             IWorldAuthority authority,
-            IChunkStore chunkStore) {
+            IChunkStore chunkStore,
+            LightEngine lightEngine) {
         this.world = world;
         this.chunkStore = chunkStore;
+        this.lightEngine = lightEngine;
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
         generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
         meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
@@ -58,18 +62,14 @@ public class ChunkManager {
         meshJob = (JobInput in) -> {
             try {
                 if (!in.chunk.tryTransition(ChunkState.MESHING)) return;
-                // Neighbors resolve here on the worker rather than at submit time, so one that
-                // finished generating while this job sat in the queue is still picked up.
-                // The center comes back through meshable() too: MESHING can't transition to
-                // UNLOADING, so the chunk is still in the world map and meshable() can't null it.
                 long startedAt = System.nanoTime();
-                ChunkMeshData meshData = mesher.mesh(in.pos, ChunkWithNeighbors.around(in.pos, this::meshable));
+                ChunkWithNeighbors cn = ChunkWithNeighbors.around(in.pos, this::meshable);
+                in.chunk.setLightData(lightEngine.compute(cn));
+                ChunkMeshData meshData = mesher.mesh(in.pos, cn);
                 if (!in.chunk.tryTransition(ChunkState.READY_TO_UPLOAD)) return;
                 uploadQueue.add(meshData);
                 CHUNK.trace("meshed {} in {} us", in.pos, (System.nanoTime() - startedAt) / 1_000);
             } catch (Throwable t) {
-                // Throwable, not Exception: an OutOfMemoryError while building a mesh would
-                // otherwise leave the chunk wedged in MESHING with nothing logged.
                 in.chunk.tryTransition(ChunkState.ERROR);
                 CHUNK.error("mesh job failed for chunk {}", in.pos, t);
             }
@@ -80,9 +80,6 @@ public class ChunkManager {
                 long startedAt = System.nanoTime();
                 generator.generate(in.pos, config.seed(), in.chunk);
                 CHUNK.trace("generated {} in {} us", in.pos, (System.nanoTime() - startedAt) / 1_000);
-                // Generator calls setBlock thousands of times; the deterministic output doesn't
-                // need persisting (regen produces the same bytes). Clear the flag so only real
-                // player edits trigger a disk write.
                 in.chunk.clearNeedsPersisting();
                 authority.markNeighborsDirty(in.pos);
                 if (!in.chunk.tryTransition(ChunkState.QUEUED_MESH)) return;

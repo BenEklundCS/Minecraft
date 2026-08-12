@@ -4,6 +4,7 @@ in float vAO;
 in float vFaceId;
 in vec3  vTint;
 in vec3  vViewPos;
+in vec2  vLight;
 
 uniform sampler2D uAtlas;
 uniform vec3      uFogColor;
@@ -21,7 +22,8 @@ void main() {
     float faceBrightness = (vFaceId < 0.5) ? 1.0
                          : (vFaceId < 2.5) ? 0.8 : 0.6;
 
-    vec3 lit = texColor.rgb * vAO * faceBrightness * vTint;
+    float light = max(vLight.x, vLight.y);
+    vec3 lit = texColor.rgb * vAO * light * faceBrightness * vTint;
     float dist = length(vViewPos);
     float fogFactor = clamp((dist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
     FragColor = vec4(mix(lit, uFogColor, fogFactor), texColor.a);

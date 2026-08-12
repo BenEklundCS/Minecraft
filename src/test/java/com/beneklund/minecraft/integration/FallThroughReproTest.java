@@ -10,12 +10,7 @@ import com.beneklund.minecraft.player.IPhysicsBody;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.util.AABB;
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkPos;
-import com.beneklund.minecraft.world.ChunkState;
-import com.beneklund.minecraft.world.LocalWorldAuthority;
-import com.beneklund.minecraft.world.World;
-import com.beneklund.minecraft.world.WorldConfig;
+import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.IGenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
 import java.util.Optional;
@@ -126,7 +121,9 @@ class FallThroughReproTest {
                     return Optional.empty();
                 }
             };
-            ChunkManager chunkManager = new ChunkManager(config, world, worldGen, mesher, authority, chunkStore);
+            LightEngine lightEngine = new LightEngine(registry);
+            ChunkManager chunkManager =
+                    new ChunkManager(config, world, worldGen, mesher, authority, chunkStore, lightEngine);
 
             FakeBody body = new FakeBody(new Vector3f(worldX, trueSurfaceY + 12, worldZ));
             Physics physics = new Physics();

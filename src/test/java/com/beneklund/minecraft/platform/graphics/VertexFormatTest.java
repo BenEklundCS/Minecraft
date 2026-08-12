@@ -26,11 +26,12 @@ public class VertexFormatTest {
     @Test
     public void vertexFormatChunkTest() {
         VertexFormat chunk = VertexFormat.CHUNK;
-        assertEquals(40, chunk.stride());
+        assertEquals(48, chunk.stride());
         assertEquals(0, chunk.offsetOf(0));
         assertEquals(12, chunk.offsetOf(1));
         assertEquals(20, chunk.offsetOf(2));
         assertEquals(24, chunk.offsetOf(3));
         assertEquals(28, chunk.offsetOf(4));
+        assertEquals(40, chunk.offsetOf(5));
     }
 }

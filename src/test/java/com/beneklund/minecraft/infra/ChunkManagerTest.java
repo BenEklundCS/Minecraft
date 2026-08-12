@@ -78,7 +78,9 @@ class ChunkManagerTest {
 
         World world = new World(new ConcurrentHashMap<>());
         WorldConfig config = new WorldConfig(42L, 4);
-        ChunkManager manager = new ChunkManager(config, world, stubGen, stubMesher, stubAuthority, stubChunkStore);
+        LightEngine lightEngine = new LightEngine(BlockRegistry.createDefault());
+        ChunkManager manager =
+                new ChunkManager(config, world, stubGen, stubMesher, stubAuthority, stubChunkStore, lightEngine);
 
         // Tick with 10 distinct player positions — each adds new chunks within radius 4 of that position.
         for (int i = 0; i < 10; i++) {
@@ -104,7 +106,7 @@ class ChunkManagerTest {
     // argument is dereferenced is config.seed() inside genJob, which nothing here submits. So
     // nulls are safe, and the cache tests skip building a BlockRegistry to get a real mesher.
     private static ChunkManager cacheOnlyManager() {
-        return new ChunkManager(null, null, null, null, null, null);
+        return new ChunkManager(null, null, null, null, null, null, null);
     }
 
     // The card's acceptance criterion. Two ChunkPos values that are equal but not the same

@@ -4,6 +4,7 @@ layout(location = 1) in vec2 aUV;
 layout(location = 2) in float aAO;
 layout(location = 3) in float aFaceId;
 layout(location = 4) in vec3 aTint;
+layout(location = 5) in vec2 aLight;
 
 uniform mat4 uModel;
 uniform mat4 uView;
@@ -14,6 +15,7 @@ out float vAO;
 out float vFaceId;
 out vec3  vTint;
 out vec3  vViewPos;
+out vec2 vLight;
 
 void main() {
     vec4 viewPos = uView * uModel * vec4(aPos, 1.0);
@@ -24,4 +26,5 @@ void main() {
     vAO     = aAO;
     vFaceId = aFaceId;
     vTint   = aTint;
+    vLight = aLight;
 }

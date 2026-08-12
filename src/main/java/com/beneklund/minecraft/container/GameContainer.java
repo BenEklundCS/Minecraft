@@ -24,11 +24,7 @@ import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.util.DeltaTracker;
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkPos;
-import com.beneklund.minecraft.world.LocalWorldAuthority;
-import com.beneklund.minecraft.world.World;
-import com.beneklund.minecraft.world.WorldConfig;
+import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.IGenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
 import java.io.IOException;
@@ -196,7 +192,8 @@ public class GameContainer {
         worldGen = new WorldGenerator(registry, generationSpecs);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         ChunkStore store = new ChunkStore(worldConfig.seed());
-        chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store);
+        LightEngine lightEngine = new LightEngine(registry);
+        chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store, lightEngine);
         physics = new Physics();
         WORLD.debug("world ready: {} generation spec(s), seed {}", generationSpecs.size(), worldConfig.seed());
     }
