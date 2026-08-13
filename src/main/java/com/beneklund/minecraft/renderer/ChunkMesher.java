@@ -49,24 +49,11 @@ public class ChunkMesher {
     private static final int[] QUAD_DIAGONAL_02 = {0, 1, 2, 2, 3, 0};
     private static final int[] QUAD_DIAGONAL_13 = {1, 2, 3, 3, 0, 1};
 
-    // Block-space step to reach the neighbor in each direction.
-    private static final int[][] NEIGHBOR_OFFSETS = {
-        {0, 1, 0}, // UP
-        {0, -1, 0}, // DOWN
-        {0, 0, -1}, // NORTH
-        {0, 0, 1}, // SOUTH
-        {1, 0, 0}, // EAST
-        {-1, 0, 0}, // WEST
-    };
-
     private static final int VERTICES_PER_QUAD = 4;
     private static final int FLOATS_PER_VERTEX = VertexFormat.CHUNK.floatsPerVertex();
     private static final int INDICES_PER_QUAD = 6;
     // Starting capacity covers a typical surface chunk without needing to grow.
     private static final int INITIAL_FACE_CAPACITY = 8192;
-
-    // Cached to avoid allocating a new array on every Direction.values() call in the inner loop.
-    private static final Direction[] DIRECTIONS = Direction.values();
 
     // faceId values matched to the brightness bands in chunk.frag:
     //   < 0.5 → 1.0 (bright),  < 2.5 → 0.8 (side),  else → 0.6 (dark)
@@ -123,7 +110,7 @@ public class ChunkMesher {
                     BlockDef def = registry.get(blockId);
                     ChunkMeshingBuffer buf = def.blended() ? transparent : opaque;
 
-                    for (Direction dir : DIRECTIONS) {
+                    for (Direction dir : Direction.DIRECTIONS) {
                         if (isCulled(cn, x, y, z, dir, blockId)) continue;
 
                         buf.ensureQuadCapacity();
@@ -212,8 +199,7 @@ public class ChunkMesher {
     // seam looks correct no matter when the neighbor shows up. When it doesn't match we lose a face
     // on the outermost loaded chunk, which is far cheaper than a wall through the middle of a lake.
     private boolean isCulled(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, Block blockId) {
-        int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
-        int nx = x + off[0], ny = y + off[1], nz = z + off[2];
+        int nx = x + dir.dx(), ny = y + dir.dy(), nz = z + dir.dz();
 
         if (ny < 0 || ny >= Chunk.SIZE_Y) {
             return false;
@@ -256,7 +242,7 @@ public class ChunkMesher {
     }
 
     private Offsets getOffsets(Direction dir, int corner) {
-        int[] off = NEIGHBOR_OFFSETS[dir.ordinal()];
+        int[] off = new int[] {dir.dx(), dir.dy(), dir.dz()};
         float[] c = FACE_VERTICES[dir.ordinal()][corner];
 
         Sample frame = getSample(off, c);

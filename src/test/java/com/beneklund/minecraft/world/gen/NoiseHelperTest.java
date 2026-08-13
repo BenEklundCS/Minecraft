@@ -8,7 +8,6 @@ class NoiseHelperTest {
 
     private final NoiseHelper noise = new NoiseHelper();
 
-    // normalized octave output stays in [-1, 1] across a spread of inputs
     @Test
     void noise2_outputInRange() {
         long seed = 12345L;
@@ -20,7 +19,6 @@ class NoiseHelperTest {
         }
     }
 
-    // same seed + coords always returns the same value — no hidden mutable state
     @Test
     void noise2_sameSeedAndCoords_sameOutput() {
         long seed = 99L;
@@ -29,7 +27,6 @@ class NoiseHelperTest {
         assertEquals(a, b);
     }
 
-    // same range guarantee holds for the 3D variant used by cave generation
     @Test
     void noise3_outputInRange() {
         long seed = 54321L;
@@ -42,7 +39,6 @@ class NoiseHelperTest {
         }
     }
 
-    // noise3 is also deterministic
     @Test
     void noise3_sameSeedAndCoords_sameOutput() {
         long seed = 77L;

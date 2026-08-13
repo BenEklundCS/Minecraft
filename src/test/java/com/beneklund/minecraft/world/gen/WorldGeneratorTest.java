@@ -14,7 +14,6 @@ class WorldGeneratorTest {
     private final ChunkPos origin = new ChunkPos(0, 0);
     private final long seed = 42L;
 
-    // same inputs always produce identical block data — generator has no mutable state
     @Test
     void generate_sameInputsTwice_identicalChunks() {
         Chunk a = new Chunk();
@@ -33,7 +32,6 @@ class WorldGeneratorTest {
         }
     }
 
-    // y=0 is always bedrock — no biome or noise value can override it
     @Test
     void generate_bedrock_atYZeroForAllColumns() {
         Chunk chunk = new Chunk();

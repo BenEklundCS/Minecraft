@@ -22,7 +22,7 @@ public class LocalWorldAuthority implements IWorldAuthority {
 
     @Override
     public BlockDef getBlock(int x, int y, int z) {
-        if (y < 0 || y >= Chunk.SIZE_Y) return registry.get(Block.AIR);
+        if (!Chunk.inYRange(y)) return registry.get(Block.AIR);
         Chunk chunk = getChunk(x, z);
         if (chunk == null) return registry.get(Block.AIR);
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
@@ -31,7 +31,7 @@ public class LocalWorldAuthority implements IWorldAuthority {
 
     @Override
     public void setBlock(int x, int y, int z, Block block) {
-        if (y < 0 || y >= Chunk.SIZE_Y) return;
+        if (!Chunk.inYRange(y)) return;
         Chunk chunk = getChunk(x, z);
         ChunkPos pos = getChunkPos(x, z);
         if (chunk == null) return;

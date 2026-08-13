@@ -120,7 +120,7 @@ public class ChunkWithNeighbors {
     }
 
     private Chunk resolveInBounds(int centerLocalX, int y, int centerLocalZ) {
-        if (y < 0 || y >= Chunk.SIZE_Y) return null;
+        if (!Chunk.inYRange(y)) return null;
         return resolve(centerLocalX, centerLocalZ).orElse(null);
     }
 

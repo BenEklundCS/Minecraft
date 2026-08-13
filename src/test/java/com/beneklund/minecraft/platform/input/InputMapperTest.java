@@ -20,8 +20,6 @@ class InputMapperTest {
         return new InputMapper(queue, InputMapper.DEFAULT_BINDINGS);
     }
 
-    // --- Movement: held bindings fire while down, starting on press ---
-
     record WasdCase(int key, float expectedDx, float expectedDz) {}
 
     static List<WasdCase> wasdCases() {
@@ -66,8 +64,6 @@ class InputMapperTest {
         assertTrue(mapper.drain(FRAME).isEmpty()); // nothing once released
     }
 
-    // --- Taps: fire once, on release ---
-
     record TapKeyCase(int key, Simple expected) {}
 
     static List<TapKeyCase> tapKeyCases() {
@@ -98,8 +94,6 @@ class InputMapperTest {
         assertTrue(mapper.drain(FRAME).isEmpty());
     }
 
-    // --- Hotbar select (tap, on release) ---
-
     record HotbarCase(int key, int expectedSlot) {}
 
     static List<HotbarCase> hotbarCases() {
@@ -124,8 +118,6 @@ class InputMapperTest {
 
         assertEquals(List.of(new IInputAction.HotbarAction.Select(tc.expectedSlot())), mapper.drain(FRAME));
     }
-
-    // --- Mouse buttons: now held, fire on press, repeat on a delay ---
 
     record MouseCase(int button, Simple expected) {}
 
@@ -160,8 +152,6 @@ class InputMapperTest {
         // crossing the 0.25s cadence fires the next hit
         assertTrue(mapper.drain(0.2f).contains(Simple.BREAK_BLOCK), "repeats after the delay elapses");
     }
-
-    // --- Scroll passes through as a ScrollAction ---
 
     @Test
     void scroll_emitsScrollAction() {

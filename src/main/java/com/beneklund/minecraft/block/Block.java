@@ -56,7 +56,8 @@ public enum Block {
     COAL_BLOCK((byte) 49),
     IRON_BLOCK((byte) 50),
     GOLD_BLOCK((byte) 51),
-    DIAMOND_BLOCK((byte) 52);
+    DIAMOND_BLOCK((byte) 52),
+    GLOWSTONE((byte) 53);
 
     private final byte id;
 

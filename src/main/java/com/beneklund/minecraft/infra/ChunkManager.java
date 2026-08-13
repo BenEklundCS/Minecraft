@@ -106,7 +106,6 @@ public class ChunkManager {
     }
 
     public void tick(ChunkPos playerPos) {
-        // query list of chunk positions around the player
         List<ChunkPos> chunkPositions = getChunksInRadius(playerPos, worldConfig.loadRadius());
         // UNLOAD
         int unloadsThisTick = 0;

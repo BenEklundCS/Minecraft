@@ -67,6 +67,7 @@
     "coal_block":         "textures/default_coal_block.png",
     "iron_block":         "textures/default_steel_block.png",
     "gold_block":         "textures/default_gold_block.png",
-    "diamond_block":      "textures/default_diamond_block.png"
+    "diamond_block":      "textures/default_diamond_block.png",
+    "glowstone": "textures/mcl_nether_glowstone.png"
   }
 }

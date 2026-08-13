@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.world;
 
 import com.beneklund.minecraft.block.Block;
+import com.beneklund.minecraft.util.Direction;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Chunk {
@@ -25,7 +26,7 @@ public class Chunk {
     }
 
     public Block getBlock(int x, int y, int z) {
-        return Block.fromId(blocks[index(x, y, z)]);
+        return getBlock(index(x, y, z));
     }
 
     public void setBlock(int x, int y, int z, Block block) {
@@ -43,6 +44,44 @@ public class Chunk {
 
     protected static int index(int x, int y, int z) {
         return x + z * SIZE_XZ + y * SIZE_XZ * SIZE_XZ; // x + z * 16 + y * 256
+    }
+
+    protected static int x(int index) {
+        return index % SIZE_XZ;
+    }
+
+    protected static int y(int index) {
+        return index / (Chunk.SIZE_XZ * Chunk.SIZE_XZ);
+    }
+
+    protected static int z(int index) {
+        return (index / SIZE_XZ) % SIZE_XZ;
+    }
+
+    public static boolean inBounds(int x, int y, int z) {
+        return inXZRange(x) && inYRange(y) && inXZRange(z);
+    }
+
+    public static boolean inYRange(int y) {
+        return y >= 0 && y < SIZE_Y;
+    }
+
+    public static boolean inXZRange(int v) {
+        return v >= 0 && v < SIZE_XZ;
+    }
+
+    protected static int neighborIndex(int index, Direction dir) {
+        int nx = x(index) + dir.dx();
+        int ny = y(index) + dir.dy();
+        int nz = z(index) + dir.dz();
+        if (!inBounds(nx, ny, nz)) return -1;
+        return index(nx, ny, nz);
+    }
+
+    // Read by packed index. Storage is index-addressed underneath, so a caller already holding an
+    // index shouldn't have to decode to three coordinates just to let index() re-pack them.
+    protected Block getBlock(int index) {
+        return Block.fromId(blocks[index]);
     }
 
     public ChunkState getState() {

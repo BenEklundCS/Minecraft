@@ -9,7 +9,7 @@ import org.joml.Vector3i;
 // Applies gravity, integrates velocity, and resolves AABB collisions against
 // solid blocks. Operates on IPhysicsBody so it isn't tied to Player alone.
 //
-// Tuning baseline (phase 15.9 — start here, then playtest by feel):
+// Tuning baseline — start here, then playtest by feel:
 //   gravity        32.0 m/s²   downward acceleration
 //   jump velocity   9.0 m/s    → ~1.2 blocks of air time (lives in Player)
 //   walk speed      4.3 m/s    horizontal (lives in PlayerConfig)
@@ -35,7 +35,6 @@ public class Physics {
     }
 
     private void nofly(IPhysicsBody body, IWorldAuthority world, float dt) {
-        // gravity accelerates us downward every tick
         Vector3f velocity = body.getVelocity();
         velocity.y -= GRAVITY * dt;
         if (velocity.y < -TERMINAL_VELOCITY) velocity.y = -TERMINAL_VELOCITY;

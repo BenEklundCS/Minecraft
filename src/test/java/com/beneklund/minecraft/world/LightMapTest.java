@@ -14,19 +14,15 @@ public class LightMapTest {
         int idx = 10;
         int sky = 5;
         int block = 3;
-        // set and get both sky and block
         lightMap.setSky(idx, sky);
         lightMap.setBlock(idx, block);
         assertEquals(sky, lightMap.sky(idx));
         assertEquals(block, lightMap.block(idx));
-        // set sky, preserves block
         int newSky = 7;
         lightMap.setSky(idx, newSky);
         assertEquals(block, lightMap.block(idx));
-        // set block, preserves sky
         lightMap.setBlock(idx, 9);
         assertEquals(newSky, lightMap.sky(idx));
-        // set and get both sky and block on max level
         int maxLevel = LEVEL_COUNT - 1;
         lightMap.setSky(idx, maxLevel);
         lightMap.setBlock(idx, maxLevel);

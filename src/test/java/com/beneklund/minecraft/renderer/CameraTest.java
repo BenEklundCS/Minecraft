@@ -26,7 +26,6 @@ class CameraTest {
         player = new Player(new PlayerConfig(new Vector3f(0, 0, 0), 0f, 0f, 5.0f, 8.4f, 8.0f), camera, null);
     }
 
-    // getLookDirection() at yaw=0, pitch=0 should point along +Z (forward)
     @Test
     void getLookDirection_zeroPitchYaw_pointsAlongPositiveZ() {
         Vector3f dir = player.getLookDirection();
@@ -35,7 +34,6 @@ class CameraTest {
         assertEquals(1f, dir.z, EPSILON);
     }
 
-    // getLookDirection() should return a unit vector regardless of yaw/pitch
     @Test
     void getLookDirection_isNormalized() {
         player.look(45f, 30f);
@@ -43,7 +41,6 @@ class CameraTest {
         assertEquals(1f, dir.length(), EPSILON);
     }
 
-    // getRight() should be perpendicular to look direction
     @Test
     void getRight_isPerpendicularToLookDirection() {
         player.look(45f, 20f);
@@ -52,28 +49,24 @@ class CameraTest {
         assertEquals(0f, look.dot(right), EPSILON);
     }
 
-    // getRight() should be a unit vector
     @Test
     void getRight_isNormalized() {
         player.look(90f, 0f);
         assertEquals(1f, player.getRight().length(), EPSILON);
     }
 
-    // pitch should clamp at +89 - never reach vertical
     @Test
     void look_pitchClampsAtPositive89() {
         player.look(0f, -200f);
         assertEquals(89f, player.getPitch(), EPSILON);
     }
 
-    // pitch should clamp at -89
     @Test
     void look_pitchClampsAtNegative89() {
         player.look(0f, 200f);
         assertEquals(-89f, player.getPitch(), EPSILON);
     }
 
-    // yaw accumulates without clamping
     @Test
     void look_yawAccumulates() {
         player.look(90f, 0f);
@@ -81,7 +74,6 @@ class CameraTest {
         assertEquals(-135f, player.getYaw(), EPSILON);
     }
 
-    // projection matrix aspect ratio uses width/height
     @Test
     void getProjectionMatrix_aspectRatioMatchesWindowConfig() {
         float m00Before = camera.getProjectionMatrix().m00();
@@ -90,7 +82,6 @@ class CameraTest {
         assertEquals(m00Before * 2f, m00After, EPSILON);
     }
 
-    // moving the player and syncing should update the camera's view matrix
     @Test
     void syncCamera_afterMove_changesViewMatrix() {
         var before = camera.getViewMatrix();

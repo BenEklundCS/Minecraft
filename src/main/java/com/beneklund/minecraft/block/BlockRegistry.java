@@ -547,6 +547,19 @@ public class BlockRegistry {
                                 "diamond_block",
                                 "diamond_block",
                                 "diamond_block",
-                                "diamond_block"))));
+                                "diamond_block")),
+                Map.entry(
+                        Block.GLOWSTONE,
+                        BlockDef.build(
+                                        true,
+                                        false,
+                                        true,
+                                        "glowstone",
+                                        "glowstone",
+                                        "glowstone",
+                                        "glowstone",
+                                        "glowstone",
+                                        "glowstone")
+                                .withLight(15))));
     }
 }

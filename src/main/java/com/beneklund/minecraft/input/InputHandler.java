@@ -6,9 +6,8 @@ import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.renderer.Camera;
 import java.util.List;
 
-// Placeholder game-logic handler. Most Simple actions are stubs right now - they just log.
-// Move and look are handled in Game (frame-rate-sensitive); scroll lives here because
-// FOV adjustment is a camera concern, not a game-loop concern.
+// Placeholder game-logic handler — everything but EXIT is a stub that just logs. Move, look and
+// scroll are acted on in Game and Player.
 public class InputHandler {
 
     private final Window window;

@@ -10,7 +10,6 @@ class WorldTest {
         return new World(new ConcurrentHashMap<>());
     }
 
-    // addChunk then getChunk hands back the exact instance we stored
     @Test
     void addChunk_thenGetChunk_returnsSameInstance() {
         World world = emptyWorld();
@@ -20,7 +19,6 @@ class WorldTest {
         assertSame(chunk, world.getChunk(pos));
     }
 
-    // removeChunk drops it - a later lookup is null
     @Test
     void removeChunk_thenGetChunk_returnsNull() {
         World world = emptyWorld();

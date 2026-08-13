@@ -17,7 +17,7 @@ public class Hotbar {
         Block.GRAVEL,
         Block.OAK_LOG,
         Block.OAK_PLANK,
-        Block.OAK_LEAF
+        Block.GLOWSTONE
     };
 
     private final Block[] slots;

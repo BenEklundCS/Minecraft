@@ -43,7 +43,6 @@ class RaycastTest {
         };
     }
 
-    // 16.T1 — looking straight down +Z at a block one unit ahead hits its near (NORTH) face at distance 1.
     @Test
     void cast_hitsBlockAhead_reportsNorthFaceAtDistanceOne() {
         IWorldAuthority world = worldWith(new Vector3i(0, 64, 0));
@@ -56,7 +55,6 @@ class RaycastTest {
         assertEquals(1.0f, result.distance(), 1e-4, "block boundary sits one unit from the origin");
     }
 
-    // 16.T2 — a ray through empty space within reach returns a miss.
     @Test
     void cast_emptyWorld_returnsMiss() {
         IWorldAuthority world = worldWith(); // nothing solid anywhere
@@ -66,7 +64,6 @@ class RaycastTest {
         assertFalse(result.hit(), "no solid block along the ray means no hit");
     }
 
-    // 16.T3 — with two solid blocks along the ray, the nearer one is returned, not the far one behind it.
     @Test
     void cast_stopsAtNearestBlock_notTheOneBehind() {
         Vector3i near = new Vector3i(0, 64, 0);

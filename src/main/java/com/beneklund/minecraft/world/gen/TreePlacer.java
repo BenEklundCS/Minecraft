@@ -16,7 +16,7 @@ public class TreePlacer {
     // Blocks outside chunk bounds are silently skipped — edge trees are truncated.
     public void placeTree(Chunk chunk, int localX, int surfaceY, int localZ) {
         for (int y = surfaceY + 1; y <= surfaceY + TRUNK_HEIGHT; y++) {
-            if (inBounds(localX, y, localZ)) {
+            if (Chunk.inBounds(localX, y, localZ)) {
                 chunk.setBlock(localX, y, localZ, Block.OAK_LOG);
             }
         }
@@ -38,15 +38,11 @@ public class TreePlacer {
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
                 int bx = cx + dx, bz = cz + dz;
-                if (!inBounds(bx, y, bz)) continue;
+                if (!Chunk.inBounds(bx, y, bz)) continue;
                 if (chunk.getBlock(bx, y, bz) == Block.AIR) {
                     chunk.setBlock(bx, y, bz, Block.OAK_LEAF);
                 }
             }
         }
-    }
-
-    private boolean inBounds(int x, int y, int z) {
-        return x >= 0 && x < Chunk.SIZE_XZ && z >= 0 && z < Chunk.SIZE_XZ && y >= 0 && y < Chunk.SIZE_Y;
     }
 }

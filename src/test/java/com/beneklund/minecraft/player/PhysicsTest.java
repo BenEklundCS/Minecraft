@@ -84,8 +84,6 @@ class PhysicsTest {
         };
     }
 
-    // 15.T1 — drop from 5 blocks up onto a floor (everything below y=0 is solid);
-    // after 10 ticks the body has landed, rests at y=0, and reports onGround.
     @Test
     void gravity_fallsAndStopsOnFloor() {
         Physics physics = new Physics();
@@ -101,8 +99,6 @@ class PhysicsTest {
         assertTrue(body.isOnGround(), "body should report standing on ground");
     }
 
-    // 15.T2 — walk into a wall (everything at x>=1 is solid). The X sweep zeroes
-    // velocity.x and snaps the body's right face flush against the block face at x=1.
     @Test
     void wall_blocksHorizontalMovement() {
         Physics physics = new Physics();

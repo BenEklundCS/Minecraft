@@ -179,14 +179,14 @@ class ChunkMesherTest {
         assertEquals(expectedFaces * 6, data.opaque().indices().length);
     }
 
-    // Lighting is per-vertex, not per-face: each corner averages the four cells touching it on the
-    // outside of the face. So a single shadowed column among those four reads 0.75, not 0 — one
-    // sample out of four went dark. Only a shadow wide enough to cover all four reaches 0, which
-    // is what skylight_underAFullRoof_isFullyDark pins.
+    // Lighting is per-vertex: each corner averages the four cells touching it outside the face.
+    // A lone blocker's shadow gets refilled by the flood from the columns beside it, so the one
+    // shadowed sample reads 14 rather than 0 — barely a dent. Only a shadow too wide for the flood
+    // to cross reaches 0, which is what skylight_underAFullRoof_isFullyDark pins.
     //
     // Quads come out in Direction.values() order — UP, DOWN, NORTH, SOUTH, EAST, WEST — so for a
     // block with all six faces showing, quad n is vertices 4n..4n+3.
-    private static final float ONE_CORNER_SHADOWED = 0.75f;
+    private static final float ONE_CORNER_ONE_LEVEL_DOWN = (15 + 15 + 15 + 14) / 4f / 15f;
 
     @Test
     void skylight_floatingBlock_shadowsItsOwnUnderside() {
@@ -196,15 +196,13 @@ class ChunkMesherTest {
         float[] verts = meshLit(chunk).opaque().vertices();
 
         for (int v = 0; v < 4; v++) assertEquals(1.0f, sky(verts, v), "UP looks into lit air");
-        // The block stops its own column, so one of the four cells under each bottom corner is
-        // dark; the other three are open sky beside it.
         for (int v = 4; v < 8; v++)
-            assertEquals(ONE_CORNER_SHADOWED, sky(verts, v), "DOWN looks into the block's own shadow");
+            assertEquals(ONE_CORNER_ONE_LEVEL_DOWN, sky(verts, v), "DOWN looks into the block's own shadow");
         for (int v = 8; v < 24; v++) assertEquals(1.0f, sky(verts, v), "sides face open columns the sun reached");
     }
 
-    // A 1x1 roof only darkens the one column beneath it, so it dims the top face by a quarter
-    // rather than blacking it out. The sides never sample that column at all.
+    // A 1x1 roof is one step from open sky in every direction, so the column under it comes back
+    // at 14 and the top face is only just dimmed. The sides never sample that column at all.
     @Test
     void skylight_faceUnderOverhang_isDimmed() {
         Chunk chunk = emptyChunk();
@@ -213,7 +211,7 @@ class ChunkMesherTest {
 
         float[] verts = meshLit(chunk).opaque().vertices();
 
-        for (int v = 0; v < 4; v++) assertEquals(ONE_CORNER_SHADOWED, sky(verts, v), "UP is under the roof");
+        for (int v = 0; v < 4; v++) assertEquals(ONE_CORNER_ONE_LEVEL_DOWN, sky(verts, v), "UP is under the roof");
         for (int v = 8; v < 24; v++) assertEquals(1.0f, sky(verts, v), "sides still see open sky");
     }
 

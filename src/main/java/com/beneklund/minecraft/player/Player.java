@@ -17,8 +17,8 @@ import java.util.List;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
-// The local player entity. Owns world position, orientation, and free-fly movement.
-// Physics will take over movement later; for now this mirrors what Camera used to do.
+// The local player entity. Owns world position, orientation, and the fly-mode toggle; Physics
+// does the moving, through IPhysicsBody.
 public class Player implements IPhysicsBody {
     private static final float MAX_PITCH = 89.0f;
     // Scales raw mouse pixel delta to degrees of look. Player owns this since it decodes LookActions.
