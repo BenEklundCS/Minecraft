@@ -8,13 +8,13 @@ public class DayNightCycleTest {
     @Test
     void dayNightCycle_Midnight() {
         DayNightCycle midnight = ofMidnight();
-        assertEquals(0.15f, midnight.skyBrightness());
+        assertEquals(DayNightCycle.NIGHT_BRIGHTNESS, midnight.skyBrightness());
     }
 
     @Test
     void dayNightCycle_Noon() {
         DayNightCycle noon = ofNoon();
-        assertEquals(1.0f, noon.skyBrightness());
+        assertEquals(DayNightCycle.DAY_BRIGHTNESS, noon.skyBrightness());
     }
 
     private DayNightCycle ofNoon() {

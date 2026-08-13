@@ -3,7 +3,9 @@ package com.beneklund.minecraft.world;
 public class DayNightCycle {
     public static final float NOON = 0.5f;
     public static final float MIDNIGHT = 0.0f;
-    private static final float NIGHT_BRIGHTNESS = 0.15f;
+    public static final float NIGHT_BRIGHTNESS = 0.15f;
+    public static final float DAY_BRIGHTNESS = 1.0f;
+
     private float timeOfDay;
 
     public DayNightCycle(float timeOfDay) {

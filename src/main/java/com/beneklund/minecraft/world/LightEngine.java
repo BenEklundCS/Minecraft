@@ -74,22 +74,31 @@ public class LightEngine {
 
     private void computeAcrossChunksPass(
             ChunkWithNeighbors cn, LightMap map, Deque<Integer> propagationQueue, Channel channel) {
-        Chunk c = cn.center();
-        if (cn.resolve(0, -1).isPresent()) {
-            for (int x = 0; x < Chunk.SIZE_XZ; x++) {
-                for (int y = 0; y < Chunk.SIZE_Y; y++) {
-                    int light = (channel == Channel.SKY) ? cn.skyLightAt(x, y, -1) : cn.blockLightAt(x, y, -1);
-                    seedBorder(c, map, propagationQueue, channel, Chunk.index(x, y, 0), light - 1);
-                }
-            }
+        int last = Chunk.SIZE_XZ - 1;
+        for (int i = 0; i < Chunk.SIZE_XZ; i++) {
+            seedSeam(cn, map, propagationQueue, channel, i, 0, i, -1); // north
+            seedSeam(cn, map, propagationQueue, channel, i, last, i, last + 1); // south
+            seedSeam(cn, map, propagationQueue, channel, last, i, last + 1, i); // east
+            seedSeam(cn, map, propagationQueue, channel, 0, i, -1, i); // west
         }
-        if (cn.resolve(-1, 0).isPresent()) {
-            for (int z = 0; z < Chunk.SIZE_XZ; z++) {
-                for (int y = 0; y < Chunk.SIZE_Y; y++) {
-                    int light = (channel == Channel.SKY) ? cn.skyLightAt(-1, y, z) : cn.blockLightAt(-1, y, z);
-                    seedBorder(c, map, propagationQueue, channel, Chunk.index(0, y, z), light - 1);
-                }
-            }
+    }
+
+    private void seedSeam(
+            ChunkWithNeighbors cn,
+            LightMap map,
+            Deque<Integer> queue,
+            Channel channel,
+            int insideX,
+            int insideZ,
+            int outsideX,
+            int outsideZ) {
+        if (cn.resolve(outsideX, outsideZ).isEmpty()) return;
+        Chunk c = cn.center();
+        for (int y = 0; y < Chunk.SIZE_Y; y++) {
+            int light = (channel == Channel.SKY)
+                    ? cn.skyLightAt(outsideX, y, outsideZ)
+                    : cn.blockLightAt(outsideX, y, outsideZ);
+            seedBorder(c, map, queue, channel, Chunk.index(insideX, y, insideZ), light - 1);
         }
     }
 

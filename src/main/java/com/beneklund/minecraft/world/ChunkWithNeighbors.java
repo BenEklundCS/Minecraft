@@ -81,10 +81,15 @@ public class ChunkWithNeighbors {
     // column, or into a neighbor that isn't loaded, is open sky: an unloaded neighbor is the
     // render edge, and guessing dark there paints a black seam along the chunk boundary until
     // the neighbor arrives and triggers a remesh.
+    //
+    // A neighbor that's loaded but hasn't been through the light engine takes the same answer, for
+    // the same reason. It has blocks — so blockAt and the culling built on it stay truthful — but no
+    // LightMap, and reading one that doesn't exist yet as level 0 is what painted black faces on
+    // trees standing on a chunk seam.
     public int skyLightAt(int centerLocalX, int y, int centerLocalZ) {
         if (y < 0) return LightMap.MIN_LEVEL;
         Chunk chunk = resolveInBounds(centerLocalX, y, centerLocalZ);
-        if (chunk == null) return LightMap.MAX_LEVEL;
+        if (chunk == null || !chunk.hasLight()) return LightMap.MAX_LEVEL;
         return chunk.getSkyLight(local(centerLocalX), y, local(centerLocalZ));
     }
 
@@ -94,7 +99,7 @@ public class ChunkWithNeighbors {
     // torch, and guessing bright lights the inside of sealed rooms along every chunk border.
     public int blockLightAt(int centerLocalX, int y, int centerLocalZ) {
         Chunk chunk = resolveInBounds(centerLocalX, y, centerLocalZ);
-        if (chunk == null) return LightMap.MIN_LEVEL;
+        if (chunk == null || !chunk.hasLight()) return LightMap.MIN_LEVEL;
         return chunk.getBlockLight(local(centerLocalX), y, local(centerLocalZ));
     }
 

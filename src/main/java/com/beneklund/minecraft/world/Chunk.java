@@ -9,7 +9,7 @@ public class Chunk {
     public static final int SIZE_Y = 256;
     // Storage stays a packed byte[] (1 byte/block) for memory and cache; Block is the API face.
     private byte[] blocks = new byte[size()];
-    private volatile LightMap light = new LightMap(size());
+    private volatile LightMap light = null;
     private final AtomicReference<ChunkState> state = new AtomicReference<>(ChunkState.UNLOADED);
     // Tracks "has edits not yet written to disk" separately from the mesh-state machine,
     // which uses DIRTY only to signal "needs re-meshing" and clears it on the next tick.
@@ -107,6 +107,10 @@ public class Chunk {
 
     public void setLightData(LightMap next) {
         light = next;
+    }
+
+    public boolean hasLight() {
+        return light != null;
     }
 
     public int getSkyLight(int x, int y, int z) {

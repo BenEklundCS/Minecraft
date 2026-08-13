@@ -43,6 +43,7 @@ public class ChunkManager {
     private List<ChunkPos> lastChunksInRadius;
 
     private final LightEngine lightEngine;
+    private final IWorldAuthority authority;
 
     public ChunkManager(
             WorldConfig config,
@@ -56,6 +57,7 @@ public class ChunkManager {
         this.world = world;
         this.chunkStore = chunkStore;
         this.lightEngine = lightEngine;
+        this.authority = authority;
         int threads = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
         generationPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-generation-%d"));
         meshingPool = Executors.newFixedThreadPool(threads, namedFactory("chunk-meshing-%d"));
@@ -136,6 +138,7 @@ public class ChunkManager {
             Chunk chunk = saved.orElseGet(Chunk::new);
             world.addChunk(chunkPos, chunk);
             if (saved.isPresent()) {
+                authority.markNeighborsDirty(chunkPos);
                 if (!chunk.tryTransition(ChunkState.QUEUED_MESH)) continue;
                 meshingPool.execute(() -> meshJob.accept(new JobInput(chunk, chunkPos)));
             } else {
