@@ -15,7 +15,7 @@ public record BlockDef(
     }
 
     public BlockDef withLight(int level) {
-        return new BlockDef(solid, transparent, true, breakable, level, tileNames);
+        return new BlockDef(solid, transparent, blended, breakable, level, tileNames);
     }
 
     // Explicit ordinal mapping so Direction reordering can't silently corrupt tile lookups.

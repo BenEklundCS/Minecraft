@@ -240,16 +240,35 @@ class ChunkMesherTest {
         assertEquals(24, checked, "all six faces of the buried block should have been checked");
     }
 
-    // block light is unimplemented, so slot 11 must stay 0 — frag takes max(sky, block) and any
-    // nonzero here pins every fragment bright
+    // Nothing in this chunk emits, so slot 11 stays 0 however bright the sky above it is — frag
+    // takes max(sky, block) and any nonzero here would pin every fragment bright.
     @Test
-    void blockLightSlot_isZero() {
+    void blockLightSlot_isZeroWithNoEmitter() {
         Chunk chunk = emptyChunk();
         chunk.setBlock(1, 64, 1, Block.STONE);
 
         float[] verts = meshLit(chunk).opaque().vertices();
 
         for (int v = 0; v < 24; v++) assertEquals(0.0f, verts[v * FLOATS_PER_VERTEX + BLOCK_SLOT], "vertex " + v);
+    }
+
+    // The other half of the same guarantee: with an emitter next to it, the slot has to carry real
+    // light. A block one step from glowstone samples cells at 14, and the corner touching the
+    // emitter's own opaque cell contributes 0 the same way skylight's does.
+    @Test
+    void blockLightSlot_carriesEmitterLight() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(1, 64, 1, Block.STONE);
+        chunk.setBlock(2, 64, 1, Block.GLOWSTONE);
+
+        float[] verts = meshLit(chunk).opaque().vertices();
+
+        float brightest = 0.0f;
+        for (int v = 0; v < verts.length / FLOATS_PER_VERTEX; v++) {
+            brightest = Math.max(brightest, verts[v * FLOATS_PER_VERTEX + BLOCK_SLOT]);
+        }
+        assertTrue(brightest > 0.0f, "some vertex should carry block light");
+        assertTrue(brightest <= 1.0f, "block light is normalized to 0..1 like skylight");
     }
 
     @Test

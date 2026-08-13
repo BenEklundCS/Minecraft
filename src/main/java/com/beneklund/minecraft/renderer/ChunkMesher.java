@@ -118,6 +118,9 @@ public class ChunkMesher {
                         float[] sky = new float[VERTICES_PER_QUAD];
                         for (int i = 0; i < VERTICES_PER_QUAD; i++)
                             sky[i] = vertexSkyLightLevel(cn, x, y, z, dir, i) / (float) LightMap.MAX_LEVEL;
+                        float[] block = new float[VERTICES_PER_QUAD];
+                        for (int i = 0; i < VERTICES_PER_QUAD; i++)
+                            block[i] = vertexBlockLightLevel(cn, x, y, z, dir, i) / (float) LightMap.MAX_LEVEL;
 
                         float[] uvs = getUVs(def, dir);
                         Color tint = getTint(blockId, dir);
@@ -133,7 +136,8 @@ public class ChunkMesher {
                             float u = fracs[i * 2] == 0 ? uMin : uMax;
                             float v = fracs[i * 2 + 1] == 0 ? vMin : vMax;
 
-                            fillBufferVerts(buf, corners[i], x, y, z, u, v, AO_RAMP[ao[i]], faceId, tint, sky[i], 0.0f);
+                            fillBufferVerts(
+                                    buf, corners[i], x, y, z, u, v, AO_RAMP[ao[i]], faceId, tint, sky[i], block[i]);
                         }
                         fillBufferIdxs(buf, ao);
                     }
@@ -231,6 +235,16 @@ public class ChunkMesher {
         for (int[] off : offsets) {
             if (opaqueAt(cn, x, y, z, off)) accumulator += 0;
             else accumulator += cn.skyLightAt(x, y, z, off);
+        }
+        return accumulator / offsets.size(); // average
+    }
+
+    private float vertexBlockLightLevel(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, int corner) {
+        List<int[]> offsets = getOffsets(dir, corner).asList();
+        float accumulator = 0.0f;
+        for (int[] off : offsets) {
+            if (opaqueAt(cn, x, y, z, off)) accumulator += 0;
+            else accumulator += cn.blockLightAt(x, y, z, off);
         }
         return accumulator / offsets.size(); // average
     }

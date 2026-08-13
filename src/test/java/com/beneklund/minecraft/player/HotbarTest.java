@@ -74,7 +74,7 @@ class HotbarTest {
         hotbar.scroll(-1);
 
         assertEquals(Hotbar.SLOT_COUNT - 1, hotbar.selected());
-        assertEquals(Block.OAK_LEAF, hotbar.blockAt(hotbar.selected()));
+        assertEquals(Block.GLOWSTONE, hotbar.blockAt(hotbar.selected()));
     }
 
     @Test

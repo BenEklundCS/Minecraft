@@ -88,6 +88,16 @@ public class ChunkWithNeighbors {
         return chunk.getSkyLight(local(centerLocalX), y, local(centerLocalZ));
     }
 
+    // Deliberately not the same out-of-range answer as skyLightAt. Sky guesses bright off the end
+    // of the world because "no chunk there" usually means open sky, and guessing dark paints a
+    // black seam at the render edge. Block light has no such default: an absent chunk is not a
+    // torch, and guessing bright lights the inside of sealed rooms along every chunk border.
+    public int blockLightAt(int centerLocalX, int y, int centerLocalZ) {
+        Chunk chunk = resolveInBounds(centerLocalX, y, centerLocalZ);
+        if (chunk == null) return LightMap.MIN_LEVEL;
+        return chunk.getBlockLight(local(centerLocalX), y, local(centerLocalZ));
+    }
+
     // Sample a cell relative to this one. The {dx, dy, dz} overloads exist so that a caller
     // walking a list of offsets can't apply the offset to one lookup and forget it on the next —
     // the two reads it makes about the same cell now look identical at the call site.
@@ -97,6 +107,10 @@ public class ChunkWithNeighbors {
 
     public int skyLightAt(int centerLocalX, int y, int centerLocalZ, int[] off) {
         return skyLightAt(centerLocalX + off[0], y + off[1], centerLocalZ + off[2]);
+    }
+
+    public int blockLightAt(int centerLocalX, int y, int centerLocalZ, int[] off) {
+        return blockLightAt(centerLocalX + off[0], y + off[1], centerLocalZ + off[2]);
     }
 
     // resolve translates a center local x and local z chunk coordinate into the correct chunk
