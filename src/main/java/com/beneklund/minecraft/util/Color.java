@@ -13,10 +13,8 @@ public record Color(float red, float green, float blue, float alpha) {
     // clear (no sky dome) the two have to be the same value or the horizon shows a seam
     // where fog stops and sky starts.
     public static final Color FOG = new Color(0.753f, 0.847f, 1.0f, 1.0f);
-
-    public float[] toRgbArray() {
-        return new float[] {red, green, blue};
-    }
+    public static final Color SKY_HORIZON = new Color(0.78f, 0.87f, 1.0f, 1.0f);
+    public static final Color SKY_ZENITH = new Color(0.25f, 0.45f, 0.85f, 1.0f);
 
     public Vector3f toRgbVec3() {
         return new Vector3f(red, green, blue);

@@ -1,10 +1,10 @@
-package com.beneklund.minecraft.infra;
+package com.beneklund.minecraft.renderer;
 
-import com.beneklund.minecraft.renderer.*;
+import com.beneklund.minecraft.infra.RenderWorld;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ChunkRenderable implements IRenderable {
+public class ChunkRenderer implements IRenderable {
     private static final String VERT_PATH = "/shaders/chunk.vert";
     private static final String FRAG_PATH = "/shaders/chunk.frag";
 
@@ -14,7 +14,7 @@ public class ChunkRenderable implements IRenderable {
     // guaranteed to be after the GL context exists.
     private final ShaderProgram chunkShader;
 
-    public ChunkRenderable(RenderWorld renderWorld, TextureAtlas atlas) {
+    public ChunkRenderer(RenderWorld renderWorld, TextureAtlas atlas) {
         this.renderWorld = renderWorld;
         this.atlas = atlas;
         // Constructing directly rather than calling reload() — a shader that won't compile at

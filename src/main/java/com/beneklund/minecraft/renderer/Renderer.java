@@ -6,19 +6,28 @@ import static org.lwjgl.opengl.GL11.*;
 import com.beneklund.minecraft.util.Color;
 import java.util.ArrayList;
 import java.util.List;
+import org.joml.Matrix4f;
 import org.joml.Vector2f;
+import org.joml.Vector3f;
 
 // Collects DrawCalls from all Renderables each frame and submits them to the GPU,
 // opaque pass first then transparent pass (see draw()).
 public class Renderer {
     private final List<IRenderable> registered;
     private Color fogColor;
+    private Vector3f fogColorVec;
+    private Vector3f horizonColorVec;
+    private Vector3f zenithColorVec;
     private final Vector2f fogRange;
     private float skyBrightness;
+
+    private final Matrix4f viewRotation = new Matrix4f();
+    private final Matrix4f invViewProj = new Matrix4f();
 
     public Renderer(List<IRenderable> registered, Color fogColor, Vector2f fogRange) {
         this.registered = registered;
         this.fogColor = fogColor;
+        fogColorVec = fogColor.toRgbVec3();
         this.fogRange = fogRange;
     }
 
@@ -35,6 +44,9 @@ public class Renderer {
     public void setSkyBrightness(float skyBrightness) {
         this.skyBrightness = skyBrightness;
         fogColor = Color.FOG.scale(skyBrightness);
+        fogColorVec = fogColor.toRgbVec3();
+        horizonColorVec = Color.SKY_HORIZON.scale(skyBrightness).toRgbVec3();
+        zenithColorVec = Color.SKY_ZENITH.scale(skyBrightness).toRgbVec3();
     }
 
     // The clear color has to match the fog color exactly or the horizon shows a seam where
@@ -45,6 +57,9 @@ public class Renderer {
     }
 
     public void draw(Camera camera) {
+        viewRotation.set(camera.getViewMatrix()).setTranslation(0, 0, 0);
+        invViewProj.set(camera.getProjectionMatrix()).mul(viewRotation).invert();
+
         // Collect every renderable's calls first, then draw by pass. Gathering across all
         // renderables means transparent geometry blends against the full opaque scene, not
         // just whatever opaque calls happened to come before it in the same renderable.
@@ -104,10 +119,13 @@ public class Renderer {
         call.shader().setUniformMat4("uView", camera.getViewMatrix());
         call.shader().setUniformMat4("uProjection", camera.getProjectionMatrix());
         call.shader().setUniformMat4("uModel", call.transform());
-        call.shader().setUniformVec3("uFogColor", fogColor.toRgbVec3());
+        call.shader().setUniformVec3("uFogColor", fogColorVec);
         call.shader().setUniformFloat("uFogStart", fogRange.x);
         call.shader().setUniformFloat("uFogEnd", fogRange.y);
         call.shader().setUniformFloat("uSkyBrightness", skyBrightness);
+        call.shader().setUniformVec3("uHorizonColor", horizonColorVec);
+        call.shader().setUniformVec3("uZenithColor", zenithColorVec);
+        call.shader().setUniformMat4("uInvViewProj", invViewProj);
         call.mesh().render();
     }
 }

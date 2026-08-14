@@ -22,6 +22,8 @@ public final class VertexFormat {
             new VertexAttribute(AttributeType.VEC3), // position xyz
             new VertexAttribute(AttributeType.VEC3))); // color  rgb
 
+    public static final VertexFormat SKY = new VertexFormat(List.of(new VertexAttribute(AttributeType.VEC2)));
+
     public VertexFormat(List<VertexAttribute> attributes) {
         this.attributes = attributes;
     }

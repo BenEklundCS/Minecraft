@@ -175,7 +175,8 @@ public class GameContainer {
         atlas = new TextureAtlas(resourcePack);
         registry = BlockRegistry.createDefault();
         renderWorld = new RenderWorld();
-        ChunkRenderable chunkRenderable = new ChunkRenderable(renderWorld, atlas);
+        SkyRenderer skyRenderer = new SkyRenderer();
+        ChunkRenderer chunkRenderer = new ChunkRenderer(renderWorld, atlas);
         debugRenderer = new DebugRenderer();
         hudRenderer = new HudRenderer(registry, atlas);
         float end = 0.9f * cfg.renderDistance() * Chunk.SIZE_XZ;
@@ -184,7 +185,8 @@ public class GameContainer {
         // No initial sky brightness here on purpose — Game.run sets it from the DayNightCycle
         // every frame before draw(), so a value passed in would only ever be the one that
         // never gets used.
-        renderer = new Renderer(List.of(chunkRenderable, debugRenderer, hudRenderer), cfg.clearColor(), fogRange);
+        renderer = new Renderer(
+                List.of(skyRenderer, chunkRenderer, debugRenderer, hudRenderer), cfg.clearColor(), fogRange);
     }
 
     private void initAudio() {
