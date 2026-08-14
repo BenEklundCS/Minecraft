@@ -31,6 +31,9 @@ compileJava {
 
 tasks.withType(JavaExec).configureEach {
     jvmArgs '--enable-preview', '--enable-native-access=ALL-UNNAMED'
+    // Chunks are flat arrays — 128 KiB each regardless of contents — so render distance costs
+    // memory quadratically. Without this the JVM default caps at a quarter of physical RAM.
+    maxHeapSize = '24g'
 }
 
 repositories {

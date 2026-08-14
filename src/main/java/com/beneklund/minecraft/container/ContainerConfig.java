@@ -27,7 +27,7 @@ public record ContainerConfig(
                 Color.FOG,
                 70.0f,
                 87L,
-                16,
+                64,
                 "/packs/faithful/pack.json",
                 new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 0.0f, 4.3f, 8.4f, 8.0f),
                 5L);

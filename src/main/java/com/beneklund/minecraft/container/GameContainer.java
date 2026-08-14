@@ -96,6 +96,7 @@ public class GameContainer {
     public void run() throws IOException {
         long startedAt = System.nanoTime();
         LOGGER.info("starting up");
+        LOGGER.info("max heap: {} MB", Runtime.getRuntime().maxMemory() / (1024 * 1024));
 
         // 1. Game Config - pure data, no platform deps.
         initConfig();

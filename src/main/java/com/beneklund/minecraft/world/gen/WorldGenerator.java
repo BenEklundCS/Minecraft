@@ -29,6 +29,10 @@ public class WorldGenerator implements IWorldGenerator {
     private static final int SNOW_LINE = 95;
     private static final long COL_SEED_PRIME_X = 341873128712L;
     private static final long COL_SEED_PRIME_Z = 132897987541L;
+    public static final double WARP_STRENGTH = 40.0;
+    public static final double WARP_SCALE = 0.0008;
+    private static final long WARP_SEED_X = 7001L;
+    private static final long WARP_SEED_Z = 7002L;
 
     private final BlockRegistry registry;
     private final NoiseHelper noiseHelper;
@@ -92,10 +96,21 @@ public class WorldGenerator implements IWorldGenerator {
         carveCaves(chunk, seed, pos);
     }
 
+    private double warpX(long seed, double x, double z, double strength) {
+        return x + strength * noiseHelper.noise2(seed + WARP_SEED_X, x, z, 2, 0.5, WARP_SCALE);
+    }
+
+    private double warpZ(long seed, double x, double z, double strength) {
+        return z + strength * noiseHelper.noise2(seed + WARP_SEED_Z, x, z, 2, 0.5, WARP_SCALE);
+    }
+
     private int computeSurfaceY(long seed, int worldX, int worldZ, TerrainProfile biome) {
-        double raw = sampleLayer(seed, worldX, worldZ, noiseLayers.continental())
-                + sampleLayer(seed, worldX, worldZ, noiseLayers.erosion())
-                + sampleLayer(seed, worldX, worldZ, noiseLayers.detail());
+        double wx = warpX(seed, worldX, worldZ, WARP_STRENGTH);
+        double wz = warpZ(seed, worldX, worldZ, WARP_STRENGTH);
+
+        double raw = sampleLayer(seed, wx, wz, noiseLayers.continental())
+                + sampleLayer(seed, wx, wz, noiseLayers.erosion())
+                + sampleLayer(seed, wx, wz, noiseLayers.detail());
         return Math.clamp((int) (biome.baseHeight() + raw * biome.amplitude()), MIN_SURFACE_Y, MAX_SURFACE_Y);
     }
 
@@ -134,7 +149,7 @@ public class WorldGenerator implements IWorldGenerator {
         return new ResolvedBiome(best, new TerrainProfile(baseHeight, amplitude, grassColor, foliageColor));
     }
 
-    private double sampleLayer(long seed, int x, int z, IGenerationSpec.NoiseLayerSpec layer) {
+    private double sampleLayer(long seed, double x, double z, IGenerationSpec.NoiseLayerSpec layer) {
         double n = layer.ridged()
                 ? noiseHelper.ridged2(
                         seed + layer.seedOffset(), x, z, layer.octaves(), layer.persistence(), layer.scale())
