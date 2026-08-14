@@ -46,6 +46,7 @@ bin/
 private/
 docs/
 src/main/resources/music/c418/
+scripts/copy_c418_music.py
 local.properties
 gradle.properties
 

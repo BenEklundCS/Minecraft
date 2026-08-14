@@ -115,8 +115,29 @@ public class Window {
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-        window = glfwCreateWindow(config.width(), config.height(), config.title(), NULL, NULL);
+        WindowConfig.Mode mode = config.mode();
+
+        int width = config.width();
+        int height = config.height();
+        long monitor = glfwGetPrimaryMonitor();
+        GLFWVidMode videoMode = glfwGetVideoMode(monitor);
+        if (videoMode == null) throw new RuntimeException("Failed to get video mode.");
+
+        if (mode.fullscreen()) {
+            width = videoMode.width();
+            height = videoMode.height();
+        } else {
+            monitor = NULL;
+        }
+
+        window = glfwCreateWindow(width, height, config.title(), monitor, NULL);
         if (window == NULL) throw new RuntimeException("Failed to create the GLFW window");
+
+        if (mode == WindowConfig.Mode.WINDOWED_FULLSCREEN) {
+            glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+            int rr = videoMode.refreshRate();
+            glfwSetWindowMonitor(window, monitor, 0, 0, width, height, rr);
+        }
 
         // Center the window on the primary monitor.
         try (MemoryStack stack = stackPush()) {
@@ -181,4 +202,6 @@ public class Window {
             for (IResizeListener listener : resizeListeners) listener.onResize(width, height);
         };
     }
+
+    private void setWindowHints() {}
 }

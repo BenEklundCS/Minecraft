@@ -8,6 +8,11 @@
 
 A **Minecraft clone** built from scratch in **Java 21** using **LWJGL** (OpenGL 3.3 core, GLFW) and **JOML** for 3D math. The project uses a **domain driven architecture** — the domain layer (world, blocks, player) knows nothing about OpenGL, GLFW, or threads. The project is currently in active development.
 
+> **Not an official Minecraft product.** This is an independent, non-commercial project
+> written from scratch as a learning exercise in graphics and engine programming. It is not
+> approved by, endorsed by, or associated with Mojang Studios or Microsoft, and it shares no
+> code or assets with Minecraft. "Minecraft" is a trademark of Mojang Studios.
+
 ---
 
 ## What's in it
@@ -94,8 +99,8 @@ Optional per-machine overrides go in a `local.properties` file at the repo root.
 gitignored and entirely optional:
 
 ```properties
-preferred.album=c418          # restrict startup music to one album folder
-startup.disc=music/c418/disc_cat.ogg
+preferred.album=public        # restrict startup music to one album folder
+startup.disc=music/public/Kai_Engel_-_01_-_Prologue.ogg
 debug.enabled=true
 ```
 
@@ -164,3 +169,23 @@ world behind.
 
 The save directory is derived from the world seed, so changing the seed starts a fresh
 world rather than overwriting an existing one. `saves/` is gitignored.
+
+---
+
+## Credits and Licensing
+
+The engine code is MIT licensed — see [LICENSE](LICENSE).
+
+The bundled assets are third-party work under their own terms. Full attribution lives in
+[`src/main/resources/CREDITS.txt`](src/main/resources/CREDITS.txt); the short version:
+
+| Asset | Source | License |
+|-------|--------|---------|
+| Textures — `packs/faithful/` | [Faithful](https://faithfulpack.net), via [Zormein's Faithful Clone](https://github.com/Zormein/Faithful-Clone) port for MineClone2/VoxeLibre | CC BY-SA 4.0 |
+| Sounds — `sounds/` | [Minetest Game / Luanti](https://github.com/luanti-org/minetest_game) | CC BY-SA 3.0 |
+| Music — `music/public/` | Kai Engel | CC0 |
+
+Textures come from the **[Faithful](https://faithfulpack.net)** pack, whose
+[license](https://faithfulpack.net/license) permits use in non-Minecraft projects with credit
+and a visible link back. Both are given here and in `CREDITS.txt`. If you fork this and ship
+anything from it, keep that attribution intact.

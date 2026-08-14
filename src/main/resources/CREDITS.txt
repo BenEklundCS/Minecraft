@@ -1,10 +1,17 @@
+Third-party assets bundled with this project, with the terms they arrive under.
+The engine code itself is MIT licensed — see LICENSE at the repo root.
+
 TEXTURES — packs/faithful/
   Faithful Clone port for MineClone2/VoxeLibre
   Author: Zormein and Faithful contributors
   Source: https://github.com/Zormein/Faithful-Clone
-  License: CC BY-SA 4.0 — https://faithfulpack.net/license
-  Notes: Based on the Faithful resource pack, ported for Minetest/Luanti clone.
-         For dev use only. Replace before any public release per Faithful license.
+  License: CC BY-SA 4.0 — https://creativecommons.org/licenses/by-sa/4.0/
+  Notes: Two lineages are mixed in this directory, and they carry different terms.
+         The default_* files originate in Minetest Game (CC BY-SA 3.0); the mcl_*
+         files come from MineClone2/VoxeLibre and the Faithful pack it was styled
+         after. Faithful's own terms cover the upstream art and explicitly permit
+         use in non-Minecraft projects, with credit and a visible link back:
+         https://faithfulpack.net/license
 
 SOUNDS — sounds/
   Minetest Game / Luanti default sounds

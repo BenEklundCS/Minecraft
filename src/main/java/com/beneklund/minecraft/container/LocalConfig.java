@@ -20,7 +20,7 @@ public class LocalConfig {
         }
     }
 
-    // e.g. "music/c418/disc_cat.ogg" — plays on startup if set.
+    // e.g. "music/public/Kai_Engel_-_01_-_Prologue.ogg" — plays on startup if set.
     public Optional<String> startupDisc() {
         return Optional.ofNullable(props.getProperty("startup.disc"));
     }

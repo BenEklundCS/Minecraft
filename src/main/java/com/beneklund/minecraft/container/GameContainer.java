@@ -147,6 +147,7 @@ public class GameContainer {
                 cfg.windowWidth(),
                 cfg.windowHeight(),
                 cfg.vsync(),
+                cfg.mode(),
                 cfg.clearColor(),
                 localConfig.debugEnabled());
         cameraConfig = new CameraConfig(cfg.fov());
