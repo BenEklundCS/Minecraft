@@ -42,6 +42,7 @@ public class InputMapper {
             Map.entry(GLFW_KEY_8, Binding.tap(new IInputAction.HotbarAction.Select(7))),
             Map.entry(GLFW_KEY_9, Binding.tap(new IInputAction.HotbarAction.Select(8))),
             Map.entry(GLFW_KEY_I, Binding.tap(IInputAction.Simple.INVENTORY)),
+            Map.entry(GLFW_KEY_F2, Binding.tap(IInputAction.Simple.SCREENSHOT)),
             Map.entry(GLFW_KEY_F3, Binding.tap(IInputAction.Simple.DEBUG_OVERLAY)),
             Map.entry(GLFW_KEY_F5, Binding.tap(IInputAction.Simple.RELOAD_SHADERS)),
             Map.entry(GLFW_KEY_P, Binding.tap(IInputAction.Simple.PAUSE)));

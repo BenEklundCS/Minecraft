@@ -51,6 +51,8 @@ public class Window {
     private final InputEventQueue queue;
     private final WindowConfig config;
     private final List<IResizeListener> resizeListeners = new ArrayList<>();
+    private int width;
+    private int height;
 
     public Window(WindowConfig config, InputEventQueue queue) {
         this.config = config;
@@ -85,6 +87,14 @@ public class Window {
 
     public void setTitle(String t) {
         glfwSetWindowTitle(window, t);
+    }
+
+    public int getWidth() {
+        return width;
+    }
+
+    public int getHeight() {
+        return height;
     }
 
     // Register interest in framebuffer resizes. Window never learns who's listening - the
@@ -122,8 +132,8 @@ public class Window {
 
         WindowConfig.Mode mode = config.mode();
 
-        int width = config.width();
-        int height = config.height();
+        width = config.width();
+        height = config.height();
         long monitor = glfwGetPrimaryMonitor();
         GLFWVidMode videoMode = glfwGetVideoMode(monitor);
         if (videoMode == null) throw new RuntimeException("Failed to get video mode.");

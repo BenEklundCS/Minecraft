@@ -1,13 +1,13 @@
 package com.beneklund.minecraft;
 
-import static com.beneklund.minecraft.util.Log.PERF;
-import static com.beneklund.minecraft.util.Log.RENDER;
+import static com.beneklund.minecraft.util.Log.*;
 
 import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
+import com.beneklund.minecraft.platform.graphics.ScreenCapture;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.player.Hotbar;
@@ -19,6 +19,9 @@ import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.util.RaycastResult;
 import com.beneklund.minecraft.world.*;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.util.List;
 import org.joml.Vector3f;
 
@@ -45,6 +48,7 @@ public class Game {
 
     private int uploadsThisSecond;
     private int deletesThisSecond;
+    private boolean screenshotRequested;
 
     public Game(
             Window window,
@@ -92,7 +96,22 @@ public class Game {
             window.setClearColor(renderer.fogColor());
             window.beginFrame();
             renderer.draw(camera);
+            if (screenshotRequested) {
+                captureScreenshot();
+                screenshotRequested = false;
+            }
             window.endFrame();
+        }
+    }
+
+    private void captureScreenshot() {
+        int w = window.getWidth();
+        int h = window.getHeight();
+        ByteBuffer px = ScreenCapture.readPixels(w, h);
+        try {
+            ScreenCapture.write(px, w, h, Path.of(ScreenCapture.SCREENSHOT_DIR));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -132,6 +151,10 @@ public class Game {
 
         if (actions.contains(IInputAction.Simple.EXIT)) {
             window.close();
+        }
+
+        if (actions.contains(IInputAction.Simple.SCREENSHOT)) {
+            screenshotRequested = true;
         }
 
         if (actions.contains(IInputAction.Simple.RELOAD_SHADERS)) {
