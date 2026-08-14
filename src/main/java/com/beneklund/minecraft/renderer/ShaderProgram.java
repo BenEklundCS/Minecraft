@@ -3,11 +3,13 @@ package com.beneklund.minecraft.renderer;
 import static com.beneklund.minecraft.util.Log.RENDER;
 
 import com.beneklund.minecraft.platform.graphics.GlShader;
+import com.beneklund.minecraft.platform.graphics.UniformValue;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -38,6 +40,10 @@ public class ShaderProgram {
         shader = next;
         RENDER.info("reloaded {}", fragmentShaderPath);
         return true;
+    }
+
+    public void apply(Map<String, UniformValue<?>> frame, Map<String, UniformValue<?>> call) {
+        shader.apply(frame, call);
     }
 
     private String loadSource(String path) {

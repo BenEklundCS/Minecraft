@@ -33,7 +33,9 @@ tasks.withType(JavaExec).configureEach {
     jvmArgs '--enable-preview', '--enable-native-access=ALL-UNNAMED'
     // Chunks are flat arrays — 128 KiB each regardless of contents — so render distance costs
     // memory quadratically. Without this the JVM default caps at a quarter of physical RAM.
-    maxHeapSize = '24g'
+    // Overridable because the default is sized for this dev machine: on a 16 GB CI runner,
+    // asking for 24 GB starves native allocations and OpenAL fails to open a device.
+    maxHeapSize = providers.gradleProperty('gameHeap').getOrElse('24g')
 }
 
 repositories {

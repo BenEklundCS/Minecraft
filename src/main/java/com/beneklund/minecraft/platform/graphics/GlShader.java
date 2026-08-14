@@ -2,11 +2,16 @@ package com.beneklund.minecraft.platform.graphics;
 
 import static com.beneklund.minecraft.util.Log.GPU;
 import static org.lwjgl.opengl.GL20.*;
+import static org.lwjgl.opengl.GL31.GL_UNIFORM_TYPE;
+import static org.lwjgl.opengl.GL31C.glGetActiveUniformName;
+import static org.lwjgl.opengl.GL31C.glGetActiveUniformsi;
 import static org.lwjgl.system.MemoryStack.stackPush;
 
 import java.nio.FloatBuffer;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
@@ -31,9 +36,11 @@ public final class GlShader {
     private int vertexShader;
     private int fragmentShader;
 
-    // glGetUniformLocation is a string lookup into the linked program - cache it so we're not
-    // doing it every frame for the same name. -1 means "no such active uniform" (see setMatrix4).
-    private final Map<String, Integer> uniformLocations = new HashMap<>();
+    // tracking of complained about uniforms so a supplier logs once
+    private final Set<String> warned = new HashSet<>();
+    private final Map<String, ActiveUniform> activeUniforms = new HashMap<>();
+
+    private record ActiveUniform(String name, int location, int type) {}
 
     public GlShader(String vertexShaderSource, String fragmentShaderSource) {
         this.vertexShaderSource = vertexShaderSource;
@@ -44,6 +51,21 @@ public final class GlShader {
 
     public void use() {
         glUseProgram(programId);
+    }
+
+    public void apply(Map<String, UniformValue<?>> frame, Map<String, UniformValue<?>> call) {
+        for (ActiveUniform uniform : activeUniforms.values()) {
+            if (!drivenByFrameUniforms(uniform.type())) continue;
+            UniformValue<?> value = call.get(uniform.name());
+            if (value == null) value = frame.get(uniform.name());
+            if (value == null) {
+                if (warned.add(uniform.name())) {
+                    GPU.warn("program {} declares {} but nothing supplies it", programId, uniform.name());
+                }
+                continue;
+            }
+            upload(uniform.location(), value);
+        }
     }
 
     public int getProgramId() {
@@ -78,8 +100,28 @@ public final class GlShader {
         }
     }
 
+    private static void upload(int location, UniformValue<?> value) {
+        switch (value) {
+            case UniformValue.F f -> glUniform1f(location, f.value());
+            case UniformValue.V3 v ->
+                glUniform3f(location, v.value().x(), v.value().y(), v.value().z());
+            case UniformValue.M4 m -> {
+                try (MemoryStack stack = stackPush()) {
+                    FloatBuffer buffer = stack.mallocFloat(16);
+                    m.value().get(buffer);
+                    glUniformMatrix4fv(location, false, buffer);
+                }
+            }
+        }
+    }
+
+    private static boolean drivenByFrameUniforms(int glType) {
+        return glType == GL_FLOAT || glType == GL_FLOAT_VEC3 || glType == GL_FLOAT_MAT4;
+    }
+
     private int location(String name) {
-        return uniformLocations.computeIfAbsent(name, n -> glGetUniformLocation(programId, n));
+        ActiveUniform uniform = activeUniforms.get(name);
+        return uniform == null ? -1 : uniform.location();
     }
 
     public void delete() {
@@ -110,9 +152,20 @@ public final class GlShader {
         glAttachShader(programId, vertexShader);
         glAttachShader(programId, fragmentShader);
         glLinkProgram(programId);
+
         if (glGetProgrami(programId, GL_LINK_STATUS) == GL_FALSE) {
             GPU.error(glGetProgramInfoLog(programId));
             throw new RuntimeException("Failed to link() shader program");
         }
+
+        int count = glGetProgrami(programId, GL_ACTIVE_UNIFORMS);
+        for (int i = 0; i < count; i++) {
+            String name = glGetActiveUniformName(programId, i);
+            int uniformType = glGetActiveUniformsi(programId, i, GL_UNIFORM_TYPE);
+            int location = glGetUniformLocation(programId, name);
+            if (location < 0) continue;
+            activeUniforms.put(name, new ActiveUniform(name, location, uniformType));
+        }
+        GPU.debug("program {} declares uniform(s): {}", programId, activeUniforms.keySet());
     }
 }

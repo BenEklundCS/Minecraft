@@ -92,8 +92,7 @@ public class Game {
             cycle.advance(delta.getDelta());
             Hotbar hotbar = player.getHotbar();
             hudRenderer.setHotbar(hotbar.snapshot(), hotbar.selected());
-            renderer.setSkyBrightness(cycle.skyBrightness());
-            window.setClearColor(renderer.fogColor());
+            pushRenderVariables();
             window.beginFrame();
             renderer.draw(camera);
             if (screenshotRequested) {
@@ -102,6 +101,12 @@ public class Game {
             }
             window.endFrame();
         }
+    }
+
+    private void pushRenderVariables() {
+        renderer.setSkyBrightness(cycle.skyBrightness());
+        renderer.setSunDirection(cycle.sunDirection());
+        window.setClearColor(renderer.fogColor());
     }
 
     private void captureScreenshot() {

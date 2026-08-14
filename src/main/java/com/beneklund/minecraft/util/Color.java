@@ -9,9 +9,10 @@ public record Color(float red, float green, float blue, float alpha) {
     public static final Color WHITE = new Color(1.0f, 1.0f, 1.0f, 1.0f);
     public static final Color RED = new Color(1.0f, 0.0f, 0.0f, 1.0f);
     public static final Color OAK_LEAF = new Color(0.475f, 0.753f, 0.353f, 1.0f);
-    // Minecraft's overworld daytime fog, #C0D8FF. Doubles as the clear color — with a flat
-    // clear (no sky dome) the two have to be the same value or the horizon shows a seam
-    // where fog stops and sky starts.
+    // Minecraft's overworld daytime fog, #C0D8FF. Still the clear color and the startup
+    // fallback, but no longer what distant terrain fades to: since GG-4 the fog colour is
+    // sampled from the sky model per frame (Renderer.updateFogFromSky), so it matches the sky
+    // it dissolves into instead of being one constant hue the sky never contains.
     public static final Color FOG = new Color(0.753f, 0.847f, 1.0f, 1.0f);
     public static final Color SKY_HORIZON = new Color(0.78f, 0.87f, 1.0f, 1.0f);
     public static final Color SKY_ZENITH = new Color(0.25f, 0.45f, 0.85f, 1.0f);

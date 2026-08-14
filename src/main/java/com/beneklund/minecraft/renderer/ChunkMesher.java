@@ -96,7 +96,7 @@ public class ChunkMesher {
     // Safe to call from any worker thread — no GL calls, no shared mutable state.
     //
     // Faces are routed into one of two buffers by the block's transparent flag so the
-    // renderer can do an opaque pass then a transparent pass (see ChunkRenderable / Renderer).
+    // renderer can do an opaque pass then a transparent pass (see ChunkRenderer / Renderer).
     public ChunkMeshData mesh(ChunkPos pos, ChunkWithNeighbors cn) {
         ChunkMeshingBuffer opaque = getBuffer();
         ChunkMeshingBuffer transparent = getBuffer();

@@ -49,7 +49,9 @@ jobs:
 
           # Run game for 5 seconds then terminate — a clean timeout means it started fine.
           # Exit 124 = timed out (good). Any other non-zero = crashed on startup (bad).
-          DISPLAY=:99 timeout --signal=SIGTERM 5 ./gradlew run 2>&1 | tee game-smoke.log
+          # -PgameHeap: the build's default heap is sized for a dev machine and exceeds this
+          # runner's physical RAM, which starves native allocations during startup.
+          DISPLAY=:99 timeout --signal=SIGTERM 5 ./gradlew run -PgameHeap=2g 2>&1 | tee game-smoke.log
           EXIT=${PIPESTATUS[0]}
 
           kill "$XVFB_PID" 2>/dev/null || true

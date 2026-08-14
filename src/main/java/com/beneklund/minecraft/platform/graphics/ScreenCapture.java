@@ -24,9 +24,8 @@ public class ScreenCapture {
 
     public static Path write(ByteBuffer pixels, int width, int height, Path dir) throws IOException {
         Files.createDirectories(dir);
-        String name = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
-                .format(LocalDateTime.now())
-                .formatted(".png");
+        String name = "%s%s"
+                .formatted(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(LocalDateTime.now()), ".png");
         Path out = dir.resolve(name);
         STBImageWrite.stbi_flip_vertically_on_write(true);
         STBImageWrite.stbi_write_png(out.toString(), width, height, CHANNELS, pixels, width * CHANNELS);

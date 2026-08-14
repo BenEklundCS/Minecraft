@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.world;
 
+import org.joml.Vector3f;
+
 public class DayNightCycle {
     private static final float FULL_DAY = 1.0f;
     private static final double CURVE_MIDPOINT = 0.5f;
@@ -31,6 +33,11 @@ public class DayNightCycle {
     public float skyBrightness() {
         double curve = CURVE_MIDPOINT - (CURVE_AMPLITUDE * Math.cos(FULL_CYCLE_RADIANS * timeOfDay));
         return (float) (NIGHT_BRIGHTNESS + ((double) DAY_BRIGHTNESS - NIGHT_BRIGHTNESS) * curve);
+    }
+
+    public Vector3f sunDirection() {
+        double angle = (timeOfDay - 0.25f) * FULL_CYCLE_RADIANS;
+        return new Vector3f(0.0f, (float) Math.sin(angle), (float) Math.cos(angle)).normalize();
     }
 
     public float timeOfDay() {
