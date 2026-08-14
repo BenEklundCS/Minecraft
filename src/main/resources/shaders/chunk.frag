@@ -28,5 +28,9 @@ void main() {
     vec3 lit = texColor.rgb * vAO * light * faceBrightness * vTint;
     float dist = length(vViewPos);
     float fogFactor = clamp((dist - uFogStart) / (uFogEnd - uFogStart), 0.0, 1.0);
-    FragColor = vec4(mix(lit, uFogColor, fogFactor), texColor.a);
+    // Into the same radiance units the sky writes, or the tonemap in post.frag crushes a fully
+    // lit face to 11%. Solved against ACES for 0.90 out at light=1: aces(scale * uExposure) = 0.9
+    // reduces to 0.323x^2 - 0.501x - 0.126 = 0, x = 1.771, scale = x / 0.115.
+    const float RADIANCE_SCALE = 15.4;
+    FragColor = vec4(mix(lit, uFogColor, fogFactor) * RADIANCE_SCALE, texColor.a);
 }

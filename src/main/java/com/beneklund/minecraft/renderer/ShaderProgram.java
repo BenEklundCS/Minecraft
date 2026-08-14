@@ -71,8 +71,16 @@ public class ShaderProgram {
         shader.use();
     }
 
+    public void setUniformInt(String name, int value) {
+        shader.setInt(name, value);
+    }
+
     public void setUniformFloat(String name, float value) {
         shader.setFloat(name, value);
+    }
+
+    public void setUniformVec2(String name, float x, float y) {
+        shader.setVec2(name, x, y);
     }
 
     public void setUniformVec3(String name, Vector3f vec3) {

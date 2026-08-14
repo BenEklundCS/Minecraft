@@ -6,6 +6,7 @@ import static org.lwjgl.opengl.GL11.*;
 import com.beneklund.minecraft.platform.graphics.UniformValue;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.world.PreethamSky;
+import com.beneklund.minecraft.world.SkyModel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -27,9 +28,13 @@ public class Renderer {
 
     private static final float TURBIDITY = 2.5f;
 
-    private static final float EXPOSURE = 0.115f;
+    public static final float EXPOSURE = 0.115f;
 
-    private PreethamSky sky;
+    // Seeded with the sun overhead so the coefficient uniforms are never null if a frame draws
+    // before Game.run pushes a real sun position. Rebuilt in place by setSunDirection rather
+    // than reallocated - this runs every frame.
+    private final SkyModel sky = new SkyModel(TURBIDITY, EXPOSURE, new Vector3f(0.0f, 1.0f, 0.0f));
+
     private final Vector4f horizonProbe = new Vector4f();
     private final Vector3f horizonDir = new Vector3f();
 
@@ -46,6 +51,9 @@ public class Renderer {
     private final Matrix4f modelScratch = new Matrix4f();
 
     private final Map<String, UniformValue<?>> frameUniforms = new HashMap<>();
+
+    // Collected by drawScene, filtered again by drawHud. Render-thread-only, like everything here.
+    private final List<DrawCall> calls = new ArrayList<>();
 
     public Renderer(List<IRenderable> registered, Color fogColor, Vector2f fogRange) {
         this.registered = registered;
@@ -76,32 +84,42 @@ public class Renderer {
 
     public void setSunDirection(Vector3f sunDirection) {
         this.sunDirection = sunDirection;
-        sky = new PreethamSky(TURBIDITY, sunDirection);
-        coefficientA = sky.coefficientA();
-        coefficientB = sky.coefficientB();
-        coefficientC = sky.coefficientC();
-        coefficientD = sky.coefficientD();
-        coefficientE = sky.coefficientE();
-        skyZenith = sky.zenith();
-        skyZenithF = sky.zenithF();
+        sky.setSunDirection(sunDirection);
+        PreethamSky daylight = sky.preetham();
+        coefficientA = daylight.coefficientA();
+        coefficientB = daylight.coefficientB();
+        coefficientC = daylight.coefficientC();
+        coefficientD = daylight.coefficientD();
+        coefficientE = daylight.coefficientE();
+        skyZenith = daylight.zenith();
+        skyZenithF = daylight.zenithF();
     }
 
     public Color fogColor() {
         return fogColor;
     }
 
-    public void draw(Camera camera) {
+    /*
+     * Split from drawHud because the two land in different framebuffers. The scene renders into
+     * the HDR buffer and gets tonemapped on the way out; the HUD is authored in display values
+     * and must not be, or the crosshair dims whenever the player looks at the sun.
+     *
+     * drawScene has to run first in a frame - drawHud filters the call list this collected.
+     */
+    public void drawScene(Camera camera) {
         viewRotation.set(camera.getViewMatrix()).setTranslation(0, 0, 0);
         invViewProj.set(camera.getProjectionMatrix()).mul(viewRotation).invert();
 
-        setUniforms(camera);
+        // Fog first: setUniforms hands frameUniforms a reference to fogColorVec, not a copy,
+        // so computing the colour afterwards would work only by accident of in-place mutation.
         updateFogFromSky();
+        setUniforms(camera);
 
         // Collect every renderable's calls first, then draw by pass. Gathering across all
         // renderables means transparent geometry blends against the full opaque scene, not
         // just whatever opaque calls happened to come before it in the same renderable.
         // NOTE: getDrawCalls must not set GL state — Renderer owns it entirely.
-        List<DrawCall> calls = new ArrayList<>();
+        calls.clear();
         for (IRenderable renderable : registered) calls.addAll(renderable.getDrawCalls(camera));
 
         // Guarded because this runs every frame — without the check we'd walk the call list three
@@ -130,8 +148,11 @@ public class Renderer {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         for (DrawCall call : calls) if (call.pass() == RenderPass.TRANSPARENT) submit(call, camera);
+    }
 
-        // HUD pass: drawn last over everything, no depth test, blending on for alpha.
+    // Runs after the post pass, against the default framebuffer, so nothing here is tonemapped.
+    public void drawHud(Camera camera) {
+        // Drawn over everything, no depth test, blending on for alpha.
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
         glDepthMask(true);
@@ -156,6 +177,9 @@ public class Renderer {
         frameUniforms.put("uSkyBrightness", new UniformValue.F(skyBrightness));
         frameUniforms.put("uExposure", new UniformValue.F(EXPOSURE));
         frameUniforms.put("uSunDirection", new UniformValue.V3(sunDirection));
+        frameUniforms.put("uDayFactor", new UniformValue.F(sky.dayFactor()));
+        frameUniforms.put("uNightHorizon", new UniformValue.V3(sky.nightHorizon()));
+        frameUniforms.put("uNightZenith", new UniformValue.V3(sky.nightZenith()));
         frameUniforms.put("uA", new UniformValue.V3(coefficientA));
         frameUniforms.put("uB", new UniformValue.V3(coefficientB));
         frameUniforms.put("uC", new UniformValue.V3(coefficientC));
@@ -173,15 +197,7 @@ public class Renderer {
         if (horizonDir.lengthSquared() < 1e-6f) return;
         horizonDir.normalize();
 
-        Vector3f linear = sky.skyColor(horizonDir);
-        fogColorVec.set(
-                exposed(linear.x) * skyBrightness,
-                exposed(linear.y) * skyBrightness,
-                exposed(linear.z) * skyBrightness);
-    }
-
-    private static float exposed(float linear) {
-        return (float) (1.0 - Math.exp(-EXPOSURE * Math.max(linear, 0.0f)));
+        fogColorVec.set(sky.colorFor(horizonDir));
     }
 
     private static long countPass(List<DrawCall> calls, RenderPass pass) {

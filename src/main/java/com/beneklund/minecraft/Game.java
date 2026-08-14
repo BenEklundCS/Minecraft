@@ -7,6 +7,7 @@ import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
+import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
 import com.beneklund.minecraft.platform.graphics.ScreenCapture;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
@@ -32,6 +33,8 @@ public class Game {
 
     private final Window window;
     private final Renderer renderer;
+    private final GlFramebuffer sceneBuffer;
+    private final PostProcessor postProcessor;
     private final ChunkManager chunkManager;
     private final RenderWorld renderWorld;
     private final Camera camera;
@@ -53,6 +56,8 @@ public class Game {
     public Game(
             Window window,
             Renderer renderer,
+            GlFramebuffer sceneBuffer,
+            PostProcessor postProcessor,
             ChunkManager chunkManager,
             RenderWorld renderWorld,
             Camera camera,
@@ -68,6 +73,8 @@ public class Game {
             HudRenderer hudRenderer) {
         this.window = window;
         this.renderer = renderer;
+        this.sceneBuffer = sceneBuffer;
+        this.postProcessor = postProcessor;
         this.chunkManager = chunkManager;
         this.renderWorld = renderWorld;
         this.camera = camera;
@@ -93,8 +100,17 @@ public class Game {
             Hotbar hotbar = player.getHotbar();
             hudRenderer.setHotbar(hotbar.snapshot(), hotbar.selected());
             pushRenderVariables();
+            sceneBuffer.bind();
             window.beginFrame();
-            renderer.draw(camera);
+            renderer.drawScene(camera);
+
+            // draw() owns the return to the default framebuffer now — it runs three half-res
+            // bloom passes first, so it has to do its own binding between them.
+            postProcessor.draw(sceneBuffer.colorTexture(), window.getWidth(), window.getHeight());
+
+            // After the tonemap, straight to the window. HUD colours are display values already.
+            renderer.drawHud(camera);
+
             if (screenshotRequested) {
                 captureScreenshot();
                 screenshotRequested = false;
@@ -164,6 +180,7 @@ public class Game {
 
         if (actions.contains(IInputAction.Simple.RELOAD_SHADERS)) {
             renderer.reloadAll();
+            postProcessor.reload();
         }
 
         inputHandler.handle(actions);

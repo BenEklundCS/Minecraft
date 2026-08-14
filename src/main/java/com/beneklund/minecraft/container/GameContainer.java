@@ -4,6 +4,7 @@ import static com.beneklund.minecraft.util.Log.AUDIO;
 import static com.beneklund.minecraft.util.Log.LOGGER;
 import static com.beneklund.minecraft.util.Log.PLAYER;
 import static com.beneklund.minecraft.util.Log.WORLD;
+import static org.lwjgl.opengl.GL30.GL_RGBA16F;
 
 import com.beneklund.minecraft.Game;
 import com.beneklund.minecraft.block.Block;
@@ -12,6 +13,7 @@ import com.beneklund.minecraft.infra.*;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbAudioLoader;
+import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
 import com.beneklund.minecraft.platform.images.StbImageLoader;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
@@ -73,6 +75,10 @@ public class GameContainer {
     private DebugRenderer debugRenderer;
     private HudRenderer hudRenderer;
     private Renderer renderer;
+    private GlFramebuffer sceneBuffer;
+    private GlFramebuffer bloomA;
+    private GlFramebuffer bloomB;
+    private PostProcessor postProcessor;
 
     // audio
     private AudioPlayer music;
@@ -187,6 +193,24 @@ public class GameContainer {
         // never gets used.
         renderer = new Renderer(
                 List.of(skyRenderer, chunkRenderer, debugRenderer, hudRenderer), cfg.clearColor(), fogRange);
+
+        // The scene renders here instead of straight to the window, and PostProcessor draws it
+        // back out. RGBA16F because sky.frag emits linear radiance now — the sun runs well past
+        // 1.0 and an 8-bit attachment would clip it before the tonemap in post.frag sees it.
+        //
+        // Registered for resize: the attachments are allocated at a fixed size, so without this
+        // the scene keeps rendering at the launch resolution and gets stretched.
+        sceneBuffer = new GlFramebuffer(window.getWidth(), window.getHeight(), GL_RGBA16F);
+        int bloomW = Math.max(1, window.getWidth() / 2);
+        int bloomH = Math.max(1, window.getHeight() / 2);
+        bloomA = new GlFramebuffer(bloomW, bloomH, GL_RGBA16F);
+        bloomB = new GlFramebuffer(bloomW, bloomH, GL_RGBA16F);
+        window.addResizeListener((w, h) -> {
+            bloomA.resize(Math.max(1, w / 2), Math.max(1, h / 2));
+            bloomB.resize(Math.max(1, w / 2), Math.max(1, h / 2));
+        });
+        window.addResizeListener(sceneBuffer::resize);
+        postProcessor = new PostProcessor(Renderer.EXPOSURE, bloomA, bloomB);
     }
 
     private void initAudio() {
@@ -220,7 +244,7 @@ public class GameContainer {
         ChunkStore store = new ChunkStore(worldConfig.seed());
         chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store, lightEngine);
         physics = new Physics();
-        cycle = new DayNightCycle(DayNightCycle.NOON, DayNightCycle.SHORT_DAY_SECONDS);
+        cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.SHORT_DAY_SECONDS);
         WORLD.debug("world ready: {} generation spec(s), seed {}", generationSpecs.size(), worldConfig.seed());
     }
 
@@ -240,6 +264,8 @@ public class GameContainer {
         return new Game(
                 window,
                 renderer,
+                sceneBuffer,
+                postProcessor,
                 chunkManager,
                 renderWorld,
                 camera,
@@ -269,6 +295,10 @@ public class GameContainer {
         }
         chunkManager.flushAllDirty();
         music.shutdown();
+        postProcessor.delete();
+        sceneBuffer.delete();
+        bloomB.delete();
+        bloomA.delete();
         renderer.delete();
         atlas.delete();
         window.shutdown();

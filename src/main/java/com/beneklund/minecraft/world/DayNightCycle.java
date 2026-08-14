@@ -8,6 +8,7 @@ public class DayNightCycle {
     private static final double CURVE_AMPLITUDE = 0.5f;
     private static final double FULL_CYCLE_RADIANS = Math.PI * 2;
 
+    public static final float MORNING = 0.25f;
     public static final float NOON = 0.5f;
     public static final float MIDNIGHT = 0.0f;
     public static final float NIGHT_BRIGHTNESS = 0.15f;

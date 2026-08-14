@@ -44,8 +44,8 @@ public class PreethamSkyTest {
     @Test
     void thetaS_clampsAtTheHorizon() {
         // Preetham is a daylight model. Past sunset the raw angle would exceed PI/2 and drive
-        // zenith luminance negative, so the sun is held at the horizon and DayNightCycle's
-        // skyBrightness does the dimming instead.
+        // zenith luminance negative, so the sun is held at the horizon and SkyModel.dayFactor()
+        // fades the model out into night instead (see SkyModelTest).
         assertEquals((float) (Math.PI / 2.0), sky(CLEAR_DAY, SUN_BELOW).thetaS(), 1e-5);
         assertTrue(sky(CLEAR_DAY, SUN_BELOW).zenithLuminance() > 0.0f, "night must not produce negative luminance");
     }

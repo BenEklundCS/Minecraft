@@ -64,7 +64,7 @@ public class PreethamSky {
     // the (PI - 2*thetaS) term in zenithLuminance() goes negative, tan() flips sign, and the
     // zenith luminance comes out *negative* - which through the xyY conversion is garbage
     // colour, not darkness. Holding the sun at the horizon keeps the model inside its valid
-    // domain and lets DayNightCycle.skyBrightness() dim the result into night instead.
+    // domain; SkyModel.dayFactor() is what takes over from there and fades this out into night.
     public float thetaS() {
         double cosThetaS = Math.max(-1.0, Math.min(1.0, sunDirection.y));
         return (float) Math.min(Math.acos(cosThetaS), HALF_PI);
