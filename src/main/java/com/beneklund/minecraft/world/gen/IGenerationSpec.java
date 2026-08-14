@@ -6,9 +6,9 @@ import java.util.List;
 public sealed interface IGenerationSpec {
     List<IGenerationSpec> DEFAULT_WORLD_GENERATION = List.of(
             new NoiseLayersSpec(
-                    new IGenerationSpec.NoiseLayerSpec(4, 0.002, 0.5, 0.5, 0),
-                    new IGenerationSpec.NoiseLayerSpec(3, 0.008, 0.5, 0.3, 100),
-                    new IGenerationSpec.NoiseLayerSpec(2, 0.04, 0.5, 0.2, 200)),
+                    new IGenerationSpec.NoiseLayerSpec(4, 0.002, 0.5, 0.5, 0, true),
+                    new IGenerationSpec.NoiseLayerSpec(3, 0.008, 0.5, 0.3, 100, true),
+                    new IGenerationSpec.NoiseLayerSpec(2, 0.04, 0.5, 0.2, 200, false)),
             new OreSpec(Block.COAL_ORE, 5, 50, 0.01f),
             new OreSpec(Block.IRON_ORE, 5, 30, 0.005f),
             new TreeSpec(0.05f, 8),
@@ -17,7 +17,8 @@ public sealed interface IGenerationSpec {
             new BiomeSpec(1, 0.0005, 0.5, 700)); // humidity
 
     // Component type — used inside NoiseLayersSpec, not a spec on its own.
-    record NoiseLayerSpec(int octaves, double scale, double persistence, double weight, long seedOffset) {}
+    record NoiseLayerSpec(
+            int octaves, double scale, double persistence, double weight, long seedOffset, boolean ridged) {}
 
     // The three terrain-blend layers, named so their roles are unambiguous at the call site.
     record NoiseLayersSpec(NoiseLayerSpec continental, NoiseLayerSpec erosion, NoiseLayerSpec detail)

@@ -135,8 +135,12 @@ public class WorldGenerator implements IWorldGenerator {
     }
 
     private double sampleLayer(long seed, int x, int z, IGenerationSpec.NoiseLayerSpec layer) {
-        return noiseHelper.noise2(seed + layer.seedOffset(), x, z, layer.octaves(), layer.persistence(), layer.scale())
-                * layer.weight();
+        double n = layer.ridged()
+                ? noiseHelper.ridged2(
+                        seed + layer.seedOffset(), x, z, layer.octaves(), layer.persistence(), layer.scale())
+                : noiseHelper.noise2(
+                        seed + layer.seedOffset(), x, z, layer.octaves(), layer.persistence(), layer.scale());
+        return n * layer.weight();
     }
 
     private double sampleSpec(long seed, int x, int z, IGenerationSpec.BiomeSpec spec) {

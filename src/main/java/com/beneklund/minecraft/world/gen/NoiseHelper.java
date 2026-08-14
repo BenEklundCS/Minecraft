@@ -17,6 +17,7 @@ import com.beneklund.minecraft.util.OpenSimplex2;
 //   scale=0.008 → erosion/hilliness
 //   scale=0.04  → fine surface detail or cave carving
 public class NoiseHelper {
+    public static final double RIDGE_PEAK = 1.0;
 
     // 2D fractal noise — use for surface height maps.
     // frequency doubles each octave so each pass samples 2× finer detail.
@@ -58,7 +59,11 @@ public class NoiseHelper {
     }
 
     public double ridged2(long seed, double x, double z, int octaves, double persistence, double scale) {
-        return noise2(seed, x, z, octaves, persistence, scale);
+        return ridge(noise2(seed, x, z, octaves, persistence, scale));
+    }
+
+    public static double ridge(double n) {
+        return (RIDGE_PEAK - Math.abs(n)) * 2.0 - 1.0;
     }
 
     // Shift the [-1, 1] output range to [0, 1]. The +1 moves the floor to 0,
