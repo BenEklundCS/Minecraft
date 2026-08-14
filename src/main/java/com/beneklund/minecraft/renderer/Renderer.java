@@ -12,8 +12,9 @@ import org.joml.Vector2f;
 // opaque pass first then transparent pass (see draw()).
 public class Renderer {
     private final List<IRenderable> registered;
-    private final Color fogColor;
+    private Color fogColor;
     private final Vector2f fogRange;
+    private float skyBrightness;
 
     public Renderer(List<IRenderable> registered, Color fogColor, Vector2f fogRange) {
         this.registered = registered;
@@ -29,6 +30,18 @@ public class Renderer {
     public void reloadAll() {
         RENDER.info("reloading {} renderable(s)", registered.size());
         for (IRenderable r : registered) r.reload();
+    }
+
+    public void setSkyBrightness(float skyBrightness) {
+        this.skyBrightness = skyBrightness;
+        fogColor = Color.FOG.scale(skyBrightness);
+    }
+
+    // The clear color has to match the fog color exactly or the horizon shows a seam where
+    // fog stops and the cleared background starts. Renderer owns the tinting, so the window
+    // reads it back from here rather than computing its own.
+    public Color fogColor() {
+        return fogColor;
     }
 
     public void draw(Camera camera) {
@@ -94,6 +107,7 @@ public class Renderer {
         call.shader().setUniformVec3("uFogColor", fogColor.toRgbVec3());
         call.shader().setUniformFloat("uFogStart", fogRange.x);
         call.shader().setUniformFloat("uFogEnd", fogRange.y);
+        call.shader().setUniformFloat("uSkyBrightness", skyBrightness);
         call.mesh().render();
     }
 }

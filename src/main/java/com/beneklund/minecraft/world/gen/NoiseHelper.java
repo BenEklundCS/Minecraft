@@ -57,6 +57,10 @@ public class NoiseHelper {
         return total / maxAmplitude;
     }
 
+    public double ridged2(long seed, double x, double z, int octaves, double persistence, double scale) {
+        return noise2(seed, x, z, octaves, persistence, scale);
+    }
+
     // Shift the [-1, 1] output range to [0, 1]. The +1 moves the floor to 0,
     // the /2 compresses the resulting [0, 2] back to unit width.
     public double normalize(double noise) {

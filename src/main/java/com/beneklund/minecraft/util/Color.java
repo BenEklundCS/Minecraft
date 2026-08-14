@@ -29,4 +29,8 @@ public record Color(float red, float green, float blue, float alpha) {
                 (float) Math.lerp(a.blue(), b.blue(), t),
                 (float) Math.lerp(a.alpha(), b.alpha(), t));
     }
+
+    public Color scale(float factor) {
+        return new Color(red * factor, green * factor, blue * factor, alpha);
+    }
 }

@@ -18,10 +18,7 @@ import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.util.RaycastResult;
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkState;
-import com.beneklund.minecraft.world.IWorldAuthority;
-import com.beneklund.minecraft.world.World;
+import com.beneklund.minecraft.world.*;
 import java.util.List;
 import org.joml.Vector3f;
 
@@ -37,6 +34,7 @@ public class Game {
     private final Camera camera;
     private final Player player;
     private final Physics physics;
+    private final DayNightCycle cycle;
     private final InputHandler inputHandler;
     private final World world;
     private final IWorldAuthority authority;
@@ -56,6 +54,7 @@ public class Game {
             Camera camera,
             Player player,
             Physics physics,
+            DayNightCycle cycle,
             InputHandler inputHandler,
             World world,
             IWorldAuthority authority,
@@ -70,6 +69,7 @@ public class Game {
         this.camera = camera;
         this.player = player;
         this.physics = physics;
+        this.cycle = cycle;
         this.inputHandler = inputHandler;
         this.world = world;
         this.authority = authority;
@@ -85,8 +85,11 @@ public class Game {
             processInput();
             processPhysics();
             processChunks();
+            cycle.advance(delta.getDelta());
             Hotbar hotbar = player.getHotbar();
             hudRenderer.setHotbar(hotbar.snapshot(), hotbar.selected());
+            renderer.setSkyBrightness(cycle.skyBrightness());
+            window.setClearColor(renderer.fogColor());
             window.beginFrame();
             renderer.draw(camera);
             window.endFrame();

@@ -14,10 +14,12 @@ public class LocalWorldAuthority implements IWorldAuthority {
 
     private final World world;
     private final BlockRegistry registry;
+    private final LightEngine lightEngine;
 
-    public LocalWorldAuthority(World world, BlockRegistry registry) {
+    public LocalWorldAuthority(World world, BlockRegistry registry, LightEngine lightEngine) {
         this.world = world;
         this.registry = registry;
+        this.lightEngine = lightEngine;
     }
 
     @Override
@@ -36,8 +38,17 @@ public class LocalWorldAuthority implements IWorldAuthority {
         ChunkPos pos = getChunkPos(x, z);
         if (chunk == null) return;
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
+        BlockDef previous = registry.get(chunk.getBlock(chunkCoordinates.x, y, chunkCoordinates.z));
         chunk.setBlock(chunkCoordinates.x, y, chunkCoordinates.z, block);
         chunk.tryTransition(ChunkState.DIRTY);
+        // An emitter throws light up to 15 blocks, so by the time it's broken its glow is baked into
+        // the surrounding chunks' LightMaps and meshes. Those chunks have no edit of their own to
+        // remesh for, and a from-scratch recompute of this one would only read the glow back off
+        // them, so the light has to be taken out by hand and every chunk that held it re-meshed.
+        if (previous.lightLevel() > 0) {
+            lightEngine.removeBlockLight(this, x, y, z, previous.lightLevel());
+            markNeighborsDirty(pos);
+        }
         // This is the player-edit path only — world generation writes straight into the Chunk — so
         // one line per edit is the right granularity, not thousands per generated chunk.
         WORLD.debug("setBlock {} at world ({}, {}, {}) in chunk {}", block, x, y, z, pos);

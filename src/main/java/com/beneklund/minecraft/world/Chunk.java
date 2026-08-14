@@ -120,4 +120,11 @@ public class Chunk {
     public int getBlockLight(int x, int y, int z) {
         return light.block(index(x, y, z));
     }
+
+    // The one place a LightMap is written after setLightData handed it over: LightEngine's removal
+    // walk, patching out light whose emitter is gone. Callers check hasLight() first — a chunk that
+    // has never been lit has nothing to patch.
+    public void setBlockLight(int x, int y, int z, int level) {
+        light.setBlock(index(x, y, z), level);
+    }
 }

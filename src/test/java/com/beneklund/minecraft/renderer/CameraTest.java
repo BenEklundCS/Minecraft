@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class CameraTest {
     private static final WindowConfig CONFIG =
-            new WindowConfig("test", 1920, 1080, false, new Color(0, 0, 0, 0), false);
+            new WindowConfig("test", 1920, 1080, false, WindowConfig.Mode.WINDOWED, new Color(0, 0, 0, 0), false);
     private static final float EPSILON = 1e-5f;
 
     private Player player;

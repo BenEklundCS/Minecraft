@@ -83,6 +83,7 @@ public class GameContainer {
     private WorldGenerator worldGen;
     private ChunkManager chunkManager;
     private Physics physics;
+    private DayNightCycle cycle;
 
     // player
     private IPlayerStore playerStore;
@@ -179,6 +180,9 @@ public class GameContainer {
         float end = 0.9f * cfg.renderDistance() * Chunk.SIZE_XZ;
         float start = 0.55f * end;
         Vector2f fogRange = new Vector2f(start, end);
+        // No initial sky brightness here on purpose — Game.run sets it from the DayNightCycle
+        // every frame before draw(), so a value passed in would only ever be the one that
+        // never gets used.
         renderer = new Renderer(List.of(chunkRenderable, debugRenderer, hudRenderer), cfg.clearColor(), fogRange);
     }
 
@@ -205,14 +209,15 @@ public class GameContainer {
 
     private void initWorld() {
         world = new World(new ConcurrentHashMap<>());
-        authority = new LocalWorldAuthority(world, registry);
+        LightEngine lightEngine = new LightEngine(registry);
+        authority = new LocalWorldAuthority(world, registry, lightEngine);
         List<IGenerationSpec> generationSpecs = IGenerationSpec.DEFAULT_WORLD_GENERATION;
         worldGen = new WorldGenerator(registry, generationSpecs);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         ChunkStore store = new ChunkStore(worldConfig.seed());
-        LightEngine lightEngine = new LightEngine(registry);
         chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store, lightEngine);
         physics = new Physics();
+        cycle = new DayNightCycle(DayNightCycle.NOON, DayNightCycle.SHORT_DAY_SECONDS);
         WORLD.debug("world ready: {} generation spec(s), seed {}", generationSpecs.size(), worldConfig.seed());
     }
 
@@ -237,6 +242,7 @@ public class GameContainer {
                 camera,
                 player,
                 physics,
+                cycle,
                 inputHandler,
                 world,
                 authority,

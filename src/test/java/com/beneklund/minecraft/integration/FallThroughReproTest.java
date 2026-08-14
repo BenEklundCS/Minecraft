@@ -108,7 +108,8 @@ class FallThroughReproTest {
 
         for (int trial = 0; trial < trials; trial++) {
             World world = new World(new ConcurrentHashMap<>());
-            LocalWorldAuthority authority = new LocalWorldAuthority(world, registry);
+            LightEngine lightEngine = new LightEngine(registry);
+            LocalWorldAuthority authority = new LocalWorldAuthority(world, registry, lightEngine);
             WorldGenerator worldGen = new WorldGenerator(registry, IGenerationSpec.DEFAULT_WORLD_GENERATION);
             ChunkMesher mesher = new ChunkMesher(registry, null);
             WorldConfig config = new WorldConfig(seed, 4);
@@ -121,7 +122,6 @@ class FallThroughReproTest {
                     return Optional.empty();
                 }
             };
-            LightEngine lightEngine = new LightEngine(registry);
             ChunkManager chunkManager =
                     new ChunkManager(config, world, worldGen, mesher, authority, chunkStore, lightEngine);
 

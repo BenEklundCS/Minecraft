@@ -11,6 +11,7 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 import com.beneklund.minecraft.container.WindowConfig;
 import com.beneklund.minecraft.platform.input.IRawInputEvent;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
+import com.beneklund.minecraft.util.Color;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -96,6 +97,10 @@ public class Window {
         return glfwGetTime();
     }
 
+    public void setClearColor(Color clearColor) {
+        glClearColor(clearColor.red(), clearColor.green(), clearColor.blue(), clearColor.alpha());
+    }
+
     public void shutdown() {
         GPU.info("destroying window and terminating GLFW");
         glfwFreeCallbacks(window);
@@ -175,11 +180,7 @@ public class Window {
         if (config.debugEnabled()) {
             GLUtil.setupDebugMessageCallback();
         }
-        glClearColor(
-                config.clearColor().red(),
-                config.clearColor().green(),
-                config.clearColor().blue(),
-                config.clearColor().alpha());
+        setClearColor(config.clearColor());
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
         glEnable(GL_CULL_FACE);

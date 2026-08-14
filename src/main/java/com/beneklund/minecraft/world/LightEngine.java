@@ -130,4 +130,85 @@ public class LightEngine {
             queue.add(index);
         }
     }
+
+    // Removal counterpart to the flood above, and the only part of this class that works in world
+    // coordinates on already-stored LightMaps rather than building a fresh one.
+    //
+    // compute() rebuilds a chunk's map from nothing, so an emitter removed inside a chunk needs no
+    // help — the next remesh simply doesn't find it. The neighbours are the problem. seedSeam reads
+    // their stored maps, and a neighbour that was lit by this emitter isn't remeshing (the edit
+    // wasn't in it), so it keeps claiming the light and feeds it straight back over the seam, one
+    // level down. Recomputing the edited chunk alone can't win: propagateAndSet only ever raises a
+    // level, so nothing in a from-scratch pass can lower what the seam hands it.
+    //
+    // Two phases, because "dimmer than where I came from" is the only local test for "this light
+    // was mine". Walk outward zeroing those cells; a cell as bright or brighter belongs to some
+    // other emitter, so park it and let it refill the hole afterwards.
+    public void removeBlockLight(IWorldAuthority world, int x, int y, int z, int removedLevel) {
+        Deque<LitCell> removal = new ArrayDeque<>();
+        Deque<LitCell> relight = new ArrayDeque<>();
+
+        setBlockLight(world, x, y, z, LightMap.MIN_LEVEL);
+        removal.add(new LitCell(x, y, z, removedLevel));
+
+        while (!removal.isEmpty()) {
+            LitCell cell = removal.poll();
+            for (Direction dir : Direction.DIRECTIONS) {
+                int nx = cell.x() + dir.dx();
+                int ny = cell.y() + dir.dy();
+                int nz = cell.z() + dir.dz();
+                if (!Chunk.inYRange(ny)) continue;
+                int level = blockLight(world, nx, ny, nz);
+                if (level == LightMap.MIN_LEVEL) continue;
+                if (level < cell.level()) {
+                    setBlockLight(world, nx, ny, nz, LightMap.MIN_LEVEL);
+                    removal.add(new LitCell(nx, ny, nz, level));
+                } else {
+                    relight.add(new LitCell(nx, ny, nz, level));
+                }
+            }
+        }
+
+        while (!relight.isEmpty()) {
+            LitCell cell = relight.poll();
+            int level = blockLight(world, cell.x(), cell.y(), cell.z());
+            // A level of 1 has nothing left to give a neighbour, so it can't refill anything.
+            if (level <= 1) continue;
+            for (Direction dir : Direction.DIRECTIONS) {
+                int nx = cell.x() + dir.dx();
+                int ny = cell.y() + dir.dy();
+                int nz = cell.z() + dir.dz();
+                if (!Chunk.inYRange(ny)) continue;
+                if (world.getBlock(nx, ny, nz).opaque()) continue;
+                if (blockLight(world, nx, ny, nz) >= level - 1) continue;
+                setBlockLight(world, nx, ny, nz, level - 1);
+                relight.add(new LitCell(nx, ny, nz, level - 1));
+            }
+        }
+    }
+
+    private record LitCell(int x, int y, int z, int level) {}
+
+    // A chunk that isn't loaded, or is loaded but has never been through compute(), reads as dark
+    // and swallows writes. Neither is a cell we can be wrong about: there's no mesh built from it
+    // yet, and whenever one is, it comes from a full recompute.
+    private int blockLight(IWorldAuthority world, int x, int y, int z) {
+        Chunk chunk = chunkAt(world, x, z);
+        if (chunk == null || !chunk.hasLight()) return LightMap.MIN_LEVEL;
+        return chunk.getBlockLight(local(x), y, local(z));
+    }
+
+    private void setBlockLight(IWorldAuthority world, int x, int y, int z, int level) {
+        Chunk chunk = chunkAt(world, x, z);
+        if (chunk == null || !chunk.hasLight()) return;
+        chunk.setBlockLight(local(x), y, local(z), level);
+    }
+
+    private Chunk chunkAt(IWorldAuthority world, int x, int z) {
+        return world.getChunk(new ChunkPos(Math.floorDiv(x, Chunk.SIZE_XZ), Math.floorDiv(z, Chunk.SIZE_XZ)));
+    }
+
+    private static int local(int worldCoordinate) {
+        return Math.floorMod(worldCoordinate, Chunk.SIZE_XZ);
+    }
 }
