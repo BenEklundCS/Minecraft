@@ -10,11 +10,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 public class ShaderProgram {
     private static final Path DEV_SHADER_ROOT = Path.of("src/main/resources");
+    private static final Pattern INCLUDE =
+            Pattern.compile("^[ \\t]*#include[ \\t]+\"([^\"]+)\"[ \\t]*$", Pattern.MULTILINE);
+    private static final int MAX_INCLUDE_DEPTH = 4;
 
     private final String vertexShaderPath;
     private final String fragmentShaderPath;
@@ -46,7 +51,7 @@ public class ShaderProgram {
         shader.apply(frame, call);
     }
 
-    private String loadSource(String path) {
+    public String readSource(String path) {
         Path onDisk = DEV_SHADER_ROOT.resolve(path.startsWith("/") ? path.substring(1) : path);
         if (Files.isRegularFile(onDisk)) {
             try {
@@ -65,6 +70,24 @@ public class ShaderProgram {
         } catch (IOException e) {
             throw new RuntimeException("Failed to load shader program: ", e);
         }
+    }
+
+    private String loadSource(String path) {
+        return resolveIncludes(readSource(path), 0);
+    }
+
+    private String resolveIncludes(String source, int depth) {
+        if (depth > MAX_INCLUDE_DEPTH) {
+            throw new IllegalStateException("#include nested deeper than " + MAX_INCLUDE_DEPTH);
+        }
+        Matcher matcher = INCLUDE.matcher(source);
+        StringBuilder out = new StringBuilder();
+        while (matcher.find()) {
+            String included = resolveIncludes(readSource(matcher.group(1)), depth + 1);
+            matcher.appendReplacement(out, Matcher.quoteReplacement(included));
+        }
+        matcher.appendTail(out);
+        return out.toString();
     }
 
     public void bind() {

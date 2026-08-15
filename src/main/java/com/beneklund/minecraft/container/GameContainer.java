@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
-import org.joml.Vector2f;
 import org.joml.Vector3f;
 
 // Composition root — the only place that wires concrete types together.
@@ -185,14 +184,10 @@ public class GameContainer {
         ChunkRenderer chunkRenderer = new ChunkRenderer(renderWorld, atlas);
         debugRenderer = new DebugRenderer();
         hudRenderer = new HudRenderer(registry, atlas);
-        float end = 0.9f * cfg.renderDistance() * Chunk.SIZE_XZ;
-        float start = 0.55f * end;
-        Vector2f fogRange = new Vector2f(start, end);
         // No initial sky brightness here on purpose — Game.run sets it from the DayNightCycle
         // every frame before draw(), so a value passed in would only ever be the one that
         // never gets used.
-        renderer = new Renderer(
-                List.of(skyRenderer, chunkRenderer, debugRenderer, hudRenderer), cfg.clearColor(), fogRange);
+        renderer = new Renderer(List.of(skyRenderer, chunkRenderer, debugRenderer, hudRenderer), cfg.clearColor());
 
         // The scene renders here instead of straight to the window, and PostProcessor draws it
         // back out. RGBA16F because sky.frag emits linear radiance now — the sun runs well past

@@ -60,4 +60,11 @@ public class Camera {
     public Vector2f getWindowSize() {
         return windowSize;
     }
+
+    // The eye position the view matrix was built from. chunk.frag needs the camera's height to
+    // work out how much air a view ray passes through, and a height is cheaper to hand it than
+    // a world-space position varying on every vertex.
+    public Vector3f getPosition() {
+        return position;
+    }
 }
