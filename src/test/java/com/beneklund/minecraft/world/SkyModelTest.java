@@ -17,9 +17,13 @@ public class SkyModelTest {
     private static final float TURBIDITY = 2.5f;
     private static final float EXPOSURE = 0.115f;
 
-    // Both edges of the twilight fade, as sun altitudes (sunDirection.y).
+    // Both edges of the twilight fade, as sun altitudes (sunDirection.y). These mirror
+    // NIGHT_BELOW and DAY_ABOVE in SkyModel, which are private, so they are a hand-kept copy:
+    // change one and this file has to follow. The midpoint test below is what catches it —
+    // smoothstep is symmetric about its own midpoint, so a stale edge here puts the expected
+    // midpoint somewhere the model's curve does not cross 0.5.
     private static final float FULLY_NIGHT = -0.10f;
-    private static final float FULLY_DAY = 0.05f;
+    private static final float FULLY_DAY = 0.0f;
 
     private static final Vector3f UP = new Vector3f(0, 1, 0);
     private static final Vector3f HORIZON = new Vector3f(0, 0, 1);
