@@ -33,6 +33,28 @@ public class WorldGenerator implements IWorldGenerator {
     public static final double WARP_SCALE = 0.0008;
     private static final long WARP_SEED_X = 7001L;
     private static final long WARP_SEED_Z = 7002L;
+    // Package-private rather than private so BiomeMapTest can recompute the same displacement
+    // the biome path uses. The test asserts the two axes decorrelate, which is the one property
+    // that separates a real domain warp from both axes sharing a seed offset.
+    static final double BIOME_WARP_STRENGTH = 1200.0;
+    static final double BIOME_WARP_SCALE = 0.0001;
+    static final long BIOME_WARP_SEED_X = 7101L;
+    static final long BIOME_WARP_SEED_Z = 7102L;
+    private static final double TEMPERATURE_SCALE = 0.00035; // ~2860 block features
+    private static final double HUMIDITY_SCALE = 0.00090; // ~1110 block features
+    private static final double CLIMATE_CONTRAST = 1.8;
+    private static final double FOLD_PERIODS = 2.0;
+
+    // Perturbs the climate-space distance so the two nearest biomes trade places in a narrow
+    // band around their boundary. A 50-block feature is small enough to read as a ragged coast
+    // rather than as a second, smaller biome map.
+    // 0.04 against a unipolar [0,1] jitter is the same spread as 0.02 against a bipolar
+    // [-1,1] one — the extra 0.02 is a constant added to every anchor's distance, so it
+    // cancels in the comparison and the biome selection is bit-identical. What it buys is
+    // that d never goes negative. See the note in selectBiome.
+    private static final double EDGE_JITTER = 0.04;
+    private static final double EDGE_JITTER_SCALE = 0.02; // ~50 block features
+    private static final long EDGE_JITTER_SEED_BASE = 7200L;
 
     private final BlockRegistry registry;
     private final NoiseHelper noiseHelper;
@@ -83,8 +105,7 @@ public class WorldGenerator implements IWorldGenerator {
                 int worldX = pos.x() * Chunk.SIZE_XZ + localX;
                 int worldZ = pos.z() * Chunk.SIZE_XZ + localZ;
 
-                ResolvedBiome biome = selectBiome(
-                        sampleSpec(seed, worldX, worldZ, tempSpec), sampleSpec(seed, worldX, worldZ, humidSpec));
+                ResolvedBiome biome = resolveBiome(seed, worldX, worldZ);
                 int surfaceY = computeSurfaceY(seed, worldX, worldZ, biome.data());
                 surfaceHeights[localX + localZ * Chunk.SIZE_XZ] = surfaceY;
                 fillColumn(chunk, localX, localZ, surfaceY, biome.type());
@@ -96,17 +117,28 @@ public class WorldGenerator implements IWorldGenerator {
         carveCaves(chunk, seed, pos);
     }
 
-    private double warpX(long seed, double x, double z, double strength) {
-        return x + strength * noiseHelper.noise2(seed + WARP_SEED_X, x, z, 2, 0.5, WARP_SCALE);
+    // test surface
+    public Biome biomeAt(long seed, int worldX, int worldZ) {
+        return resolveBiome(seed, worldX, worldZ).type();
     }
 
-    private double warpZ(long seed, double x, double z, double strength) {
-        return z + strength * noiseHelper.noise2(seed + WARP_SEED_Z, x, z, 2, 0.5, WARP_SCALE);
+    private ResolvedBiome resolveBiome(long seed, int worldX, int worldZ) {
+        double wx = warpX(seed, BIOME_WARP_SEED_X, worldX, worldZ, BIOME_WARP_STRENGTH, BIOME_WARP_SCALE);
+        double wz = warpZ(seed, BIOME_WARP_SEED_Z, worldX, worldZ, BIOME_WARP_STRENGTH, BIOME_WARP_SCALE);
+        return selectBiome(sampleSpec(seed, wx, wz, tempSpec), sampleSpec(seed, wx, wz, humidSpec), wx, wz, seed);
+    }
+
+    double warpX(long seed, long seedOffset, double x, double z, double strength, double warpScale) {
+        return x + strength * noiseHelper.noise2(seed + seedOffset, x, z, 2, 0.5, warpScale);
+    }
+
+    double warpZ(long seed, long seedOffset, double x, double z, double strength, double warpScale) {
+        return z + strength * noiseHelper.noise2(seed + seedOffset, x, z, 2, 0.5, warpScale);
     }
 
     private int computeSurfaceY(long seed, int worldX, int worldZ, TerrainProfile biome) {
-        double wx = warpX(seed, worldX, worldZ, WARP_STRENGTH);
-        double wz = warpZ(seed, worldX, worldZ, WARP_STRENGTH);
+        double wx = warpX(seed, WARP_SEED_X, worldX, worldZ, WARP_STRENGTH, WARP_SCALE);
+        double wz = warpZ(seed, WARP_SEED_Z, worldX, worldZ, WARP_STRENGTH, WARP_SCALE);
 
         double raw = sampleLayer(seed, wx, wz, noiseLayers.continental())
                 + sampleLayer(seed, wx, wz, noiseLayers.erosion())
@@ -114,14 +146,27 @@ public class WorldGenerator implements IWorldGenerator {
         return Math.clamp((int) (biome.baseHeight() + raw * biome.amplitude()), MIN_SURFACE_Y, MAX_SURFACE_Y);
     }
 
+    private static double fold(double f) {
+        double u = (f + 1.0) / 2.0 * FOLD_PERIODS;
+        double frac = u - Math.floor(u);
+        return 4.0 * Math.abs(frac - 0.5) - 1.0;
+    }
+
+    private static double contrast(double c) {
+        return Math.clamp(0.5 + (c - 0.5) * CLIMATE_CONTRAST, 0.0, 1.0);
+    }
+
     // Adjacent Biome ordinals are geographically adjacent in-world because biomeNoise
     // changes slowly — so the linear mapping produces wide, gradual transitions.
     // dominant is whichever neighbour the noise sample falls closer to, so callers can
     // make block-identity decisions (surface block type, tree species, etc.) on a clean enum.
-    private ResolvedBiome selectBiome(double tempNoise, double humidNoise) {
+    private ResolvedBiome selectBiome(double tempNoise, double humidNoise, double worldX, double worldZ, long seed) {
         Biome[] biomes = Biome.values();
-        double temp = noiseHelper.normalize(tempNoise);
-        double humid = noiseHelper.normalize(humidNoise);
+        double temp = contrast(noiseHelper.normalize(tempNoise));
+        // fold takes and returns [-1, 1], so it runs on the raw noise. Wrapping it around
+        // normalize instead feeds it [0, 1] and hands back [-1, 1], which puts humid outside
+        // the range the anchors occupy — every negative sample lands on DESERT at humidity 0.
+        double humid = contrast(noiseHelper.normalize(fold(humidNoise)));
 
         Biome best = biomes[0];
         double bestDist = Double.MAX_VALUE;
@@ -129,6 +174,9 @@ public class WorldGenerator implements IWorldGenerator {
         double secondDist = Double.MAX_VALUE;
         for (Biome b : biomes) {
             double d = Math.pow(b.getTemperature() - temp, 2) + Math.pow(b.getHumidity() - humid, 2);
+            double jitter = noiseHelper.noise2(
+                    seed + EDGE_JITTER_SEED_BASE + b.ordinal(), worldX, worldZ, 1, 0.5, EDGE_JITTER_SCALE);
+            d += EDGE_JITTER * (jitter * 0.5 + 0.5);
             if (d < bestDist) {
                 second = best;
                 secondDist = bestDist;
@@ -158,7 +206,7 @@ public class WorldGenerator implements IWorldGenerator {
         return n * layer.weight();
     }
 
-    private double sampleSpec(long seed, int x, int z, IGenerationSpec.BiomeSpec spec) {
+    private double sampleSpec(long seed, double x, double z, IGenerationSpec.BiomeSpec spec) {
         return noiseHelper.noise2(seed + spec.seedOffset(), x, z, spec.octaves(), spec.persistence(), spec.scale());
     }
 
