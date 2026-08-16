@@ -15,6 +15,14 @@ A **Minecraft clone** built from scratch in **Java 21** using **LWJGL** (OpenGL 
 
 ---
 
+## Screenshots
+
+![Sunlight streaming past a forested ridge](screenshots/2026-08-16_13-05-40.png)
+
+![A river valley receding into aerial haze](screenshots/2026-08-16_13-07-14.png)
+
+---
+
 ## What's in it
 
 - **Infinite streaming world** — chunks generate on background threads and upload to the GPU on the main thread, so terrain streams in without frame hitches.
