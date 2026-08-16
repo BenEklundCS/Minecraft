@@ -27,6 +27,7 @@ public sealed interface IInputAction {
         DEBUG_OVERLAY,
         INVENTORY,
         RELOAD_SHADERS,
+        DEBUG_SHADOW_MAP,
         SCREENSHOT,
         EXIT,
         NONE,

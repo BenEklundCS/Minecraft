@@ -23,7 +23,8 @@ import java.util.List;
 //   [0-2]  x, y, z       world position
 //   [3-4]  u, v          atlas UV
 //   [5]    ao            ambient occlusion, ramped through AO_RAMP
-//   [6]    faceId        0=UP, 1=side, 2=DOWN (drives brightness bands in chunk.frag)
+//   [6]    faceId        Direction.ordinal() — 0=UP, 1=DOWN, 2=N, 3=S, 4=E, 5=W.
+//                        chunk.frag reads both the brightness band and the surface normal off it.
 //   [7-9]  r, g, b       biome tint (1,1,1 = no tint)
 public class ChunkMesher {
     // 4 corner offsets per face, CCW winding when viewed from outside the block.
@@ -54,12 +55,6 @@ public class ChunkMesher {
     private static final int INDICES_PER_QUAD = 6;
     // Starting capacity covers a typical surface chunk without needing to grow.
     private static final int INITIAL_FACE_CAPACITY = 8192;
-
-    // faceId values matched to the brightness bands in chunk.frag:
-    //   < 0.5 → 1.0 (bright),  < 2.5 → 0.8 (side),  else → 0.6 (dark)
-    private static final float FACE_ID_UP = 0.0f;
-    private static final float FACE_ID_SIDE = 1.0f;
-    private static final float FACE_ID_DOWN = 2.0f;
 
     private static final float[] DEFAULT_UV = {0f, 0f, 1f, 1f};
 
@@ -299,12 +294,21 @@ public class ChunkMesher {
         return arr;
     }
 
+    /*
+     * The Direction itself, not a brightness band. chunk.frag turns this back into the surface
+     * normal, so all six have to stay distinguishable — collapsing the four sides into one id
+     * would leave the shader unable to tell north from east.
+     *
+     * That normal used to be recovered in the shader from screen-space derivatives, which made it
+     * depend on where the camera was looking: at grazing angles the derivatives run nearly
+     * parallel, their cross product collapses, and the normal lands on the wrong axis. It feeds
+     * the slope-scaled shadow bias, so whole faces flipped between lit and shadowed as the mouse
+     * moved. The mesher already knows the answer exactly; there was never a reason to guess it.
+     *
+     * Ordinal, because FACE_VERTICES is already indexed by it — one order, defined in one place.
+     */
     private static float faceIdFor(Direction dir) {
-        return switch (dir) {
-            case UP -> FACE_ID_UP;
-            case DOWN -> FACE_ID_DOWN;
-            default -> FACE_ID_SIDE;
-        };
+        return dir.ordinal();
     }
 
     // Grass top and all leaf blocks store greyscale textures in the faithful pack —

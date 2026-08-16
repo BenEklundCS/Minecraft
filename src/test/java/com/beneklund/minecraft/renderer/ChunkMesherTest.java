@@ -4,10 +4,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
+import com.beneklund.minecraft.util.Direction;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.ChunkWithNeighbors;
 import com.beneklund.minecraft.world.LightEngine;
+import java.util.HashSet;
+import java.util.Set;
+import org.joml.Vector3f;
+import org.joml.Vector3i;
 import org.junit.jupiter.api.Test;
 
 class ChunkMesherTest {
@@ -16,6 +21,7 @@ class ChunkMesherTest {
     private static final int FLOATS_PER_VERTEX = 12;
     private static final int SKY_SLOT = 10;
     private static final int BLOCK_SLOT = 11;
+    private static final int FACE_ID_SLOT = 6;
 
     // null atlas → getUVs falls back to DEFAULT_UV; no GL context needed in tests
     private final ChunkMesher mesher = new ChunkMesher(BlockRegistry.createDefault(), null);
@@ -269,6 +275,74 @@ class ChunkMesherTest {
         }
         assertTrue(brightest > 0.0f, "some vertex should carry block light");
         assertTrue(brightest <= 1.0f, "block light is normalized to 0..1 like skylight");
+    }
+
+    /*
+     * chunk.frag reads the surface normal off faceId, so faceId has to identify which of the six
+     * faces this is — not just which brightness band it lands in.
+     *
+     * This is load-bearing for shadows. The normal used to come from screen-space derivatives,
+     * which made it a function of where the camera was looking: at grazing angles the two
+     * derivatives go nearly parallel, the cross product collapses, and the normal snapped to the
+     * wrong axis. Measured, 4-7% of terrain pixels changed normal from a 0.04 degree turn, and
+     * since the normal drives the slope-scaled shadow bias, whole faces flipped between lit and
+     * shadowed as you moved the mouse. A mesh-supplied normal cannot do that.
+     */
+    @Test
+    void faceId_isDistinctPerDirection() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(0, 64, 0, Block.STONE);
+
+        float[] verts = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk))
+                .opaque()
+                .vertices();
+
+        Set<Integer> ids = new HashSet<>();
+        for (int quad = 0; quad < 6; quad++) {
+            float id = faceId(verts, quad * 4);
+            for (int v = 1; v < 4; v++) {
+                assertEquals(id, faceId(verts, quad * 4 + v), "all 4 vertices of a quad share one faceId");
+            }
+            ids.add(Math.round(id));
+        }
+        assertEquals(Set.of(0, 1, 2, 3, 4, 5), ids, "six faces must carry six distinct ids");
+    }
+
+    // The id is only useful if it names the RIGHT direction, so check it against the geometry the
+    // mesher actually emitted rather than against the table it was generated from.
+    @Test
+    void faceId_matchesTheQuadsOwnGeometricNormal() {
+        Chunk chunk = emptyChunk();
+        chunk.setBlock(0, 64, 0, Block.STONE);
+
+        float[] verts = mesher.mesh(new ChunkPos(0, 0), ChunkWithNeighbors.noNeighbors(chunk))
+                .opaque()
+                .vertices();
+
+        for (int quad = 0; quad < 6; quad++) {
+            int base = quad * 4;
+            Vector3f a = position(verts, base);
+            Vector3f b = position(verts, base + 1);
+            Vector3f c = position(verts, base + 2);
+            // CCW from outside, so this points out of the block.
+            Vector3f actual =
+                    b.sub(a, new Vector3f()).cross(c.sub(b, new Vector3f())).normalize();
+
+            Direction dir = Direction.DIRECTIONS[Math.round(faceId(verts, base))];
+            Vector3i expected = dir.normal();
+            assertEquals(expected.x, Math.round(actual.x), "x of " + dir);
+            assertEquals(expected.y, Math.round(actual.y), "y of " + dir);
+            assertEquals(expected.z, Math.round(actual.z), "z of " + dir);
+        }
+    }
+
+    private static float faceId(float[] verts, int vertex) {
+        return verts[vertex * FLOATS_PER_VERTEX + FACE_ID_SLOT];
+    }
+
+    private static Vector3f position(float[] verts, int vertex) {
+        int i = vertex * FLOATS_PER_VERTEX;
+        return new Vector3f(verts[i], verts[i + 1], verts[i + 2]);
     }
 
     @Test

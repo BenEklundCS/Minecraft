@@ -2,7 +2,12 @@ package com.beneklund.minecraft.renderer;
 
 import static com.beneklund.minecraft.util.Log.RENDER;
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
+import static org.lwjgl.opengl.GL13.GL_TEXTURE1;
+import static org.lwjgl.opengl.GL13.glActiveTexture;
 
+import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
+import com.beneklund.minecraft.platform.graphics.ShadowFramebuffer;
 import com.beneklund.minecraft.platform.graphics.UniformValue;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.world.PreethamSky;
@@ -43,15 +48,28 @@ public class Renderer {
     private final Matrix4f invViewRotation = new Matrix4f();
     private final Matrix4f invViewProj = new Matrix4f();
     private final Matrix4f modelScratch = new Matrix4f();
+    // Unit 0 is the block atlas, bound by submit() from the DrawCall. The shadow map needs a unit
+    // of its own or the depth lookup samples the atlas instead — samplers cannot ride in
+    // frameUniforms, because UniformValue is sealed over float/vec3/mat4 with no int variant.
+    private static final int SHADOW_TEXTURE_UNIT = 1;
 
     private final Map<String, UniformValue<?>> frameUniforms = new HashMap<>();
 
     // Collected by drawScene, filtered again by drawHud. Render-thread-only, like everything here.
     private final List<DrawCall> calls = new ArrayList<>();
 
-    public Renderer(List<IRenderable> registered, Color fogColor) {
+    private final ShadowFramebuffer shadowBuffer;
+
+    // The sun's projection. Everything about where the shadow map is rendered from lives there,
+    // deliberately out of reach of the window and the view matrix — see the note on the class.
+    private final ShadowCamera shadowCamera;
+
+    public Renderer(
+            List<IRenderable> registered, Color fogColor, ShadowFramebuffer shadowBuffer, ShadowCamera shadowCamera) {
         this.registered = registered;
         this.fogColor = fogColor;
+        this.shadowBuffer = shadowBuffer;
+        this.shadowCamera = shadowCamera;
         // Seeded so the sky uniforms are never null if a frame draws before Game.run pushes
         // the real sun position. The sky shader resolves them to a real location, so unlike
         // the chunk shader it would NPE rather than no-op.
@@ -61,6 +79,7 @@ public class Renderer {
     public void delete() {
         RENDER.debug("deleting {} renderable(s)", registered.size());
         for (IRenderable r : registered) r.delete();
+        shadowBuffer.delete();
     }
 
     public void reloadAll() {
@@ -86,6 +105,35 @@ public class Renderer {
         skyZenithF = daylight.zenithF();
     }
 
+    /*
+     * Where the sun looks from. The maths lives in ShadowCamera, which takes a POSITION and a sun
+     * direction and has no way to see where the player is looking — shadows moving with the mouse
+     * is the bug that separation exists to make unexpressible.
+     */
+    private void updateLightMatrix(Camera camera) {
+        shadowCamera.update(camera.getPosition(), sunDirection);
+    }
+
+    public int shadowMapTexture() {
+        return shadowBuffer.depthTexture();
+    }
+
+    /*
+     * The slice of the shadow map's [0,1] depth range that terrain actually occupies, for the
+     * debug overlay to stretch across its contrast range.
+     *
+     * The light's eye sits SUN_DISTANCE in front of the box centre, so the centre lands at that
+     * depth; terrain reaches roughly a world-height either side of it. Everything outside this
+     * window is either empty sky or below bedrock.
+     */
+    public float shadowDepthWindowMin() {
+        return shadowCamera.depthWindowMin();
+    }
+
+    public float shadowDepthWindowMax() {
+        return shadowCamera.depthWindowMax();
+    }
+
     public Color fogColor() {
         return fogColor;
     }
@@ -97,10 +145,11 @@ public class Renderer {
      *
      * drawScene has to run first in a frame - drawHud filters the call list this collected.
      */
-    public void drawScene(Camera camera) {
+    public void drawScene(Camera camera, GlFramebuffer target) {
         viewRotation.set(camera.getViewMatrix()).setTranslation(0, 0, 0);
         invViewRotation.set(viewRotation).transpose();
         invViewProj.set(camera.getProjectionMatrix()).mul(viewRotation).invert();
+        updateLightMatrix(camera);
 
         setUniforms(camera);
 
@@ -115,12 +164,25 @@ public class Renderer {
         // extra times per frame just to build a message nobody is listening to.
         if (RENDER.isTraceEnabled()) {
             RENDER.trace(
-                    "{} draw call(s): {} opaque, {} transparent, {} hud",
+                    "{} draw call(s): {} opaque, {} transparent, {} hud, {} shadow",
                     calls.size(),
                     countPass(calls, RenderPass.OPAQUE),
                     countPass(calls, RenderPass.TRANSPARENT),
-                    countPass(calls, RenderPass.HUD));
+                    countPass(calls, RenderPass.HUD),
+                    countPass(calls, RenderPass.SHADOW));
         }
+
+        drawShadowPass(camera);
+
+        // Back to the scene target the shadow pass just took us away from. This is why drawScene
+        // takes the target rather than Game binding it — only one of them can own the sequencing.
+        //
+        // The clear belongs here, immediately after the bind, because glClear acts on whatever
+        // framebuffer is bound. Clearing before the shadow pass would clear the wrong one, and
+        // skipping it leaves last frame's depth in place, which rejects every fragment from the
+        // second frame onward.
+        target.bind();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // Opaque pass: full depth test + write, no blending.
         glEnable(GL_DEPTH_TEST);
@@ -137,6 +199,31 @@ public class Renderer {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         for (DrawCall call : calls) if (call.pass() == RenderPass.TRANSPARENT) submit(call, camera);
+    }
+
+    /*
+     * The scene from the sun's point of view, depth only. Runs before the opaque pass because it
+     * produces an input to it — chunk.frag samples this map to decide what is shadowed.
+     *
+     * No colour state to set: ShadowFramebuffer has no colour attachment, so there is nothing to
+     * clear or blend and glClear takes the depth bit alone.
+     */
+    private void drawShadowPass(Camera camera) {
+        shadowBuffer.bind();
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glDepthMask(true);
+        glDisable(GL_BLEND);
+
+        // Front-face culling, only for this pass. Storing the depth of each caster's BACK faces
+        // moves the recorded surface a whole block behind the lit one, so the front faces the
+        // player sees are never within bias distance of their own stored depth — which is where
+        // acne comes from. Works cleanly here because terrain is closed solid geometry; it would
+        // break on single-sided planes, which this renderer does not produce.
+        glCullFace(GL_FRONT);
+        for (DrawCall call : calls) if (call.pass() == RenderPass.SHADOW) submit(call, camera);
+        glCullFace(GL_BACK);
     }
 
     // Runs after the post pass, against the default framebuffer, so nothing here is tonemapped.
@@ -176,7 +263,9 @@ public class Renderer {
         frameUniforms.put("uZenithF", new UniformValue.V3(skyZenithF));
         frameUniforms.put("uModel", new UniformValue.M4(modelScratch));
         frameUniforms.put("uExtinction", new UniformValue.F(EXTINCTION));
-        frameUniforms.put("uCameraY", new UniformValue.F(camera.getPosition().y));
+        frameUniforms.put("uShadowBias", new UniformValue.F(shadowCamera.normalizedBias()));
+        frameUniforms.put("uCameraPos", new UniformValue.V3(camera.getPosition()));
+        frameUniforms.put("uLightViewProj", new UniformValue.M4(shadowCamera.lightViewProj()));
     }
 
     private static long countPass(List<DrawCall> calls, RenderPass pass) {
@@ -188,6 +277,15 @@ public class Renderer {
         else glBindTexture(GL_TEXTURE_2D, 0);
         modelScratch.set(call.transform());
         call.shader().bind();
+
+        // Bound per call because the shader changes per call and the sampler uniform lives on the
+        // program. setUniformInt is a no-op for shaders that do not declare it — GlShader.location
+        // returns -1 and the setter bails — so this costs one glUniform1i on chunk.frag alone.
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, shadowBuffer.depthTexture());
+        glActiveTexture(GL_TEXTURE0);
+        call.shader().setUniformInt("uShadowMap", SHADOW_TEXTURE_UNIT);
+
         call.shader().apply(frameUniforms, call.uniforms());
         call.mesh().render();
     }

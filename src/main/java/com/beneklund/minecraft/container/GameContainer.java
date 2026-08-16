@@ -13,7 +13,9 @@ import com.beneklund.minecraft.infra.*;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbAudioLoader;
+import com.beneklund.minecraft.platform.debug.FrameStreamServer;
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
+import com.beneklund.minecraft.platform.graphics.ShadowFramebuffer;
 import com.beneklund.minecraft.platform.images.StbImageLoader;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
@@ -49,6 +51,8 @@ public class GameContainer {
     // CC0 folder (CREDITS.txt)
     private static final String MUSIC_DIR = "music";
 
+    private static final int SHADOW_MAP_SIZE = 2048;
+
     private final ContainerConfig cfg;
 
     // config
@@ -75,6 +79,9 @@ public class GameContainer {
     private HudRenderer hudRenderer;
     private Renderer renderer;
     private GlFramebuffer sceneBuffer;
+    private ShadowFramebuffer shadowBuffer;
+    private ShadowCamera shadowCamera;
+    private FrameStreamServer frameStream;
     private GlFramebuffer bloomA;
     private GlFramebuffer bloomB;
     private PostProcessor postProcessor;
@@ -126,6 +133,7 @@ public class GameContainer {
         // 7. Game logic - depends on input and the GL renderer being ready.
         initWorld();
         initPlayer();
+        initFrameStream();
         phaseDone("world+player", startedAt);
 
         LOGGER.info("startup complete in {} ms, entering game loop", millisSince(startedAt));
@@ -187,7 +195,17 @@ public class GameContainer {
         // No initial sky brightness here on purpose — Game.run sets it from the DayNightCycle
         // every frame before draw(), so a value passed in would only ever be the one that
         // never gets used.
-        renderer = new Renderer(List.of(skyRenderer, chunkRenderer, debugRenderer, hudRenderer), cfg.clearColor());
+        // Fixed 2048 square, not window-sized: shadow map resolution is a quality setting, and
+        // at SHADOW_BOX_HALF = 128 this is one texel per eighth of a block.
+        shadowBuffer = new ShadowFramebuffer(SHADOW_MAP_SIZE);
+        // Same size for both, from one constant: the camera snaps the box to whole texels, so it
+        // has to agree with the map it is snapping to or the snapping quietly stops working.
+        shadowCamera = new ShadowCamera(SHADOW_MAP_SIZE);
+        renderer = new Renderer(
+                List.of(skyRenderer, chunkRenderer, debugRenderer, hudRenderer),
+                cfg.clearColor(),
+                shadowBuffer,
+                shadowCamera);
 
         // The scene renders here instead of straight to the window, and PostProcessor draws it
         // back out. RGBA16F because sky.frag emits linear radiance now — the sun runs well past
@@ -239,7 +257,7 @@ public class GameContainer {
         ChunkStore store = new ChunkStore(worldConfig.seed());
         chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store, lightEngine);
         physics = new Physics();
-        cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.SHORT_DAY_SECONDS);
+        cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.DEFAULT_DAY_SECONDS);
         WORLD.debug("world ready: {} generation spec(s), seed {}", generationSpecs.size(), worldConfig.seed());
     }
 
@@ -253,6 +271,19 @@ public class GameContainer {
                 "spawn {} at ({}, {}, {})", saved != null ? "restored" : "measured", spawn.x(), spawn.y(), spawn.z());
         player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
         player.setOrientation(spawn.pitch(), spawn.yaw());
+    }
+
+    // Opt-in: absent framestream.port means no socket is opened at all.
+    private void initFrameStream() {
+        localConfig.frameStreamPort().ifPresent(port -> {
+            try {
+                frameStream = new FrameStreamServer(port);
+                frameStream.start();
+            } catch (IOException e) {
+                LOGGER.warn("frame stream failed to start on port {}", port, e);
+                frameStream = null;
+            }
+        });
     }
 
     private Game buildGame() {
@@ -273,13 +304,16 @@ public class GameContainer {
                 delta,
                 inputMapper,
                 debugRenderer,
-                hudRenderer);
+                hudRenderer,
+                frameStream);
     }
 
     // Reverse dependency order: audio before window (AL before GLFW/GL).
     // Stop chunk workers before flushing so no async setBlock can dirty a chunk
     // after we've already persisted it.
     private void shutdown() {
+        // First: it holds a socket and a worker thread, and neither depends on anything below.
+        if (frameStream != null) frameStream.stop();
         long startedAt = System.nanoTime();
         savePlayerState();
         try {

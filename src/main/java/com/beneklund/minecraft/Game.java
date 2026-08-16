@@ -6,6 +6,7 @@ import com.beneklund.minecraft.infra.ChunkManager;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.InputHandler;
+import com.beneklund.minecraft.platform.debug.FrameStreamServer;
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
 import com.beneklund.minecraft.platform.graphics.ScreenCapture;
@@ -52,6 +53,15 @@ public class Game {
     private int uploadsThisSecond;
     private int deletesThisSecond;
     private boolean screenshotRequested;
+    // F6. Draws the sun's depth map into the corner so it can be watched while moving — the
+    // only way to tell "the map is wrong" apart from "the sampling is wrong", which look
+    // identical in the world.
+    private boolean shadowMapOverlay;
+
+    // Null unless local.properties set framestream.port. Serves the last frame over localhost
+    // and accepts camera/time commands back, so a change can be evaluated against the same view
+    // twice instead of from memory.
+    private final FrameStreamServer frameStream;
 
     public Game(
             Window window,
@@ -70,7 +80,8 @@ public class Game {
             DeltaTracker delta,
             InputMapper mapper,
             DebugRenderer debugRenderer,
-            HudRenderer hudRenderer) {
+            HudRenderer hudRenderer,
+            FrameStreamServer frameStream) {
         this.window = window;
         this.renderer = renderer;
         this.sceneBuffer = sceneBuffer;
@@ -88,6 +99,30 @@ public class Game {
         this.mapper = mapper;
         this.debugRenderer = debugRenderer;
         this.hudRenderer = hudRenderer;
+        this.frameStream = frameStream;
+        if (frameStream != null) {
+            frameStream.setTeleportHandler(this::applyTeleport);
+            frameStream.setTimeHandler(cycle::setTimeOfDay);
+        }
+    }
+
+    /*
+     * pose is {x, y, z, yaw, pitch}; NaN means "leave alone", so a caller can nudge one axis.
+     * Runs on the main thread via drainCommands — Player and Camera are not thread-safe and the
+     * HTTP threads must never touch them.
+     */
+    private void applyTeleport(float[] pose) {
+        Vector3f p = new Vector3f(player.getPosition());
+        if (!Float.isNaN(pose[0])) p.x = pose[0];
+        if (!Float.isNaN(pose[1])) p.y = pose[1];
+        if (!Float.isNaN(pose[2])) p.z = pose[2];
+        player.setPosition(p);
+        if (!Float.isNaN(pose[3]) || !Float.isNaN(pose[4])) {
+            float yaw = Float.isNaN(pose[3]) ? player.getYaw() : pose[3];
+            float pitch = Float.isNaN(pose[4]) ? player.getPitch() : pose[4];
+            player.setOrientation(pitch, yaw);
+        }
+        LOGGER.info("teleport to {} yaw/pitch {}/{}", p, pose[3], pose[4]);
     }
 
     public void run() {
@@ -95,21 +130,42 @@ public class Game {
             processTitle();
             processInput();
             processPhysics();
+            if (frameStream != null) frameStream.drainCommands();
             processChunks();
             cycle.advance(delta.getDelta());
             Hotbar hotbar = player.getHotbar();
             hudRenderer.setHotbar(hotbar.snapshot(), hotbar.selected());
             pushRenderVariables();
-            sceneBuffer.bind();
             window.beginFrame();
-            renderer.drawScene(camera);
+            // drawScene binds the shadow map first and the scene target second — passing the
+            // target in rather than binding it here keeps that ordering in one place.
+            renderer.drawScene(camera, sceneBuffer);
 
             // draw() owns the return to the default framebuffer now — it runs three half-res
             // bloom passes first, so it has to do its own binding between them.
             postProcessor.draw(sceneBuffer.colorTexture(), window.getWidth(), window.getHeight());
 
+            // After the tonemap and before the HUD: an instrument drawn over the finished frame,
+            // deliberately not part of the image it is being used to debug.
+            if (shadowMapOverlay) {
+                postProcessor.drawDepthOverlay(
+                        renderer.shadowMapTexture(),
+                        renderer.shadowDepthWindowMin(),
+                        renderer.shadowDepthWindowMax(),
+                        window.getWidth(),
+                        window.getHeight());
+            }
+
             // After the tonemap, straight to the window. HUD colours are display values already.
             renderer.drawHud(camera);
+
+            // After the HUD so the stream shows exactly what is on screen, overlay included.
+            // wantsFrame() gates before readPixels, so a declined frame costs nothing.
+            if (frameStream != null && frameStream.wantsFrame(System.currentTimeMillis())) {
+                int w = window.getWidth();
+                int h = window.getHeight();
+                frameStream.submit(ScreenCapture.readPixels(w, h), w, h);
+            }
 
             if (screenshotRequested) {
                 captureScreenshot();
@@ -176,6 +232,11 @@ public class Game {
 
         if (actions.contains(IInputAction.Simple.SCREENSHOT)) {
             screenshotRequested = true;
+        }
+
+        if (actions.contains(IInputAction.Simple.DEBUG_SHADOW_MAP)) {
+            shadowMapOverlay = !shadowMapOverlay;
+            RENDER.info("shadow map overlay {}", shadowMapOverlay ? "on" : "off");
         }
 
         if (actions.contains(IInputAction.Simple.RELOAD_SHADERS)) {

@@ -23,7 +23,7 @@ public record ContainerConfig(
                 1200,
                 800,
                 false,
-                WindowConfig.Mode.FULLSCREEN,
+                WindowConfig.Mode.WINDOWED_FULLSCREEN,
                 Color.FOG,
                 70.0f,
                 87L,

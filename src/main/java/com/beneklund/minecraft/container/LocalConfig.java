@@ -29,6 +29,16 @@ public class LocalConfig {
         return Optional.ofNullable(props.getProperty("preferred.album"));
     }
 
+    // Port for the live frame stream, e.g. framestream.port=8099. Absent means off — this opens
+    // a socket, so it stays opt-in rather than defaulting on.
+    public Optional<Integer> frameStreamPort() {
+        try {
+            return Optional.ofNullable(props.getProperty("framestream.port")).map(Integer::parseInt);
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+
     public boolean debugEnabled() {
         Optional<String> prop = Optional.ofNullable(props.getProperty("debug.enabled"));
         if (prop.isPresent()) {

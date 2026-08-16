@@ -41,6 +41,10 @@ public class DayNightCycle {
         return new Vector3f(0.0f, (float) Math.sin(angle), (float) Math.cos(angle)).normalize();
     }
 
+    public void setTimeOfDay(float t) {
+        timeOfDay = ((t % 1.0f) + 1.0f) % 1.0f;
+    }
+
     public float timeOfDay() {
         return timeOfDay;
     }

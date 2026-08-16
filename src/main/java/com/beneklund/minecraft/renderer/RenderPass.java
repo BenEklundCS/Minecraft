@@ -6,5 +6,6 @@ package com.beneklund.minecraft.renderer;
 public enum RenderPass {
     OPAQUE,
     TRANSPARENT,
-    HUD
+    HUD,
+    SHADOW
 }

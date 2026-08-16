@@ -22,6 +22,12 @@ public class PostProcessor {
     private static final String FRAG_PATH = "/shaders/post.frag";
     private static final String BRIGHT_FRAG = "/shaders/bloom_bright.frag";
     private static final String BLUR_FRAG = "/shaders/bloom_blur.frag";
+    private static final String DEBUG_DEPTH_FRAG = "/shaders/debug_depth.frag";
+
+    // Fraction of the window width the shadow-map inset occupies. A quarter is large enough to
+    // read texel structure and small enough to leave the world visible beside it, which is the
+    // point — the map has to be watched while moving, not in isolation.
+    private static final float DEBUG_INSET_FRACTION = 0.25f;
 
     // Scene radiance units, the same scale chunk.frag and sky.frag write in - not display units.
     // Measured at turbidity 2.5: a fully lit face reaches 15.4, and the sky peaks at 36 in the
@@ -35,6 +41,7 @@ public class PostProcessor {
     private final ShaderProgram shader;
     private final ShaderProgram brightShader;
     private final ShaderProgram blurShader;
+    private final ShaderProgram debugDepthShader;
     private final SkyMesh mesh;
     private final GlFramebuffer bloomA;
     private final GlFramebuffer bloomB;
@@ -47,7 +54,37 @@ public class PostProcessor {
         shader = new ShaderProgram(VERT_PATH, FRAG_PATH);
         brightShader = new ShaderProgram(VERT_PATH, BRIGHT_FRAG);
         blurShader = new ShaderProgram(VERT_PATH, BLUR_FRAG);
+        debugDepthShader = new ShaderProgram(VERT_PATH, DEBUG_DEPTH_FRAG);
         mesh = new SkyMesh();
+    }
+
+    /*
+     * Draws the shadow map into a square inset in the bottom-right corner, over the finished
+     * frame. Runs against the default framebuffer, after draw(), so it is never tonemapped —
+     * this is an instrument, not part of the image.
+     *
+     * depthMin/depthMax select which slice of the depth range is stretched across the contrast
+     * range; the caller knows the light's near/far and where the terrain sits within them.
+     */
+    public void drawDepthOverlay(int depthTexture, float depthMin, float depthMax, int windowWidth, int windowHeight) {
+        int size = (int) (windowWidth * DEBUG_INSET_FRACTION);
+        GlFramebuffer.bindDefault(windowWidth, windowHeight);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+
+        // The inset is drawn by shrinking the viewport, not by changing the geometry: the same
+        // fullscreen triangle covers whatever rectangle the viewport describes.
+        glViewport(windowWidth - size, 0, size, size);
+        debugDepthShader.bind();
+        debugDepthShader.setUniformInt("uDepth", 0);
+        debugDepthShader.setUniformFloat("uDepthMin", depthMin);
+        debugDepthShader.setUniformFloat("uDepthMax", depthMax);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, depthTexture);
+        mesh.render();
+
+        glViewport(0, 0, windowWidth, windowHeight);
     }
 
     public void draw(int sceneTexture, int windowWidth, int windowHeight) {
@@ -103,12 +140,14 @@ public class PostProcessor {
 
     public void reload() {
         shader.reload();
+        debugDepthShader.reload();
         brightShader.reload();
         blurShader.reload();
     }
 
     public void delete() {
         shader.delete();
+        debugDepthShader.delete();
         brightShader.delete();
         blurShader.delete();
         mesh.delete();

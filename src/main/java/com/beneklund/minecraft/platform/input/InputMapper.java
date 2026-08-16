@@ -45,6 +45,7 @@ public class InputMapper {
             Map.entry(GLFW_KEY_F2, Binding.tap(IInputAction.Simple.SCREENSHOT)),
             Map.entry(GLFW_KEY_F3, Binding.tap(IInputAction.Simple.DEBUG_OVERLAY)),
             Map.entry(GLFW_KEY_F5, Binding.tap(IInputAction.Simple.RELOAD_SHADERS)),
+            Map.entry(GLFW_KEY_F6, Binding.tap(IInputAction.Simple.DEBUG_SHADOW_MAP)),
             Map.entry(GLFW_KEY_P, Binding.tap(IInputAction.Simple.PAUSE)));
 
     private final InputEventQueue queue;
