@@ -5,6 +5,8 @@ uniform sampler2D uScene;
 uniform float uExposure;
 uniform sampler2D uBloom;
 uniform float uBloomStrength;
+uniform sampler2D uGodray;
+uniform float uGodrayStrength;
 
 out vec4 FragColor;
 
@@ -15,7 +17,8 @@ vec3 tonemapACES(vec3 x) {
 
 void main() {
     vec3 hdr = (texture(uScene, vScreenUV).rgb
-        + texture(uBloom, vScreenUV).rgb * uBloomStrength) * uExposure;
+    + texture(uBloom, vScreenUV).rgb * uBloomStrength
+    + texture(uGodray, vScreenUV).rgb * uGodrayStrength) * uExposure;
     vec3 mapped = tonemapACES(hdr);
     FragColor = vec4(mapped, 1.0);
 }

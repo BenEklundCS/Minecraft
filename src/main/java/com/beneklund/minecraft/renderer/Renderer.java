@@ -326,6 +326,8 @@ public class Renderer {
         frameUniforms.put("uModel", new UniformValue.M4(modelScratch));
         frameUniforms.put("uExtinction", new UniformValue.F(EXTINCTION));
         frameUniforms.put("uCameraPos", new UniformValue.V3(camera.getPosition()));
+        frameUniforms.put("uCameraNear", new UniformValue.F(Camera.NEAR_PLANE));
+        frameUniforms.put("uCameraFar", new UniformValue.F(Camera.FAR_PLANE));
 
         // One entry per cascade. glGetUniformLocation accepts an array element by name, so the
         // sealed UniformValue needs no array variant — "uLightViewProj[1]" is just a uniform.

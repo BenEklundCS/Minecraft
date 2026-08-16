@@ -25,7 +25,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
+import org.joml.Vector2f;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 // Per-frame update/render loop. Drives player input, chunk streaming, GPU uploads, and rendering.
 public class Game {
@@ -151,9 +154,17 @@ public class Game {
             // target in rather than binding it here keeps that ordering in one place.
             renderer.drawScene(camera, sceneBuffer);
 
-            // draw() owns the return to the default framebuffer now — it runs three half-res
-            // bloom passes first, so it has to do its own binding between them.
-            postProcessor.draw(sceneBuffer.colorTexture(), window.getWidth(), window.getHeight());
+            // draw() owns the return to the default framebuffer now — it runs several half-res
+            // passes first, so it has to do its own binding between them.
+            //
+            // depthTexture() only answers because sceneBuffer is built with DepthMode.TEXTURE; if
+            // this throws, the argument to fix is the one in GameContainer, not the one here.
+            postProcessor.draw(
+                    sceneBuffer.colorTexture(),
+                    sceneBuffer.depthTexture(),
+                    sunScreenUV(),
+                    window.getWidth(),
+                    window.getHeight());
 
             // After the tonemap and before the HUD: an instrument drawn over the finished frame,
             // deliberately not part of the image it is being used to debug.
@@ -338,5 +349,24 @@ public class Game {
                 RENDER.trace("freed GL buffers for {}", pos);
             }
         }
+    }
+
+    /*
+     * Where the sun sits on screen, in [0,1] UV, or empty when it is behind the camera.
+     *
+     * w = 0 marks a direction rather than a position: the sun has no location, only a bearing, and
+     * a projection handles the two differently. After the transform, w carries the view-space
+     * depth of that bearing, so its sign is the front/behind test.
+     */
+    private Optional<Vector2f> sunScreenUV() {
+        Vector3f sun = cycle.sunDirection();
+        Vector4f clip = camera.getViewProjectionMatrix().transform(new Vector4f(sun.x, sun.y, sun.z, 0.0f));
+
+        // Behind the camera, w is negative and the divide mirrors the result onto the screen —
+        // the effect would then radiate from a phantom sun in the wrong place.
+        if (clip.w <= 0.0f) return Optional.empty();
+
+        return Optional.of(
+                new Vector2f(clip.x / clip.w, clip.y / clip.w).mul(0.5f).add(0.5f, 0.5f));
     }
 }

@@ -14,6 +14,7 @@ import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbAudioLoader;
 import com.beneklund.minecraft.platform.debug.FrameStreamServer;
+import com.beneklund.minecraft.platform.graphics.DepthMode;
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
 import com.beneklund.minecraft.platform.graphics.ShadowFramebuffer;
 import com.beneklund.minecraft.platform.images.StbImageLoader;
@@ -84,6 +85,8 @@ public class GameContainer {
     private FrameStreamServer frameStream;
     private GlFramebuffer bloomA;
     private GlFramebuffer bloomB;
+    private GlFramebuffer godrayA;
+    private GlFramebuffer godrayB;
     private PostProcessor postProcessor;
 
     // audio
@@ -214,17 +217,43 @@ public class GameContainer {
         //
         // Registered for resize: the attachments are allocated at a fixed size, so without this
         // the scene keeps rendering at the launch resolution and gets stretched.
-        sceneBuffer = new GlFramebuffer(window.getWidth(), window.getHeight(), GL_RGBA16F);
+        //
+        // DepthMode.TEXTURE: this is the one framebuffer whose depth anything reads back. World
+        // geometry needs a real depth test while it draws, and screen-space passes downstream need
+        // to sample the result to find out how far away each pixel ended up.
+        sceneBuffer = new GlFramebuffer(window.getWidth(), window.getHeight(), GL_RGBA16F, DepthMode.TEXTURE);
+
+        constructBloomBuffers();
+        constructGodrayBuffers();
+        postProcessor = new PostProcessor(Renderer.EXPOSURE, bloomA, bloomB, godrayA, godrayB);
+    }
+
+    private void constructBloomBuffers() {
         int bloomW = Math.max(1, window.getWidth() / 2);
         int bloomH = Math.max(1, window.getHeight() / 2);
-        bloomA = new GlFramebuffer(bloomW, bloomH, GL_RGBA16F);
-        bloomB = new GlFramebuffer(bloomW, bloomH, GL_RGBA16F);
+        // DepthMode.NONE: every pass that touches these draws one screen-covering quad, so there
+        // is nothing to sort and nothing to occlude. A depth attachment here would be allocated,
+        // reallocated on every resize below, and never written to.
+        bloomA = new GlFramebuffer(bloomW, bloomH, GL_RGBA16F, DepthMode.NONE);
+        bloomB = new GlFramebuffer(bloomW, bloomH, GL_RGBA16F, DepthMode.NONE);
         window.addResizeListener((w, h) -> {
             bloomA.resize(Math.max(1, w / 2), Math.max(1, h / 2));
             bloomB.resize(Math.max(1, w / 2), Math.max(1, h / 2));
         });
         window.addResizeListener(sceneBuffer::resize);
-        postProcessor = new PostProcessor(Renderer.EXPOSURE, bloomA, bloomB);
+    }
+
+    private void constructGodrayBuffers() {
+        int godrayW = Math.max(1, window.getWidth() / 2);
+        int godrayH = Math.max(1, window.getHeight() / 2);
+        // Same story as the bloom pair: fullscreen quads only. The depth these read comes from
+        // sceneBuffer, not from a depth buffer of their own.
+        godrayA = new GlFramebuffer(godrayW, godrayH, GL_RGBA16F, DepthMode.NONE);
+        godrayB = new GlFramebuffer(godrayW, godrayH, GL_RGBA16F, DepthMode.NONE);
+        window.addResizeListener((w, h) -> {
+            godrayA.resize(Math.max(1, w / 2), Math.max(1, h / 2));
+            godrayB.resize(Math.max(1, w / 2), Math.max(1, h / 2));
+        });
     }
 
     private void initAudio() {
@@ -258,7 +287,7 @@ public class GameContainer {
         ChunkStore store = new ChunkStore(worldConfig.seed());
         chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store, lightEngine);
         physics = new Physics();
-        cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.DEFAULT_DAY_SECONDS);
+        cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.VERY_SHORT_DAY_SECONDS);
         WORLD.debug("world ready: {} generation spec(s), seed {}", generationSpecs.size(), worldConfig.seed());
     }
 

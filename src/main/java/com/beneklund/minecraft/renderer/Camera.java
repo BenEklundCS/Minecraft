@@ -9,8 +9,8 @@ import org.joml.Vector3f;
 // Pure view/projection calculator. Holds the eye position and look direction that
 // Player pushes in each frame; owns no simulation state of its own.
 public class Camera {
-    private static final float NEAR_PLANE = 0.1f;
-    private static final float FAR_PLANE = 1000.0f;
+    public static final float NEAR_PLANE = 0.1f;
+    public static final float FAR_PLANE = 1000.0f;
 
     private final Vector2f windowSize;
     private final Vector3f position = new Vector3f();
