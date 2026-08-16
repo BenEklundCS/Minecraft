@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 class ShadowCameraTest {
 
     private static final int MAP_SIZE = 2048;
+    // The tests below describe the widest cascade; the near one is checked separately.
+    private static final int FAR_CASCADE = ShadowCamera.cascadeCount() - 1;
     // A late-morning sun: high enough not to trip the elevation clamp.
     private static final Vector3f SUN = new Vector3f(0.3f, 0.8f, 0.5f).normalize();
 
@@ -25,7 +27,7 @@ class ShadowCameraTest {
 
     private Matrix4f matrixAt(float x, float y, float z) {
         camera.update(new Vector3f(x, y, z), SUN);
-        return new Matrix4f(camera.lightViewProj());
+        return new Matrix4f(camera.lightViewProj(FAR_CASCADE));
     }
 
     /*
@@ -40,7 +42,7 @@ class ShadowCameraTest {
      */
     @Test
     void theEyeEntersOnlyInWholeTexels() {
-        float texel = camera.texelWorldSize();
+        float texel = camera.texelWorldSize(FAR_CASCADE);
         int steps = 300;
         float span = texel * 3.0f;
 
@@ -89,7 +91,7 @@ class ShadowCameraTest {
             double angle = Math.toRadians(40.0 + frame * 0.3 / 60.0);
             camera.update(eye, new Vector3f(0.0f, (float) Math.sin(angle), (float) Math.cos(angle)).normalize());
 
-            Vector3f ndc = camera.lightViewProj().transformPosition(new Vector3f(probe));
+            Vector3f ndc = camera.lightViewProj(FAR_CASCADE).transformPosition(new Vector3f(probe));
             float texelX = ndc.x * 1024.0f; // NDC -> texels across a 2048 map
 
             if (!Float.isNaN(previous)) {
@@ -111,6 +113,78 @@ class ShadowCameraTest {
     }
 
     /*
+     * The reason cascades exist: the near one has to resolve more detail than the far one, or it
+     * is two copies of the same map and twice the cost for nothing.
+     */
+    @Test
+    void theNearCascadeHasFinerTexelsThanTheFar() {
+        for (int cascade = 1; cascade < ShadowCamera.cascadeCount(); cascade++) {
+            assertTrue(
+                    camera.texelWorldSize(cascade - 1) < camera.texelWorldSize(cascade),
+                    "cascade " + (cascade - 1) + " must be finer than cascade " + cascade);
+        }
+    }
+
+    /*
+     * Each cascade snaps to its own grid. Sharing one would leave the near cascade moving in steps
+     * the size of the FAR cascade's texels — sixteen of its own — which is not snapping, it is a
+     * quantisation coarse enough to see.
+     */
+    @Test
+    void eachCascadeSnapsToItsOwnTexelGrid() {
+        float nearTexel = camera.texelWorldSize(0);
+
+        camera.update(new Vector3f(700.0f, 96.0f, 190.0f), SUN);
+        Matrix4f before = new Matrix4f(camera.lightViewProj(0));
+
+        // A step far below the FAR cascade's texel but several of the near cascade's own.
+        camera.update(new Vector3f(700.0f + nearTexel * 4.0f, 96.0f, 190.0f), SUN);
+
+        assertNotEquals(before, camera.lightViewProj(0), "the near cascade must track motion at its own texel scale");
+    }
+
+    /*
+     * The bias is authored in texels, so a cascade covering a quarter of the world through the same
+     * texels needs a quarter of the depth margin. A shared bias would be four times too large in
+     * the near cascade, which is how a caster ends up floating above its own shadow.
+     */
+    @Test
+    void biasScalesWithEachCascadesTexelSize() {
+        float nearBias = camera.normalizedBias(0);
+        float farBias = camera.normalizedBias(ShadowCamera.cascadeCount() - 1);
+        float texelRatio = camera.texelWorldSize(ShadowCamera.cascadeCount() - 1) / camera.texelWorldSize(0);
+
+        assertEquals(texelRatio, farBias / nearBias, 1e-4f, "bias must track texel size, not be a constant");
+    }
+
+    // Splits have to increase, or cascadeFor in the shader returns the wrong one: it takes the
+    // first split the fragment is inside, so an out-of-order list makes later cascades unreachable.
+    @Test
+    void splitDistancesIncrease() {
+        for (int cascade = 1; cascade < ShadowCamera.cascadeCount(); cascade++) {
+            assertTrue(
+                    ShadowCamera.splitDistance(cascade - 1) < ShadowCamera.splitDistance(cascade),
+                    "split " + (cascade - 1) + " must come before split " + cascade);
+        }
+    }
+
+    /*
+     * A fragment is handed to a cascade by view distance, but the lookup only works if it is inside
+     * that cascade's BOX — and the box is a square in light space, not a sphere around the eye.
+     * The handover distance therefore has to sit strictly inside the box's half-width.
+     */
+    @Test
+    void eachSplitFallsInsideItsOwnCascadesBox() {
+        for (int cascade = 0; cascade < ShadowCamera.cascadeCount(); cascade++) {
+            float boxHalf = camera.texelWorldSize(cascade) * MAP_SIZE / 2.0f;
+            assertTrue(
+                    ShadowCamera.splitDistance(cascade) <= boxHalf,
+                    "cascade " + cascade + " hands over at " + ShadowCamera.splitDistance(cascade)
+                            + " blocks but its box only reaches " + boxHalf);
+        }
+    }
+
+    /*
      * The other half of the same property. A snap that always returned the same matrix would pass
      * the test above and give you a shadow box that never follows the player at all.
      */
@@ -127,7 +201,7 @@ class ShadowCameraTest {
      */
     @Test
     void manySubTexelSteps_landOnTheSameGridAsOneJump() {
-        float texel = camera.texelWorldSize();
+        float texel = camera.texelWorldSize(FAR_CASCADE);
         float total = texel * 10.0f;
 
         Matrix4f direct = matrixAt(700.0f + total, 96.0f, 190.0f);
@@ -150,7 +224,7 @@ class ShadowCameraTest {
         camera.update(new Vector3f(700.0f, 96.0f, 190.0f), new Vector3f(0.0f, 1.0f, 0.0f));
 
         float[] values = new float[16];
-        camera.lightViewProj().get(values);
+        camera.lightViewProj(FAR_CASCADE).get(values);
         for (int i = 0; i < values.length; i++) {
             assertTrue(Float.isFinite(values[i]), "element " + i + " is " + values[i] + " with the sun overhead");
         }
@@ -197,12 +271,13 @@ class ShadowCameraTest {
     void aSunNudgeSmallerThanAStep_leavesTheMatrixBitIdentical() {
         Vector3f eye = new Vector3f(700.0f, 96.0f, 190.0f);
         camera.update(eye, new Vector3f(0.0f, (float) Math.sin(0.7), (float) Math.cos(0.7)).normalize());
-        Matrix4f reference = new Matrix4f(camera.lightViewProj());
+        Matrix4f reference = new Matrix4f(camera.lightViewProj(FAR_CASCADE));
 
         // A frame's worth of travel at DEFAULT_DAY_SECONDS is 0.005 degrees, far under one step.
         double nudged = 0.7 + Math.toRadians(0.005);
         camera.update(eye, new Vector3f(0.0f, (float) Math.sin(nudged), (float) Math.cos(nudged)).normalize());
 
-        assertEquals(reference, camera.lightViewProj(), "one frame of sun travel must not move the shadow map");
+        assertEquals(
+                reference, camera.lightViewProj(FAR_CASCADE), "one frame of sun travel must not move the shadow map");
     }
 }

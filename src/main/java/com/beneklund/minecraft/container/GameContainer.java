@@ -197,7 +197,7 @@ public class GameContainer {
         // never gets used.
         // Fixed 2048 square, not window-sized: shadow map resolution is a quality setting, and
         // at SHADOW_BOX_HALF = 128 this is one texel per eighth of a block.
-        shadowBuffer = new ShadowFramebuffer(SHADOW_MAP_SIZE);
+        shadowBuffer = new ShadowFramebuffer(SHADOW_MAP_SIZE, ShadowCamera.cascadeCount());
         // Same size for both, from one constant: the camera snaps the box to whole texels, so it
         // has to agree with the map it is snapping to or the snapping quietly stops working.
         shadowCamera = new ShadowCamera(SHADOW_MAP_SIZE);
@@ -205,7 +205,8 @@ public class GameContainer {
                 List.of(skyRenderer, chunkRenderer, debugRenderer, hudRenderer),
                 cfg.clearColor(),
                 shadowBuffer,
-                shadowCamera);
+                shadowCamera,
+                renderWorld::version);
 
         // The scene renders here instead of straight to the window, and PostProcessor draws it
         // back out. RGBA16F because sky.frag emits linear radiance now — the sun runs well past

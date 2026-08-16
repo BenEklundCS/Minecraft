@@ -35,8 +35,12 @@ public class ChunkRenderer implements IRenderable {
         Vector3f eye = camera.getPosition();
         List<DrawCall> result = new ArrayList<>();
         for (RenderWorld.Entry entry : renderWorld.getEntries()) {
-            if (entry.opaqueMesh() != null && castsIntoShadowBox(entry.bounds(), eye)) {
-                result.add(new DrawCall(entry.opaqueMesh(), entry.model(), shadowShader, atlas, RenderPass.SHADOW));
+            if (entry.opaqueMesh() != null) {
+                int cascades = cascadeMaskFor(entry.bounds(), eye);
+                if (cascades != 0) {
+                    result.add(new DrawCall(
+                            entry.opaqueMesh(), entry.model(), shadowShader, atlas, RenderPass.SHADOW, cascades));
+                }
             }
             if (!frustum.isVisible(entry.bounds())) continue;
             if (entry.opaqueMesh() != null) {
@@ -50,13 +54,27 @@ public class ChunkRenderer implements IRenderable {
         return result;
     }
 
-    // Horizontal distance from the camera to the nearest point of the chunk's box. Vertical
-    // extent is ignored: the sun's box spans the full world height, so a chunk is either within
-    // horizontal reach or it is not.
-    private static boolean castsIntoShadowBox(AABB bounds, Vector3f eye) {
+    /*
+     * Which cascades this chunk can cast into, one bit each.
+     *
+     * Horizontal distance from the eye to the nearest point of the chunk's box. Vertical extent is
+     * ignored: the sun's box spans the full world height, so a chunk is either within horizontal
+     * reach of a cascade or it is not.
+     *
+     * The near cascade covers a much smaller area, so most loaded chunks fail its test and are
+     * never submitted to it — which is the saving that pays for rendering the scene twice.
+     */
+    private static int cascadeMaskFor(AABB bounds, Vector3f eye) {
         float dx = Math.max(0.0f, Math.max(bounds.minX() - eye.x, eye.x - bounds.maxX()));
         float dz = Math.max(0.0f, Math.max(bounds.minZ() - eye.z, eye.z - bounds.maxZ()));
-        return dx * dx + dz * dz <= ShadowCamera.CASTER_RADIUS * ShadowCamera.CASTER_RADIUS;
+        float distanceSquared = dx * dx + dz * dz;
+
+        int mask = 0;
+        for (int cascade = 0; cascade < ShadowCamera.cascadeCount(); cascade++) {
+            float radius = ShadowCamera.casterRadius(cascade);
+            if (distanceSquared <= radius * radius) mask |= 1 << cascade;
+        }
+        return mask;
     }
 
     @Override

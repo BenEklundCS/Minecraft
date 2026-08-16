@@ -1,7 +1,9 @@
 #version 330 core
 in vec2 vScreenUV;
 
-uniform sampler2D uDepth;
+uniform sampler2DArray uDepth;
+// Which cascade to show. F6 cycles it; the near cascade is layer 0.
+uniform float uLayer;
 // The slice of the [0,1] depth range to spread across black-to-white. The shadow map's
 // projection is orthographic, so its depth is linear — but terrain only occupies a few hundred
 // blocks of a ~1200 block slab, so the interesting values sit in a narrow band around the middle
@@ -12,7 +14,7 @@ uniform float uDepthMax;
 out vec4 FragColor;
 
 void main() {
-    float d = texture(uDepth, vScreenUV).r;
+    float d = texture(uDepth, vec3(vScreenUV, uLayer)).r;
 
     // Exactly 1.0 means nothing was ever rendered there — the clear value. Flagged red rather
     // than drawn as white, because "the map is empty" and "the map is full of distant geometry"

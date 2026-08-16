@@ -11,9 +11,19 @@ uniform sampler2D uAtlas;
 uniform float     uSkyBrightness;
 uniform float     uExtinction;
 uniform mat4      uInvViewRotation;
-uniform mat4      uLightViewProj;
-uniform sampler2D uShadowMap;
-uniform vec3      uCameraPos;
+// One shadow map per cascade, as layers of a single array texture. An array of sampler2D would
+// have to be indexed by a dynamically uniform expression in GLSL 3.30, and the cascade a fragment
+// falls in is chosen per fragment — exactly what that rule forbids. One sampler, layer as the
+// third texture coordinate, no such restriction.
+// Must equal ShadowCamera.cascadeCount(). GLSL needs it as a compile-time constant for the array
+// sizes, and nothing uploads it, so the two are kept in step by ShaderSourceTest rather than by
+// remembering.
+const int CASCADE_COUNT = 3;
+uniform mat4           uLightViewProj[CASCADE_COUNT];
+uniform float          uShadowBias[CASCADE_COUNT];
+uniform float          uCascadeSplit[CASCADE_COUNT];
+uniform sampler2DArray uShadowMap;
+uniform vec3           uCameraPos;
 
 // The altitude over which air density falls by 1/e. Earth's is about 8.5 km against a ~9 km
 // visual range; this world's sight line is ~256 blocks, so 120 keeps the same rough proportion.
@@ -31,17 +41,26 @@ float densityAt(float y) { return exp(-(y - HAZE_REFERENCE_Y) / ATMOSPHERE_SCALE
 // it is still lit by the whole dome of the sky, which is what makes shadows read as blue-ish
 // rather than as holes.
 const float SHADOW_AMBIENT = 0.35;
-// Depth margin, supplied already converted into the map's [0,1] units. Authored in blocks on
-// the Java side because a normalized figure means nothing without knowing the light's depth
-// range — at SHADOW_FAR-SHADOW_NEAR = 1199, a "standard" 0.0015 is 1.8 blocks, which is larger
-// than most casters and makes their shadows vanish entirely.
-uniform float uShadowBias;
 // Multiplier on the per-fragment depth slope, in the map's [0,1] depth units. Scales the margin
 // up on surfaces oblique to the sun, which is where a fixed bias fails first.
 const float SHADOW_SLOPE_SCALE = 2.0;
 
-float shadowFactor(vec3 worldPos, vec3 normal) {
-    vec4 lightClip = uLightViewProj * vec4(worldPos, 1.0);
+/*
+ * Which cascade a fragment belongs to, by how far it is down the view ray.
+ *
+ * The near cascade covers a quarter of the distance through the same number of texels, so its
+ * shadows are four times finer. Everything past the last split has no map covering it and reads
+ * as lit — the split distances are the reach of the whole system, not just the boundaries in it.
+ */
+int cascadeFor(float viewDistance) {
+    for (int i = 0; i < CASCADE_COUNT; i++) {
+        if (viewDistance < uCascadeSplit[i]) return i;
+    }
+    return CASCADE_COUNT;   // past the far split: outside every box
+}
+
+float shadowFactor(vec3 worldPos, vec3 normal, int cascade) {
+    vec4 lightClip = uLightViewProj[cascade] * vec4(worldPos, 1.0);
 
     // Clip -> NDC. For an orthographic projection w is always 1, so this divide changes
     // nothing today. It is here because it is what makes the function correct if the light
@@ -69,18 +88,20 @@ float shadowFactor(vec3 worldPos, vec3 normal) {
     // space, so it holds still while you look around.
     float ndotl = clamp(abs(dot(normal, uSunDirection)), 0.05, 1.0);
     float slope = sqrt(1.0 - ndotl * ndotl) / ndotl;
-    float bias = uShadowBias * (1.0 + SHADOW_SLOPE_SCALE * slope);
+    float bias = uShadowBias[cascade] * (1.0 + SHADOW_SLOPE_SCALE * slope);
 
     // Percentage-closer filtering: average the COMPARISONS over a 3x3 neighbourhood, never the
     // depths. The mean of "nearer" and "further" is not a depth that means anything; the mean of
     // nine booleans is a coverage fraction, which is what a soft edge is. This also stops a
     // fragment sitting on the threshold from flipping wholesale between frames — it moves by a
     // ninth at a time instead.
-    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+    // textureSize on a sampler2DArray returns (width, height, layers) — the layer count is not
+    // a texel size, so only xy goes into the step.
+    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0).xy);
     float sum = 0.0;
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
-            float nearest = texture(uShadowMap, lightUV.xy + vec2(x, y) * texel).r;
+            float nearest = texture(uShadowMap, vec3(lightUV.xy + vec2(x, y) * texel, float(cascade))).r;
             sum += lightUV.z - bias > nearest ? 0.0 : 1.0;
         }
     }
@@ -157,7 +178,10 @@ void main() {
      * are undefined inside non-uniform control flow, which is why this could not be written while
      * the normal came from dFdx.
      */
-    float shadow = ndotl > 0.0 ? shadowFactor(worldPos, normal) : 0.0;
+    // Past the last split there is no map covering this fragment, so it reads as lit rather than
+    // as shadowed — the same answer the border colour gives inside the box.
+    int cascade = cascadeFor(dist);
+    float shadow = (cascade >= CASCADE_COUNT) ? 1.0 : (ndotl > 0.0 ? shadowFactor(worldPos, normal, cascade) : 0.0);
 
     // Sun actually reaching this fragment: the angle it presents, times whether anything is in
     // the way. The shadow attenuates the *sun* term only — vLight.y is torches, which the sun

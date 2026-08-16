@@ -2,6 +2,7 @@ package com.beneklund.minecraft.platform.graphics;
 
 import static com.beneklund.minecraft.util.Log.GPU;
 import static org.lwjgl.opengl.GL20.*;
+import static org.lwjgl.opengl.GL31.GL_UNIFORM_SIZE;
 import static org.lwjgl.opengl.GL31.GL_UNIFORM_TYPE;
 import static org.lwjgl.opengl.GL31C.glGetActiveUniformName;
 import static org.lwjgl.opengl.GL31C.glGetActiveUniformsi;
@@ -174,9 +175,28 @@ public final class GlShader {
         for (int i = 0; i < count; i++) {
             String name = glGetActiveUniformName(programId, i);
             int uniformType = glGetActiveUniformsi(programId, i, GL_UNIFORM_TYPE);
-            int location = glGetUniformLocation(programId, name);
-            if (location < 0) continue;
-            activeUniforms.put(name, new ActiveUniform(name, location, uniformType));
+            int size = glGetActiveUniformsi(programId, i, GL_UNIFORM_SIZE);
+
+            /*
+             * An array arrives as ONE active uniform. GL reports `uFoo[3]` as a single entry named
+             * "uFoo[0]" with size 3 — so registering only what the enumeration hands back leaves
+             * elements 1 and up with no entry at all, and every lookup for them silently misses.
+             *
+             * That is not a hypothetical. chunk.frag's per-cascade uLightViewProj, uShadowBias and
+             * uCascadeSplit were uploaded for element 0 only; elements 1 and 2 kept their default
+             * of zero, so cascadeFor compared against a split of 0, reported "no cascade" for
+             * anything past the first split, and shadows silently stopped at 28 blocks. Nothing
+             * warned, because element 0 WAS supplied and the other elements were never asked for.
+             *
+             * So expand arrays here: one entry per element, each with its own location.
+             */
+            String base = name.endsWith("[0]") ? name.substring(0, name.length() - 3) : name;
+            for (int element = 0; element < size; element++) {
+                String elementName = size == 1 ? base : base + "[" + element + "]";
+                int location = glGetUniformLocation(programId, elementName);
+                if (location < 0) continue;
+                activeUniforms.put(elementName, new ActiveUniform(elementName, location, uniformType));
+            }
         }
         GPU.debug("program {} declares uniform(s): {}", programId, activeUniforms.keySet());
     }

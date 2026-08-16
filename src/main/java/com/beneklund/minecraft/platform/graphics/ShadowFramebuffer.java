@@ -9,35 +9,53 @@ public class ShadowFramebuffer {
     private final int fbo;
     private final int depthTexture;
     private final int size;
+    private final int layers;
 
-    public ShadowFramebuffer(int size) {
+    public ShadowFramebuffer(int size, int layers) {
         this.size = size;
+        this.layers = layers;
 
         fbo = glGenFramebuffers();
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
         depthTexture = glGenTextures();
-        glBindTexture(GL_TEXTURE_2D, depthTexture);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, depthTexture);
+        // An array texture, one layer per cascade. A single object rather than N framebuffers
+        // because the shader samples it with one sampler2DArray: GLSL 3.30 requires an array OF
+        // samplers to be indexed by a dynamically uniform expression, and the cascade a fragment
+        // falls in is chosen per fragment, which is exactly what that forbids.
+        //
         // GL_DEPTH_COMPONENT with a null pixel pointer: allocate storage, upload nothing. The
         // format arguments still have to describe a depth image even though no data is passed.
-        glTexImage2D(
-                GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, size, size, 0, GL_DEPTH_COMPONENT, GL_FLOAT, (ByteBuffer) null);
+        glTexImage3D(
+                GL_TEXTURE_2D_ARRAY,
+                0,
+                GL_DEPTH_COMPONENT24,
+                size,
+                size,
+                layers,
+                0,
+                GL_DEPTH_COMPONENT,
+                GL_FLOAT,
+                (ByteBuffer) null);
 
         // GL_NEAREST, not GL_LINEAR. Interpolating between two depths produces a value that is
         // not the depth of anything — the midpoint between a near surface and a far one is empty
         // air, and comparing against it reports shadow where there is none. Softening happens by
         // averaging the *comparisons* (PCF in the shader), never the depths.
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
         // Anything outside the sun's box must read as "nothing was in the way". CLAMP_TO_EDGE
         // would smear the border texels outward and hang a shadow off the edge of the map across
         // the rest of the world; the border colour is depth 1.0, the far plane, which reads as lit.
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, new float[] {1.0f, 1.0f, 1.0f, 1.0f});
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, new float[] {1.0f, 1.0f, 1.0f, 1.0f});
 
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
+        // Layer 0 just so the framebuffer is complete at construction; bindLayer picks the real
+        // one per pass.
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTexture, 0, 0);
 
         // Both of these are state on *this* framebuffer object, not global state, so they are set
         // once here and never restored — binding another framebuffer does not inherit them.
@@ -45,16 +63,25 @@ public class ShadowFramebuffer {
         glDrawBuffer(GL_NONE);
         glReadBuffer(GL_NONE);
 
-        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         validate();
     }
 
-    // Callers must clear GL_DEPTH_BUFFER_BIT after this — there is no colour buffer to clear.
-    public void bind() {
+    /*
+     * Point the depth attachment at one cascade's layer. Callers must clear GL_DEPTH_BUFFER_BIT
+     * after this — there is no colour buffer to clear, and the clear applies to whichever layer is
+     * attached right now, so attaching and clearing cannot be reordered.
+     */
+    public void bindLayer(int layer) {
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTexture, 0, layer);
         glViewport(0, 0, size, size);
+    }
+
+    public int layers() {
+        return layers;
     }
 
     public void delete() {

@@ -4,6 +4,7 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE1;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
+import static org.lwjgl.opengl.GL30.GL_TEXTURE_2D_ARRAY;
 
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
 import com.beneklund.minecraft.platform.graphics.SkyMesh;
@@ -66,7 +67,8 @@ public class PostProcessor {
      * depthMin/depthMax select which slice of the depth range is stretched across the contrast
      * range; the caller knows the light's near/far and where the terrain sits within them.
      */
-    public void drawDepthOverlay(int depthTexture, float depthMin, float depthMax, int windowWidth, int windowHeight) {
+    public void drawDepthOverlay(
+            int depthTexture, int layer, float depthMin, float depthMax, int windowWidth, int windowHeight) {
         int size = (int) (windowWidth * DEBUG_INSET_FRACTION);
         GlFramebuffer.bindDefault(windowWidth, windowHeight);
         glDisable(GL_DEPTH_TEST);
@@ -78,10 +80,11 @@ public class PostProcessor {
         glViewport(windowWidth - size, 0, size, size);
         debugDepthShader.bind();
         debugDepthShader.setUniformInt("uDepth", 0);
+        debugDepthShader.setUniformFloat("uLayer", layer);
         debugDepthShader.setUniformFloat("uDepthMin", depthMin);
         debugDepthShader.setUniformFloat("uDepthMax", depthMax);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, depthTexture);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, depthTexture);
         mesh.render();
 
         glViewport(0, 0, windowWidth, windowHeight);

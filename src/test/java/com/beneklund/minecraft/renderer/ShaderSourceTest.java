@@ -42,6 +42,26 @@ class ShaderSourceTest {
     private static final Pattern DERIVATIVES =
             Pattern.compile("\\b(dFdx|dFdy|dFdxFine|dFdyFine|dFdxCoarse|dFdyCoarse|fwidth)\\s*\\(");
 
+    /*
+     * chunk.frag sizes its uniform arrays with a literal CASCADE_COUNT, because GLSL needs an array
+     * size at compile time and nothing uploads one. Java owns the real number.
+     *
+     * Get them out of step and there is no error anywhere: the shader reads uniform slots Java
+     * never filled, which default to zero, so the extra cascade silently projects everything to a
+     * single point and shadows go wrong in a way that looks like a maths bug in the light matrix.
+     */
+    @Test
+    void chunkFragCascadeCountMatchesShadowCamera() {
+        Matcher m = Pattern.compile("const\\s+int\\s+CASCADE_COUNT\\s*=\\s*(\\d+)\\s*;")
+                .matcher(read("/shaders/chunk.frag"));
+
+        assertTrue(m.find(), "chunk.frag no longer declares CASCADE_COUNT");
+        assertEquals(
+                ShadowCamera.cascadeCount(),
+                Integer.parseInt(m.group(1)),
+                "chunk.frag's CASCADE_COUNT and ShadowCamera.cascadeCount() have drifted apart");
+    }
+
     @Test
     void shadowPathShadersUseNoScreenSpaceDerivatives() {
         for (String path : CAMERA_INDEPENDENT_SHADERS) {

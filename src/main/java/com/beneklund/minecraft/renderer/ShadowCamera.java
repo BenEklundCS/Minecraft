@@ -22,16 +22,45 @@ import org.joml.Vector3fc;
  */
 public class ShadowCamera {
 
-    // Half-width of the square area the sun's shadow map covers, in blocks. 128 puts a 256-block
-    // box around the player, which at a 2048 map is one texel per eighth of a block — crisp.
-    // Raising it trades sharpness for coverage, and that trade is what cascades exist to stop
-    // having to make.
+    /*
+     * Half-width of each cascade's square, in blocks. One map covering everything has to pick a
+     * single trade between sharpness and reach; cascades are how you stop picking.
+     *
+     * At a 2048 map these are 0.031 and 0.125 blocks per texel. The near cascade is four times
+     * finer than a single 128 map, which is the whole point — it is what shadow edges close to the
+     * player are rasterised into.
+     *
+     * Add a third by adding an entry here and to SPLIT_DISTANCES. Nothing else counts cascades.
+     */
+    private static final float[] BOX_HALVES = {32.0f, 128.0f, 512.0f};
+
+    /*
+     * View distance at which each cascade hands over, in blocks. The last entry is the end of
+     * shadowing altogether.
+     *
+     * 28 rather than 32: a cascade's box is centred on the eye and axis-aligned in LIGHT space, so
+     * a fragment 32 blocks away along the view ray is not necessarily inside a box of half-width
+     * 32. The margin keeps the handover strictly inside the near box, where the lookup is valid.
+     */
+    private static final float[] SPLIT_DISTANCES = {28.0f, 120.0f, 500.0f};
+
+    // Widest cascade, for anything that needs one number for the whole system.
     public static final float BOX_HALF = 128.0f;
 
-    // How far from the camera a chunk can be and still cast into the box. The box itself is
-    // BOX_HALF wide; the extra margin is for low sun, where a tall caster outside the box still
-    // throws a shadow across it. Read by ChunkRenderer, which does the actual selection.
-    public static final float CASTER_RADIUS = BOX_HALF + 128.0f;
+    // How far from the eye a chunk can be and still cast into a given cascade. The box itself is
+    // BOX_HALVES[i] wide; the extra margin is for low sun, where a tall caster outside the box
+    // still throws a shadow across it. Read by ChunkRenderer, which does the actual selection.
+    public static float casterRadius(int cascade) {
+        return BOX_HALVES[cascade] + 128.0f;
+    }
+
+    public static int cascadeCount() {
+        return BOX_HALVES.length;
+    }
+
+    public static float splitDistance(int cascade) {
+        return SPLIT_DISTANCES[cascade];
+    }
 
     // How far back along the sun ray the light's eye sits. Only has to clear the tallest terrain
     // that could cast into the box; MAX_SURFACE_Y is 250, so this is generous.
@@ -40,11 +69,18 @@ public class ShadowCamera {
     private static final float NEAR = 1.0f;
     private static final float FAR = 1200.0f;
 
-    // Depth margin between a fragment and the nearest surface the sun saw, in BLOCKS. Too small
-    // and lit surfaces speckle with acne; too large and a caster floats above its own shadow. The
-    // shader wants it in the map's [0,1] depth units, so normalizedBias() divides it by the slab
-    // depth — authoring it normalized is how you end up with a 1.8-block bias without noticing.
-    private static final float BIAS_BLOCKS = 0.3f;
+    /*
+     * Depth margin between a fragment and the nearest surface the sun saw, measured in TEXELS.
+     *
+     * Acne is a texel-footprint problem: one stored depth stands for a whole texel of world, and a
+     * surface tilted to the sun genuinely varies in depth across it. The margin that absorbs that
+     * therefore scales with how much world a texel covers — so a cascade with finer texels needs a
+     * proportionally smaller bias, and one number covers every cascade.
+     *
+     * 2.4 texels is the value tuned on the single 128 map, restated in its natural units:
+     *   0.3 blocks / (256 blocks / 2048 texels) = 0.3 / 0.125 = 2.4 texels
+     */
+    private static final float BIAS_TEXELS = 2.4f;
 
     // Half-depth of the band the debug overlay stretches to full contrast, in blocks either side
     // of the box centre. Chunk.SIZE_Y is 256, so this comfortably contains any caster.
@@ -76,7 +112,7 @@ public class ShadowCamera {
 
     private final Matrix4f lightView = new Matrix4f();
     private final Matrix4f lightProj = new Matrix4f();
-    private final Matrix4f lightViewProj = new Matrix4f();
+    private final Matrix4f[] lightViewProj = new Matrix4f[cascadeCount()];
     private final Matrix4f lightViewInv = new Matrix4f();
     private final Vector3f sceneCenter = new Vector3f();
     private final Vector3f lightEye = new Vector3f();
@@ -86,6 +122,7 @@ public class ShadowCamera {
 
     public ShadowCamera(int mapSize) {
         this.mapSize = mapSize;
+        for (int i = 0; i < lightViewProj.length; i++) lightViewProj[i] = new Matrix4f();
     }
 
     /*
@@ -134,23 +171,34 @@ public class ShadowCamera {
          * matrix, and "the eye only enters in whole texels" is a far easier property to rely on,
          * and to test, when it has no exceptions.
          */
+        // Each cascade snaps to its OWN texel grid, because each covers a different amount of
+        // world through the same number of texels. Sharing one grid would leave the near cascade
+        // snapping in steps four times larger than its own texels — which is no snapping at all.
+        for (int cascade = 0; cascade < cascadeCount(); cascade++) {
+            updateCascade(eyePosition, cascade);
+        }
+    }
+
+    private void updateCascade(Vector3fc eyePosition, int cascade) {
+        float boxHalf = BOX_HALVES[cascade];
+
         lightEye.set(shadowSunDir).mul(SUN_DISTANCE);
         lightView.identity().lookAt(lightEye, ORIGIN, lightUp);
 
-        float texelWorldSize = (2.0f * BOX_HALF) / mapSize;
+        float texel = texelWorldSize(cascade);
         snapScratch.set(eyePosition);
         lightView.transformPosition(snapScratch);
-        snapScratch.x = Math.round(snapScratch.x / texelWorldSize) * texelWorldSize;
-        snapScratch.y = Math.round(snapScratch.y / texelWorldSize) * texelWorldSize;
-        snapScratch.z = Math.round(snapScratch.z / texelWorldSize) * texelWorldSize;
+        snapScratch.x = Math.round(snapScratch.x / texel) * texel;
+        snapScratch.y = Math.round(snapScratch.y / texel) * texel;
+        snapScratch.z = Math.round(snapScratch.z / texel) * texel;
         lightViewInv.set(lightView).invert().transformPosition(snapScratch);
         sceneCenter.set(snapScratch);
 
         // Rebuild for real, now centred on a point that only moves a whole texel at a time.
         lightEye.set(shadowSunDir).mul(SUN_DISTANCE).add(sceneCenter);
         lightView.identity().lookAt(lightEye, sceneCenter, lightUp);
-        lightProj.identity().ortho(-BOX_HALF, BOX_HALF, -BOX_HALF, BOX_HALF, NEAR, FAR);
-        lightProj.mul(lightView, lightViewProj);
+        lightProj.identity().ortho(-boxHalf, boxHalf, -boxHalf, boxHalf, NEAR, FAR);
+        lightProj.mul(lightView, lightViewProj[cascade]);
     }
 
     /*
@@ -193,13 +241,14 @@ public class ShadowCamera {
     }
 
     // Live view of the matrix, reused each frame — the renderer hands it straight to a uniform.
-    public Matrix4f lightViewProj() {
-        return lightViewProj;
+    public Matrix4f lightViewProj(int cascade) {
+        return lightViewProj[cascade];
     }
 
-    // The bias in the map's [0,1] depth units, which is what the shader compares in.
-    public float normalizedBias() {
-        return BIAS_BLOCKS / (FAR - NEAR);
+    // The bias in the map's [0,1] depth units, which is what the shader compares in. Per cascade,
+    // because it is authored in texels and a texel is worth different amounts of world in each.
+    public float normalizedBias(int cascade) {
+        return (BIAS_TEXELS * texelWorldSize(cascade)) / (FAR - NEAR);
     }
 
     /*
@@ -218,9 +267,10 @@ public class ShadowCamera {
         return (SUN_DISTANCE + DEPTH_WINDOW - NEAR) / (FAR - NEAR);
     }
 
-    // One shadow texel in blocks. Exposed because the snapping guarantee is stated in these units.
-    public float texelWorldSize() {
-        return (2.0f * BOX_HALF) / mapSize;
+    // One shadow texel in blocks, for the given cascade. Exposed because the snapping guarantee
+    // and the bias are both stated in these units.
+    public float texelWorldSize(int cascade) {
+        return (2.0f * BOX_HALVES[cascade]) / mapSize;
     }
 
     /*

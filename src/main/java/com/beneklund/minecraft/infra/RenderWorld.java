@@ -22,6 +22,16 @@ public class RenderWorld {
 
     private final HashMap<ChunkPos, Entry> meshes = new HashMap<>();
 
+    /*
+     * Bumped whenever the set of meshes changes. Lets a consumer tell "the world is exactly as I
+     * last saw it" from "something moved", without diffing the map.
+     *
+     * The shadow pass uses it to skip redrawing a cascade whose contents cannot have changed. That
+     * is only sound if every mutation is counted here — miss one and a cascade keeps showing
+     * terrain that is no longer there, which reads as a shadow with no caster.
+     */
+    private int version;
+
     // Computes and stores the model matrix and bounds once at upload time.
     public void add(ChunkPos pos, ChunkMesh opaqueMesh, ChunkMesh transparentMesh) {
         float x = pos.x() * Chunk.SIZE_XZ;
@@ -36,14 +46,22 @@ public class RenderWorld {
         if (previousMesh != null) {
             previousMesh.delete();
         }
+        version++;
     }
 
     // Removes and returns the entry so the caller can delete its GL buffers.
     public Entry remove(ChunkPos pos) {
-        return meshes.remove(pos);
+        Entry removed = meshes.remove(pos);
+        if (removed != null) version++;
+        return removed;
     }
 
     public Collection<Entry> getEntries() {
         return meshes.values();
+    }
+
+    // Changes whenever a mesh is added, replaced or removed. See the field.
+    public int version() {
+        return version;
     }
 }

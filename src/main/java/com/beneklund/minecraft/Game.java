@@ -30,7 +30,15 @@ import org.joml.Vector3f;
 // Per-frame update/render loop. Drives player input, chunk streaming, GPU uploads, and rendering.
 public class Game {
 
-    private static final int MAX_UPLOADS_PER_FRAME = 4;
+    /*
+     * Mesh uploads per second, and the ceiling on any one frame. 300/s is what the old fixed
+     * 4-per-frame delivered at 75 fps, so this preserves the behaviour that was tuned and only
+     * removes its dependence on frame rate. The cap is what 4-per-frame gave at 30 fps, which is
+     * about as much GL upload as one frame should carry.
+     */
+    private static final float TARGET_UPLOADS_PER_SECOND = 300.0f;
+
+    private static final int MAX_UPLOADS_PER_FRAME = 8;
 
     private final Window window;
     private final Renderer renderer;
@@ -56,7 +64,9 @@ public class Game {
     // F6. Draws the sun's depth map into the corner so it can be watched while moving — the
     // only way to tell "the map is wrong" apart from "the sampling is wrong", which look
     // identical in the world.
-    private boolean shadowMapOverlay;
+    // -1 is off; otherwise the cascade being shown. F6 cycles off -> 0 -> 1 -> off, because with
+    // cascades "is the map right" is really "is each map right", and they fail differently.
+    private int shadowOverlayCascade = -1;
 
     // Null unless local.properties set framestream.port. Serves the last frame over localhost
     // and accepts camera/time commands back, so a change can be evaluated against the same view
@@ -147,9 +157,10 @@ public class Game {
 
             // After the tonemap and before the HUD: an instrument drawn over the finished frame,
             // deliberately not part of the image it is being used to debug.
-            if (shadowMapOverlay) {
+            if (shadowOverlayCascade >= 0) {
                 postProcessor.drawDepthOverlay(
                         renderer.shadowMapTexture(),
+                        shadowOverlayCascade,
                         renderer.shadowDepthWindowMin(),
                         renderer.shadowDepthWindowMax(),
                         window.getWidth(),
@@ -235,8 +246,9 @@ public class Game {
         }
 
         if (actions.contains(IInputAction.Simple.DEBUG_SHADOW_MAP)) {
-            shadowMapOverlay = !shadowMapOverlay;
-            RENDER.info("shadow map overlay {}", shadowMapOverlay ? "on" : "off");
+            shadowOverlayCascade =
+                    shadowOverlayCascade + 1 >= ShadowCamera.cascadeCount() ? -1 : shadowOverlayCascade + 1;
+            RENDER.info("shadow map overlay {}", shadowOverlayCascade < 0 ? "off" : "cascade " + shadowOverlayCascade);
         }
 
         if (actions.contains(IInputAction.Simple.RELOAD_SHADERS)) {
@@ -286,11 +298,29 @@ public class Game {
         player.syncCamera();
     }
 
+    /*
+     * How many meshes to upload this frame, from how long the last one took.
+     *
+     * A fixed count per frame makes chunk streaming a function of frame rate, which is a coupling
+     * nobody asked for: adding the 512-block shadow cascade cost 18 ms a frame, and that alone cut
+     * uploads from 300/s to 128/s. Chunks visibly lagged behind the player and a placed block took
+     * noticeably longer to appear — a rendering change quietly throttling the world pipeline.
+     *
+     * Denominating the budget in seconds instead keeps streaming steady while frame time moves.
+     * Still bounded at both ends: at least one so it never stalls completely, and capped so a
+     * single long frame cannot spend the recovery uploading a hundred meshes and cause the next
+     * long frame.
+     */
+    private int uploadBudget() {
+        int budget = Math.round(TARGET_UPLOADS_PER_SECOND * delta.getDelta());
+        return Math.clamp(budget, 1, MAX_UPLOADS_PER_FRAME);
+    }
+
     private void processChunks() {
-        // Upload at most MAX_UPLOADS_PER_FRAME new meshes — ChunkMesh asserts main thread.
+        // Upload as many new meshes as this frame's budget allows — ChunkMesh asserts main thread.
         // Skip empty buffers so chunks with no opaque (or no transparent) geometry don't
         // allocate a zero-length VAO; null means "nothing to draw for this pass".
-        for (ChunkMeshData data : chunkManager.drainUploadQueue(MAX_UPLOADS_PER_FRAME)) {
+        for (ChunkMeshData data : chunkManager.drainUploadQueue(uploadBudget())) {
             ChunkMesh opaque = data.opaque().isEmpty() ? null : new ChunkMesh(data.opaque());
             ChunkMesh transparent = data.transparent().isEmpty() ? null : new ChunkMesh(data.transparent());
             renderWorld.add(data.pos(), opaque, transparent);

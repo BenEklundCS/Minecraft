@@ -5,6 +5,7 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE1;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
+import static org.lwjgl.opengl.GL30.GL_TEXTURE_2D_ARRAY;
 
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
 import com.beneklund.minecraft.platform.graphics.ShadowFramebuffer;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntSupplier;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -64,12 +66,35 @@ public class Renderer {
     // deliberately out of reach of the window and the view matrix — see the note on the class.
     private final ShadowCamera shadowCamera;
 
+    /*
+     * What each cascade's depth layer was last rendered from. A cascade whose matrix and world are
+     * both unchanged still holds a correct image, so it is skipped — see drawShadowPass.
+     *
+     * A supplier rather than the RenderWorld itself: renderer/ has no business reaching into
+     * infra/, and "how many times has the world changed" is the only thing needed here.
+     */
+    private final IntSupplier worldVersion_;
+
+    private final Matrix4f[] lastCascadeMatrix = new Matrix4f[ShadowCamera.cascadeCount()];
+    private final int[] lastWorldVersion = new int[ShadowCamera.cascadeCount()];
+
     public Renderer(
-            List<IRenderable> registered, Color fogColor, ShadowFramebuffer shadowBuffer, ShadowCamera shadowCamera) {
+            List<IRenderable> registered,
+            Color fogColor,
+            ShadowFramebuffer shadowBuffer,
+            ShadowCamera shadowCamera,
+            IntSupplier worldVersion) {
         this.registered = registered;
         this.fogColor = fogColor;
         this.shadowBuffer = shadowBuffer;
         this.shadowCamera = shadowCamera;
+        worldVersion_ = worldVersion;
+        for (int i = 0; i < lastCascadeMatrix.length; i++) {
+            lastCascadeMatrix[i] = new Matrix4f();
+            // Not 0: the world legitimately starts at version 0, and a cascade must render once
+            // before it can be skipped or the first frames sample an uninitialised depth layer.
+            lastWorldVersion[i] = -1;
+        }
         // Seeded so the sky uniforms are never null if a frame draws before Game.run pushes
         // the real sun position. The sky shader resolves them to a real location, so unlike
         // the chunk shader it would NPE rather than no-op.
@@ -209,8 +234,6 @@ public class Renderer {
      * clear or blend and glClear takes the depth bit alone.
      */
     private void drawShadowPass(Camera camera) {
-        shadowBuffer.bind();
-        glClear(GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glDepthMask(true);
@@ -222,7 +245,46 @@ public class Renderer {
         // acne comes from. Works cleanly here because terrain is closed solid geometry; it would
         // break on single-sided planes, which this renderer does not produce.
         glCullFace(GL_FRONT);
-        for (DrawCall call : calls) if (call.pass() == RenderPass.SHADOW) submit(call, camera);
+
+        /*
+         * Once per cascade — but only if anything it depends on moved.
+         *
+         * A cascade's depth layer is a function of exactly two things: the matrix it is rendered
+         * with, and the set of meshes in the world. Both are now quantised or counted, so "did it
+         * change" is answerable without redrawing to find out. The matrix only steps when the eye
+         * crosses one of that cascade's texels or the sun reaches its next quarter-degree, and the
+         * far cascade's texels are half a block wide — so standing still, it is unchanged for
+         * hundreds of frames and redrawing it is pure waste.
+         *
+         * That waste is not small. Measured, the 512-block cascade costs 18 ms a frame on its own,
+         * dropping 75 fps to 32 — and because Game.processChunks uploads a fixed number of meshes
+         * per FRAME, halving the frame rate also halves chunk streaming.
+         *
+         * Skipping means not clearing either: the layer keeps the contents it already had, which
+         * are still correct precisely because nothing it depends on moved.
+         */
+        int worldVersion = worldVersion_.getAsInt();
+        for (int cascade = 0; cascade < ShadowCamera.cascadeCount(); cascade++) {
+            Matrix4f current = shadowCamera.lightViewProj(cascade);
+            if (worldVersion == lastWorldVersion[cascade] && current.equals(lastCascadeMatrix[cascade])) continue;
+
+            lastCascadeMatrix[cascade].set(current);
+            lastWorldVersion[cascade] = worldVersion;
+
+            // The clear has to sit inside the loop and after bindLayer, because it acts on
+            // whichever layer is attached — clearing once outside would wipe one layer and leave
+            // the others holding last frame's depth.
+            shadowBuffer.bindLayer(cascade);
+            glClear(GL_DEPTH_BUFFER_BIT);
+
+            // shadow.vert takes one matrix under its own name rather than reading the array
+            // chunk.frag uses — a vertex shader has no cascade to select, it IS the cascade.
+            frameUniforms.put("uCascadeViewProj", new UniformValue.M4(current));
+
+            for (DrawCall call : calls) {
+                if (call.pass() == RenderPass.SHADOW && call.castsInto(cascade)) submit(call, camera);
+            }
+        }
         glCullFace(GL_BACK);
     }
 
@@ -263,9 +325,17 @@ public class Renderer {
         frameUniforms.put("uZenithF", new UniformValue.V3(skyZenithF));
         frameUniforms.put("uModel", new UniformValue.M4(modelScratch));
         frameUniforms.put("uExtinction", new UniformValue.F(EXTINCTION));
-        frameUniforms.put("uShadowBias", new UniformValue.F(shadowCamera.normalizedBias()));
         frameUniforms.put("uCameraPos", new UniformValue.V3(camera.getPosition()));
-        frameUniforms.put("uLightViewProj", new UniformValue.M4(shadowCamera.lightViewProj()));
+
+        // One entry per cascade. glGetUniformLocation accepts an array element by name, so the
+        // sealed UniformValue needs no array variant — "uLightViewProj[1]" is just a uniform.
+        for (int cascade = 0; cascade < ShadowCamera.cascadeCount(); cascade++) {
+            frameUniforms.put(
+                    "uLightViewProj[" + cascade + "]", new UniformValue.M4(shadowCamera.lightViewProj(cascade)));
+            frameUniforms.put("uShadowBias[" + cascade + "]", new UniformValue.F(shadowCamera.normalizedBias(cascade)));
+            frameUniforms.put(
+                    "uCascadeSplit[" + cascade + "]", new UniformValue.F(ShadowCamera.splitDistance(cascade)));
+        }
     }
 
     private static long countPass(List<DrawCall> calls, RenderPass pass) {
@@ -282,7 +352,7 @@ public class Renderer {
         // program. setUniformInt is a no-op for shaders that do not declare it — GlShader.location
         // returns -1 and the setter bails — so this costs one glUniform1i on chunk.frag alone.
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, shadowBuffer.depthTexture());
+        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowBuffer.depthTexture());
         glActiveTexture(GL_TEXTURE0);
         call.shader().setUniformInt("uShadowMap", SHADOW_TEXTURE_UNIT);
 
