@@ -60,3 +60,25 @@ vec3 nightRadiance(vec3 dir) {
     return mix(uNightHorizon, uNightZenith, clamp(dir.y, 0.0, 1.0));
 }
 
+const vec3 SUN_COLOR = vec3(1.0, 0.95, 0.86);
+
+// Per-channel extinction, blue scattered out hardest - the same reason the sky is blue and the
+// setting sun is red. Preetham dims the *sky* toward the horizon on its own; anything lit by the
+// disc gets none of that, so without this the sun holds full noon radiance at sunset.
+const vec3 SUN_EXTINCTION = vec3(0.09, 0.22, 0.45);
+// Air mass is 1/sin(elevation), which runs away at the horizon. Capping the elevation at 0.15
+// caps air mass near 6.7 - enough to redden and dim the light without deleting it.
+const float MIN_SUN_ELEVATION = 0.15;
+
+/*
+ * The colour of direct sunlight after the atmosphere has taken its cut, per unit intensity.
+ *
+ * Lives here rather than in sky.frag because the sun disc and the clouds are lit by the same sun,
+ * and two copies of this would drift - the disc would go orange at sunset while the clouds it is
+ * lighting stayed white. Multiply by whatever radiance the caller is lighting with.
+ */
+vec3 sunlightColor() {
+    float airMass = 1.0 / max(uSunDirection.y, MIN_SUN_ELEVATION);
+    return SUN_COLOR * exp(-SUN_EXTINCTION * airMass);
+}
+

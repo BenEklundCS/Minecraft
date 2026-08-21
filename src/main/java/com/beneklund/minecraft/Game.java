@@ -198,6 +198,7 @@ public class Game {
     }
 
     private void pushRenderVariables() {
+        renderer.setTime((float) window.getTime());
         renderer.setSkyBrightness(cycle.skyBrightness());
         renderer.setSunDirection(cycle.sunDirection());
         window.setClearColor(renderer.fogColor());

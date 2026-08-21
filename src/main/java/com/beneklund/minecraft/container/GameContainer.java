@@ -54,6 +54,10 @@ public class GameContainer {
 
     private static final int SHADOW_MAP_SIZE = 2048;
 
+    // How far down from the window the cloud march runs, on each axis. 4 is the knob to turn if
+    // clouds cost too much (8) or the edge where one crosses the sun disc looks too soft (2).
+    private static final int CLOUD_BUFFER_DIVISOR = 3;
+
     private final ContainerConfig cfg;
 
     // config
@@ -87,6 +91,8 @@ public class GameContainer {
     private GlFramebuffer bloomB;
     private GlFramebuffer godrayA;
     private GlFramebuffer godrayB;
+    private GlFramebuffer cloudBuffer;
+    private CloudRenderer cloudRenderer;
     private PostProcessor postProcessor;
 
     // audio
@@ -204,11 +210,16 @@ public class GameContainer {
         // Same size for both, from one constant: the camera snaps the box to whole texels, so it
         // has to agree with the map it is snapping to or the snapping quietly stops working.
         shadowCamera = new ShadowCamera(SHADOW_MAP_SIZE);
+        // Before the Renderer, which takes both: the cloud pass is one of the passes it sequences.
+        constructCloudBuffer();
+        cloudRenderer = new CloudRenderer();
         renderer = new Renderer(
                 List.of(skyRenderer, chunkRenderer, debugRenderer, hudRenderer),
                 cfg.clearColor(),
                 shadowBuffer,
                 shadowCamera,
+                cloudRenderer,
+                cloudBuffer,
                 renderWorld::version);
 
         // The scene renders here instead of straight to the window, and PostProcessor draws it
@@ -241,6 +252,25 @@ public class GameContainer {
             bloomB.resize(Math.max(1, w / 2), Math.max(1, h / 2));
         });
         window.addResizeListener(sceneBuffer::resize);
+    }
+
+    /*
+     * A quarter of the window on each axis, so a sixteenth of the pixels. The raymarch in
+     * cloud.frag costs CLOUD_STEPS view samples and up to CLOUD_LIGHT_STEPS more per lit one, and
+     * paying that per screen pixel is the difference between clouds and a slideshow. Clouds are
+     * low-frequency enough that the bilinear stretch back up is nearly free visually — the cost
+     * shows on the sun disc's edge, not on the clouds themselves.
+     *
+     * DepthMode.NONE, like the bloom and godray pairs: one fullscreen triangle, nothing to sort.
+     * RGBA16F because the alpha channel carries transmittance and the rgb carries linear radiance
+     * that runs well past 1.0 wherever the sun catches a rim.
+     */
+    private void constructCloudBuffer() {
+        int cloudW = Math.max(1, window.getWidth() / CLOUD_BUFFER_DIVISOR);
+        int cloudH = Math.max(1, window.getHeight() / CLOUD_BUFFER_DIVISOR);
+        cloudBuffer = new GlFramebuffer(cloudW, cloudH, GL_RGBA16F, DepthMode.NONE);
+        window.addResizeListener((w, h) ->
+                cloudBuffer.resize(Math.max(1, w / CLOUD_BUFFER_DIVISOR), Math.max(1, h / CLOUD_BUFFER_DIVISOR)));
     }
 
     private void constructGodrayBuffers() {
@@ -356,6 +386,7 @@ public class GameContainer {
         music.shutdown();
         postProcessor.delete();
         sceneBuffer.delete();
+        cloudBuffer.delete();
         bloomB.delete();
         bloomA.delete();
         renderer.delete();

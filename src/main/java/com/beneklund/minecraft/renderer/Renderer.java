@@ -4,6 +4,7 @@ import static com.beneklund.minecraft.util.Log.RENDER;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE1;
+import static org.lwjgl.opengl.GL13.GL_TEXTURE2;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL30.GL_TEXTURE_2D_ARRAY;
 
@@ -28,6 +29,7 @@ public class Renderer {
     private Color fogColor;
     private Vector3f sunDirection;
     private float skyBrightness;
+    private float time;
 
     private static final float TURBIDITY = 2.5f;
     private static final float EXTINCTION = (float) 1 / 350;
@@ -55,12 +57,23 @@ public class Renderer {
     // frameUniforms, because UniformValue is sealed over float/vec3/mat4 with no int variant.
     private static final int SHADOW_TEXTURE_UNIT = 1;
 
+    // Same story for the cloud buffer, which sky.frag reads back after CloudRenderer has marched
+    // into it. One more unit rather than sharing 1: both are bound for every call, and a shader
+    // that wanted both would otherwise get whichever was bound last.
+    private static final int CLOUD_TEXTURE_UNIT = 2;
+
     private final Map<String, UniformValue<?>> frameUniforms = new HashMap<>();
 
     // Collected by drawScene, filtered again by drawHud. Render-thread-only, like everything here.
     private final List<DrawCall> calls = new ArrayList<>();
 
     private final ShadowFramebuffer shadowBuffer;
+
+    // The cloud pass and the quarter-resolution buffer it marches into. Owned here rather than by
+    // Game because the ordering constraint is the same one drawScene already exists to hold: this
+    // has to run and finish before the sky pass reads it, and only one place can sequence that.
+    private final CloudRenderer cloudRenderer;
+    private final GlFramebuffer cloudBuffer;
 
     // The sun's projection. Everything about where the shadow map is rendered from lives there,
     // deliberately out of reach of the window and the view matrix — see the note on the class.
@@ -83,11 +96,15 @@ public class Renderer {
             Color fogColor,
             ShadowFramebuffer shadowBuffer,
             ShadowCamera shadowCamera,
+            CloudRenderer cloudRenderer,
+            GlFramebuffer cloudBuffer,
             IntSupplier worldVersion) {
         this.registered = registered;
         this.fogColor = fogColor;
         this.shadowBuffer = shadowBuffer;
         this.shadowCamera = shadowCamera;
+        this.cloudRenderer = cloudRenderer;
+        this.cloudBuffer = cloudBuffer;
         worldVersion_ = worldVersion;
         for (int i = 0; i < lastCascadeMatrix.length; i++) {
             lastCascadeMatrix[i] = new Matrix4f();
@@ -105,11 +122,15 @@ public class Renderer {
         RENDER.debug("deleting {} renderable(s)", registered.size());
         for (IRenderable r : registered) r.delete();
         shadowBuffer.delete();
+        cloudRenderer.delete();
     }
 
+    // cloudRenderer named separately because it is not in registered — see the note on the class.
+    // Missing it here is the failure where F5 reloads every shader except the clouds.
     public void reloadAll() {
         RENDER.info("reloading {} renderable(s)", registered.size());
         for (IRenderable r : registered) r.reload();
+        cloudRenderer.reload();
     }
 
     public void setSkyBrightness(float skyBrightness) {
@@ -198,6 +219,12 @@ public class Renderer {
         }
 
         drawShadowPass(camera);
+
+        // Before the scene, for the same reason the shadow pass is: it produces an input to it.
+        // sky.frag samples what this writes. Order against the shadow pass does not matter — they
+        // write to different buffers and neither reads the other — but both must be finished
+        // before the target below is bound, because each one binds a framebuffer of its own.
+        cloudRenderer.draw(cloudBuffer, frameUniforms);
 
         // Back to the scene target the shadow pass just took us away from. This is why drawScene
         // takes the target rather than Game binding it — only one of them can own the sequencing.
@@ -288,6 +315,11 @@ public class Renderer {
         glCullFace(GL_BACK);
     }
 
+    // Seconds since GLFW init
+    public void setTime(float time) {
+        this.time = time;
+    }
+
     // Runs after the post pass, against the default framebuffer, so nothing here is tonemapped.
     public void drawHud(Camera camera) {
         // Drawn over everything, no depth test, blending on for alpha.
@@ -306,6 +338,7 @@ public class Renderer {
 
     private void setUniforms(Camera camera) {
         frameUniforms.clear();
+        frameUniforms.put("uTime", new UniformValue.F(time));
         frameUniforms.put("uView", new UniformValue.M4(camera.getViewMatrix()));
         frameUniforms.put("uProjection", new UniformValue.M4(camera.getProjectionMatrix()));
         frameUniforms.put("uInvViewProj", new UniformValue.M4(invViewProj));
@@ -353,10 +386,16 @@ public class Renderer {
         // Bound per call because the shader changes per call and the sampler uniform lives on the
         // program. setUniformInt is a no-op for shaders that do not declare it — GlShader.location
         // returns -1 and the setter bails — so this costs one glUniform1i on chunk.frag alone.
+        //
+        // Both binds return the active unit to 0 before anything else runs. That is global state,
+        // and the atlas bind at the top of the next submit goes to whatever unit was left active.
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D_ARRAY, shadowBuffer.depthTexture());
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, cloudBuffer.colorTexture());
         glActiveTexture(GL_TEXTURE0);
         call.shader().setUniformInt("uShadowMap", SHADOW_TEXTURE_UNIT);
+        call.shader().setUniformInt("uCloudBuffer", CLOUD_TEXTURE_UNIT);
 
         call.shader().apply(frameUniforms, call.uniforms());
         call.mesh().render();
