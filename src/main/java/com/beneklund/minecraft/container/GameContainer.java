@@ -29,6 +29,7 @@ import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.util.FrameLog;
 import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.IGenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
@@ -75,6 +76,7 @@ public class GameContainer {
     private Window window;
     private Camera camera;
     private DeltaTracker delta;
+    private FrameLog frameLog;
 
     // renderer
     private TextureAtlas atlas;
@@ -189,6 +191,9 @@ public class GameContainer {
         window = new Window(windowConfig, inputEventQueue);
         inputHandler = new InputHandler(window, camera);
         delta = new DeltaTracker(window::getTime);
+        // Beside delta because they are one concern, not because it needs anything from this
+        // phase - FrameLog touches no GL and no window, so it is safe anywhere above buildGame.
+        frameLog = new FrameLog(FrameLog.FRAME_HISTORY);
         window.addResizeListener(camera::setWindowSize);
     }
 
@@ -365,6 +370,7 @@ public class GameContainer {
                 inputMapper,
                 debugRenderer,
                 hudRenderer,
+                frameLog,
                 frameStream);
     }
 

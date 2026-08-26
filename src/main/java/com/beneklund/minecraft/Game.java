@@ -19,6 +19,7 @@ import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.util.FrameLog;
 import com.beneklund.minecraft.util.RaycastResult;
 import com.beneklund.minecraft.world.*;
 import java.io.IOException;
@@ -60,6 +61,7 @@ public class Game {
     private final InputMapper mapper;
     private final DebugRenderer debugRenderer;
     private final HudRenderer hudRenderer;
+    private final FrameLog frameLog;
 
     private int uploadsThisSecond;
     private int deletesThisSecond;
@@ -94,6 +96,7 @@ public class Game {
             InputMapper mapper,
             DebugRenderer debugRenderer,
             HudRenderer hudRenderer,
+            FrameLog frameLog,
             FrameStreamServer frameStream) {
         this.window = window;
         this.renderer = renderer;
@@ -112,6 +115,7 @@ public class Game {
         this.mapper = mapper;
         this.debugRenderer = debugRenderer;
         this.hudRenderer = hudRenderer;
+        this.frameLog = frameLog;
         this.frameStream = frameStream;
         if (frameStream != null) {
             frameStream.setTeleportHandler(this::applyTeleport);
@@ -230,13 +234,17 @@ public class Game {
 
     private void processTitle() {
         delta.tick();
+        // Every frame, not once a second: the line below is a summary of what this collects,
+        // and a sample taken once a second cannot show a hitch that lasted one frame.
+        frameLog.record(delta.getDelta() * 1000.0f);
         if (delta.timePassed(1.0f)) {
             int fps = delta.getFrames();
             window.setTitle("Minecraft FPS: %d".formatted(fps));
             PERF.debug(
-                    "{} fps ({} ms/frame), {} mesh upload(s), {} buffer delete(s)",
+                    "{} fps ({} ms/frame), {} frame sample(s), {} mesh upload(s), {} buffer delete(s)",
                     fps,
                     fps == 0 ? 0 : 1000 / fps,
+                    frameLog.count(),
                     uploadsThisSecond,
                     deletesThisSecond);
             uploadsThisSecond = 0;
