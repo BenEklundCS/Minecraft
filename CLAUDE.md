@@ -111,3 +111,27 @@ than throwing; writes go temp-file-then-atomic-move.
   belongs in `README.md` or in a comment next to the code that enforces it — not only in `docs/`.
 - `private/` is a separate nested git repo (personal notes) and is not part of this repo's
   history.
+
+## Debug console (Spyglass)
+
+`src/main/resources/debug/index.html` is the browser frontend for the debug HTTP server in
+`platform/debug/`. It is a single self-contained page — no build step, no dependencies, no
+external requests — served as the server's `/` document.
+
+**Claude owns this file.** The Java server is Ben's; the page is Claude's to write and keep
+current. When an endpoint is added, removed, or changes shape on the server, updating this page
+is part of that change, not a follow-up.
+
+Rules that keep it honest:
+
+- **It is a client, never a source of truth.** Every number on the page came from an endpoint.
+  The page does no measurement of its own and stores no game state.
+- **Degrade, don't break.** An endpoint that 404s is shown as unwired, with a note saying which
+  DG stage adds it — never as an error, and never as a blank panel. The page probes on a timer so
+  a newly wired endpoint lights up without a reload.
+- **Parse liberally.** Text responses are read as `key=value` lines *or* JSON, so tightening a
+  response format on the Java side doesn't require a matching edit here.
+- **No dependencies.** It is served from a socket that is off by default, to a browser that may
+  have no network. Inline everything; no CDN, no web fonts, no build.
+- **Vanilla JS in the game's own idiom.** Comments explain why a thing is shaped that way — the
+  same habit as the Java.

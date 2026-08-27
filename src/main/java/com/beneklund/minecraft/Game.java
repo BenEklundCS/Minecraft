@@ -9,6 +9,7 @@ import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.debug.FrameStreamServer;
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
+import com.beneklund.minecraft.platform.graphics.GpuTimer;
 import com.beneklund.minecraft.platform.graphics.ScreenCapture;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
@@ -18,10 +19,13 @@ import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
+import com.beneklund.minecraft.renderer.RenderPass;
 import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.util.EngineStats;
 import com.beneklund.minecraft.util.FrameLog;
 import com.beneklund.minecraft.util.RaycastResult;
 import com.beneklund.minecraft.world.*;
+import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
@@ -78,6 +82,11 @@ public class Game {
     // twice instead of from memory.
     private final FrameStreamServer frameStream;
 
+    // Null unless gputimer.enabled. Game owns the frame ordinal because it owns the loop, and
+    // brackets the post pass because postProcessor.draw is called from here, not from Renderer.
+    private final GpuTimer gpuTimer;
+    private long frame;
+
     public Game(
             Window window,
             Renderer renderer,
@@ -97,7 +106,8 @@ public class Game {
             DebugRenderer debugRenderer,
             HudRenderer hudRenderer,
             FrameLog frameLog,
-            FrameStreamServer frameStream) {
+            FrameStreamServer frameStream,
+            GpuTimer gpuTimer) {
         this.window = window;
         this.renderer = renderer;
         this.sceneBuffer = sceneBuffer;
@@ -117,10 +127,65 @@ public class Game {
         this.hudRenderer = hudRenderer;
         this.frameLog = frameLog;
         this.frameStream = frameStream;
+        this.gpuTimer = gpuTimer;
         if (frameStream != null) {
             frameStream.setTeleportHandler(this::applyTeleport);
             frameStream.setTimeHandler(cycle::setTimeOfDay);
+            frameStream.setStatsHandler(() -> statsSnapshot);
+            // Queued by /bench and drained on the main thread, so the log is cleared by the
+            // same thread that writes it.
+            frameStream.setResetHandler(frameLog::reset);
         }
+    }
+
+    /*
+     * The /stats body
+     *
+     * The viewer parses `key=value` lines or a JSON object, looking for p50, p99, max and count,
+     * so either shape already has a client.
+     */
+    /*
+     * Built once a second in processTitle and read from an HTTP thread by /stats, which is why
+     * it is volatile and why formatStats is never called from the handler itself. frameLog,
+     * renderWorld and EngineStats are all main-thread-only; reading them from the pool thread
+     * would be a data race, and percentile() sorting on that thread would put the sort back on
+     * a path we deliberately keep it off.
+     */
+    private volatile String statsSnapshot = null;
+
+    private String formatStats() {
+        int renderWorldEntries = renderWorld.getEntries().size();
+        JsonObject stats = new JsonObject();
+        stats.addProperty("renderWorldEntries", renderWorldEntries);
+        stats.addProperty("p50", frameLog.percentile(FrameLog.P50));
+        stats.addProperty("p99", frameLog.percentile(FrameLog.P99));
+        stats.addProperty("max", frameLog.max());
+        stats.addProperty("count", frameLog.count());
+        stats.addProperty("opaqueDrawCalls", EngineStats.drawCalls(RenderPass.OPAQUE));
+        stats.addProperty("transparentDrawCalls", EngineStats.drawCalls(RenderPass.TRANSPARENT));
+        stats.addProperty("shadowDrawCalls", EngineStats.drawCalls(RenderPass.SHADOW));
+        stats.addProperty("hudDrawCalls", EngineStats.drawCalls(RenderPass.HUD));
+        stats.addProperty("uniformUploads", EngineStats.uniformUploads());
+        stats.addProperty("chunksConsidered", EngineStats.chunksConsidered());
+        stats.addProperty("chunksDrawn", EngineStats.chunksDrawn());
+
+        // -1 all the way through means "no number", never zero: a pass that was skipped and a
+        // pass that ran instantly must not look the same, or Stage 4's triage reads backwards.
+        // drawShadowPass skips entirely when nothing changed, so this is a normal answer, not
+        // an error.
+        stats.addProperty("gpuShadowMs", gpuPassMillis(Renderer.TIMER_SHADOW));
+        stats.addProperty("gpuCloudsMs", gpuPassMillis(Renderer.TIMER_CLOUDS));
+        stats.addProperty("gpuOpaqueMs", gpuPassMillis(Renderer.TIMER_OPAQUE));
+        stats.addProperty("gpuTransparentMs", gpuPassMillis(Renderer.TIMER_TRANSPARENT));
+        stats.addProperty("gpuPostMs", gpuPassMillis(Renderer.TIMER_POST));
+        return stats.toString();
+    }
+
+    // Nanoseconds to milliseconds, with -1 preserved rather than divided.
+    private float gpuPassMillis(int pass) {
+        if (gpuTimer == null) return -1.0f;
+        long nanos = gpuTimer.lastResultNanos(pass, frame);
+        return nanos < 0 ? -1.0f : nanos / 1_000_000.0f;
     }
 
     /*
@@ -144,6 +209,10 @@ public class Game {
 
     public void run() {
         while (!window.shouldClose()) {
+            // Closes the previous frame's counters before anything can add to the next one, so
+            // everything reported below describes one whole frame rather than a partial one.
+            EngineStats.beginFrame();
+            frame++;
             processTitle();
             processInput();
             processPhysics();
@@ -163,12 +232,14 @@ public class Game {
             //
             // depthTexture() only answers because sceneBuffer is built with DepthMode.TEXTURE; if
             // this throws, the argument to fix is the one in GameContainer, not the one here.
+            if (gpuTimer != null) gpuTimer.begin(Renderer.TIMER_POST, frame);
             postProcessor.draw(
                     sceneBuffer.colorTexture(),
                     sceneBuffer.depthTexture(),
                     sunScreenUV(),
                     window.getWidth(),
                     window.getHeight());
+            if (gpuTimer != null) gpuTimer.end(Renderer.TIMER_POST);
 
             // After the tonemap and before the HUD: an instrument drawn over the finished frame,
             // deliberately not part of the image it is being used to debug.
@@ -203,6 +274,7 @@ public class Game {
 
     private void pushRenderVariables() {
         renderer.setTime((float) window.getTime());
+        renderer.setFrame(frame);
         renderer.setSkyBrightness(cycle.skyBrightness());
         renderer.setSunDirection(cycle.sunDirection());
         window.setClearColor(renderer.fogColor());
@@ -240,13 +312,29 @@ public class Game {
         if (delta.timePassed(1.0f)) {
             int fps = delta.getFrames();
             window.setTitle("Minecraft FPS: %d".formatted(fps));
+            // p50/p99/max rather than 1000/fps: the mean is a summary of the frames you did
+            // not notice. The counters beside them are the last complete frame, not a total for
+            // the second, so they can be checked straight against the per-frame predictions.
             PERF.debug(
-                    "{} fps ({} ms/frame), {} frame sample(s), {} mesh upload(s), {} buffer delete(s)",
+                    "{} fps  p50 {} p99 {} max {} ms ({} samples) | draws {}o {}t {}s {}h,"
+                            + " {} uniforms, chunks {}/{} | {} mesh upload(s), {} buffer delete(s)",
                     fps,
-                    fps == 0 ? 0 : 1000 / fps,
+                    "%.2f".formatted(frameLog.percentile(FrameLog.P50)),
+                    "%.2f".formatted(frameLog.percentile(FrameLog.P99)),
+                    "%.2f".formatted(frameLog.max()),
                     frameLog.count(),
+                    EngineStats.drawCalls(RenderPass.OPAQUE),
+                    EngineStats.drawCalls(RenderPass.TRANSPARENT),
+                    EngineStats.drawCalls(RenderPass.SHADOW),
+                    EngineStats.drawCalls(RenderPass.HUD),
+                    EngineStats.uniformUploads(),
+                    EngineStats.chunksDrawn(),
+                    EngineStats.chunksConsidered(),
                     uploadsThisSecond,
                     deletesThisSecond);
+            // Built here, on the main thread, and only read by the /stats handler. This is the
+            // one place that touches frameLog, renderWorld and EngineStats together.
+            statsSnapshot = formatStats();
             uploadsThisSecond = 0;
             deletesThisSecond = 0;
             delta.reset();

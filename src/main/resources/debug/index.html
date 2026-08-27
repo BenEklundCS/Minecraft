@@ -1,0 +1,1040 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spyglass — debug console</title>
+<style>
+  /* Palette lifted from the game's own materials so the tool reads as part of the project:
+     grass for "good", diamond for accents, redstone for "over budget", stone for chrome. */
+  :root {
+    --bg:        #0a0c0a;
+    --bg-grid:   #12151200;
+    --panel:     #141815;
+    --panel-2:   #191e1a;
+    --line:      #2a322c;
+    --text:      #c9d3cb;
+    --text-dim:  #6f7d73;
+    --text-faint:#4a544d;
+
+    --grass:     #6ac45a;
+    --diamond:   #4ee8e8;
+    --redstone:  #e5484d;
+    --gold:      #e0a930;
+    --lapis:     #3f6fd8;
+
+    --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background:
+      /* faint voxel grid — reads as graph paper at a glance, not as decoration */
+      linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px) 0 0 / 16px 16px,
+      linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px) 0 0 / 16px 16px,
+      var(--bg);
+    color: var(--text);
+    font: 13px/1.5 var(--mono);
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+  }
+
+  /* Minecraft GUI panels are beveled: light on the top-left, dark on the bottom-right. One
+     inset shadow gets the same read without a texture, and stays crisp at any zoom. */
+  .bevel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: inset 1px 1px 0 rgba(255,255,255,.045), inset -1px -1px 0 rgba(0,0,0,.55);
+  }
+
+  /* ---------- header ---------- */
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #171c18, #101410);
+  }
+
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand h1 {
+    margin: 0;
+    font-size: 13px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .brand .sub {
+    color: var(--text-faint);
+    letter-spacing: .06em;
+    font-size: 11px;
+  }
+
+  .spacer { flex: 1; }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .led {
+    width: 8px; height: 8px;
+    background: var(--text-faint);
+    box-shadow: 0 0 0 2px rgba(0,0,0,.5);
+  }
+  .led.up   { background: var(--grass);   box-shadow: 0 0 8px rgba(106,196,90,.7), 0 0 0 2px rgba(0,0,0,.5); }
+  .led.warn { background: var(--gold);    box-shadow: 0 0 8px rgba(224,169,48,.6), 0 0 0 2px rgba(0,0,0,.5); }
+  .led.down { background: var(--redstone);box-shadow: 0 0 8px rgba(229,72,77,.6),  0 0 0 2px rgba(0,0,0,.5); }
+
+  /* ---------- layout ---------- */
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) 340px;
+    gap: 12px;
+    padding: 12px;
+    min-height: 0;
+  }
+
+  .stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: #070907;
+  }
+  .viewport img {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+    image-rendering: pixelated;
+  }
+  .viewport img.hidden { display: none; }
+
+  .nosignal {
+    text-align: center;
+    color: var(--text-faint);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    font-size: 11px;
+    line-height: 2.2;
+  }
+  .nosignal b { display: block; color: var(--text-dim); font-size: 12px; letter-spacing: .2em; }
+  .nosignal code { color: var(--diamond); letter-spacing: 0; text-transform: none; }
+
+  .overlay {
+    position: absolute;
+    top: 8px; left: 8px;
+    display: flex; gap: 6px;
+    pointer-events: none;
+  }
+  .chip {
+    background: rgba(6,8,6,.82);
+    border: 1px solid var(--line);
+    padding: 3px 7px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: .06em;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  /* ---------- panels ---------- */
+
+  section.panel { padding: 0; }
+  .panel > h2 {
+    margin: 0;
+    padding: 8px 11px;
+    font-size: 10px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel > h2 .tag {
+    margin-left: auto;
+    font-size: 9px;
+    letter-spacing: .12em;
+    padding: 1px 5px;
+    border: 1px solid var(--line);
+    color: var(--text-faint);
+  }
+  .panel > h2 .tag.live  { color: var(--grass);    border-color: rgba(106,196,90,.4); }
+  .panel > h2 .tag.unwired { color: var(--gold);   border-color: rgba(224,169,48,.35); }
+  .body { padding: 11px; }
+
+  /* ---------- stats ---------- */
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+  }
+  .metric { background: var(--panel); padding: 9px 10px; }
+  .metric .k {
+    font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-faint);
+  }
+  .metric .v {
+    font-size: 21px; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums;
+  }
+  .metric .v small { font-size: 11px; font-weight: 400; color: var(--text-faint); margin-left: 2px; }
+  .v.good { color: var(--grass); }
+  .v.warn { color: var(--gold); }
+  .v.bad  { color: var(--redstone); }
+  .v.none { color: var(--text-faint); }
+
+  canvas#spark {
+    display: block;
+    width: 100%;
+    height: 86px;
+    margin-top: 10px;
+    background: #0b0e0c;
+    border: 1px solid var(--line);
+  }
+
+  .legend {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    margin-top: 8px; font-size: 10px; color: var(--text-faint);
+    letter-spacing: .06em;
+  }
+  .legend i { display: inline-block; width: 9px; height: 2px; margin-right: 5px; vertical-align: middle; }
+
+  /* ---------- counters ---------- */
+
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: 12px; }
+  .kv .k { color: var(--text-faint); letter-spacing: .06em; }
+  .kv .v2 { font-variant-numeric: tabular-nums; text-align: right; color: var(--text); }
+  .kv .v2.dim { color: var(--text-faint); }
+  .kv .v2 em { font-style: normal; color: var(--text-faint); }
+
+  .rule { height: 1px; background: var(--line); margin: 9px 0; }
+
+  .ratio {
+    height: 4px;
+    background: #0b0e0c;
+    border: 1px solid var(--line);
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .ratio i { display: block; height: 100%; width: 0; background: var(--diamond); }
+
+  /* ---------- forms ---------- */
+
+  .grid5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label {
+    font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint);
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: #0b0e0c;
+    border: 1px solid var(--line);
+    color: var(--text);
+    font: 12px var(--mono);
+    padding: 5px 6px;
+    box-shadow: inset 1px 1px 0 rgba(0,0,0,.5);
+  }
+  input:focus { outline: none; border-color: var(--diamond); }
+  input::placeholder { color: var(--text-faint); }
+
+  .row { display: flex; gap: 6px; align-items: center; margin-top: 9px; flex-wrap: wrap; }
+
+  button {
+    font: 11px var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text);
+    background: linear-gradient(180deg, #232a24, #171d18);
+    border: 1px solid var(--line);
+    box-shadow: inset 1px 1px 0 rgba(255,255,255,.06), inset -1px -1px 0 rgba(0,0,0,.6);
+    padding: 6px 11px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--text-faint); color: #fff; }
+  button:active:not(:disabled) {
+    box-shadow: inset -1px -1px 0 rgba(255,255,255,.05), inset 1px 1px 0 rgba(0,0,0,.6);
+    transform: translateY(1px);
+  }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { color: #0a0c0a; background: linear-gradient(180deg, #7ad469, #55ad48); border-color: #4b9a40; font-weight: 700; }
+  button.primary:hover:not(:disabled) { color: #0a0c0a; }
+  button.ghost { background: none; }
+
+  input[type="range"] { flex: 1; accent-color: var(--gold); min-width: 120px; }
+
+  .hint { margin-top: 8px; font-size: 10px; color: var(--text-faint); line-height: 1.7; }
+  .hint code { color: var(--text-dim); }
+
+  /* ---------- console ---------- */
+
+  footer {
+    border-top: 1px solid var(--line);
+    background: #0b0e0c;
+    height: 128px;
+    display: flex;
+    flex-direction: column;
+  }
+  .console-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-faint);
+  }
+  .keys { margin-left: auto; display: flex; gap: 10px; }
+  .keys kbd {
+    font: 10px var(--mono);
+    border: 1px solid var(--line);
+    padding: 1px 4px;
+    color: var(--text-dim);
+    background: var(--panel);
+  }
+  #console {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    line-height: 1.65;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+  #console div { white-space: pre-wrap; word-break: break-word; }
+  .t  { color: var(--text-faint); }
+  .ok { color: var(--grass); }
+  .er { color: var(--redstone); }
+  .wa { color: var(--gold); }
+  .di { color: var(--text-dim); }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    .rail { overflow: visible; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <!-- A block, drawn isometric. Grass top, dirt sides — the first thing the renderer ever
+         got right, and the only ornament on the page. -->
+    <svg width="22" height="24" viewBox="0 0 22 24" aria-hidden="true">
+      <path d="M11 1 L21 6 L11 11 L1 6 Z"  fill="#6ac45a"/>
+      <path d="M1 6  L11 11 L11 22 L1 17 Z" fill="#6b4a2f"/>
+      <path d="M21 6 L11 11 L11 22 L21 17 Z" fill="#54381f"/>
+    </svg>
+    <h1>Spyglass</h1>
+    <span class="sub">debug console</span>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="status">
+    <span class="led" id="led-stream"></span><span id="lbl-stream">stream</span>
+    <span class="led" id="led-stats" style="margin-left:12px"></span><span id="lbl-stats">stats</span>
+  </div>
+</header>
+
+<main>
+  <div class="stage">
+    <div class="viewport bevel">
+      <img id="frame" class="hidden" alt="live frame">
+      <div class="nosignal" id="nosignal">
+        <b>no signal</b>
+        waiting for the first rendered frame<br>
+        <code>framestream.port</code> must be set in <code>local.properties</code>
+      </div>
+      <div class="overlay">
+        <span class="chip"><b id="stream-fps">—</b> stream fps</span>
+        <span class="chip" id="chip-res">—</span>
+        <span class="chip" id="chip-paused" style="display:none; color:var(--gold)">paused</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rail">
+
+    <section class="panel bevel">
+      <h2>frame time <span class="tag" id="tag-stats">probing…</span></h2>
+      <div class="body">
+        <div class="metrics">
+          <div class="metric"><div class="k">p50</div><div class="v none" id="m-p50">—</div></div>
+          <div class="metric"><div class="k">p99</div><div class="v none" id="m-p99">—</div></div>
+          <div class="metric"><div class="k">max</div><div class="v none" id="m-max">—</div></div>
+        </div>
+        <canvas id="spark"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--diamond)"></i>p50</span>
+          <span><i style="background:var(--gold)"></i>p99</span>
+          <span><i style="background:var(--redstone)"></i>16.67 ms budget</span>
+          <span style="margin-left:auto" id="l-count">samples —</span>
+        </div>
+        <div class="row">
+          <button class="ghost" id="btn-clear">clear graph</button>
+          <button class="ghost" id="btn-copy">copy row</button>
+        </div>
+        <div class="hint" id="stats-hint" style="display:none">
+          <code>/stats</code> is not wired yet — DG-17 Stage 2. This panel expects
+          <code>text/plain</code>, one <code>key=value</code> per line
+          (<code>p50</code>, <code>p99</code>, <code>max</code>, <code>count</code>),
+          or a JSON object with those keys. It will light up on its own once the endpoint answers.
+        </div>
+      </div>
+    </section>
+
+    <section class="panel bevel">
+      <h2>render counters <span class="tag" id="tag-counters">last frame</span></h2>
+      <div class="body">
+        <div class="kv">
+          <span class="k">opaque draws</span><span class="v2 dim" id="c-opaque">—</span>
+          <span class="k">transparent draws</span><span class="v2 dim" id="c-transparent">—</span>
+          <span class="k">shadow draws</span><span class="v2 dim" id="c-shadow">—</span>
+          <span class="k">hud draws</span><span class="v2 dim" id="c-hud">—</span>
+        </div>
+        <div class="rule"></div>
+        <div class="kv">
+          <span class="k">uniform uploads</span><span class="v2 dim" id="c-uniforms">—</span>
+          <span class="k">chunks drawn</span><span class="v2 dim" id="c-chunks">—</span>
+        </div>
+        <div class="ratio"><i id="c-ratio-bar"></i></div>
+        <div class="rule"></div>
+        <div class="kv">
+          <span class="k">renderworld entries</span><span class="v2 dim" id="c-entries">—</span>
+          <span class="k">peak this session</span><span class="v2 dim" id="c-entries-peak">—</span>
+        </div>
+        <div class="hint">
+          Counters describe the last complete frame; entries is a live gauge, so a leak shows as
+          peak climbing while the world stops streaming. Pitch straight up: opaque should fall to
+          near zero and shadow should not move.
+        </div>
+      </div>
+    </section>
+
+    <section class="panel bevel">
+      <h2>teleport <span class="tag live">/tp</span></h2>
+      <div class="body">
+        <div class="grid5">
+          <div class="field"><label>x</label>    <input type="text" id="tp-x"     placeholder="—" inputmode="decimal"></div>
+          <div class="field"><label>y</label>    <input type="text" id="tp-y"     placeholder="—" inputmode="decimal"></div>
+          <div class="field"><label>z</label>    <input type="text" id="tp-z"     placeholder="—" inputmode="decimal"></div>
+          <div class="field"><label>yaw</label>  <input type="text" id="tp-yaw"   placeholder="—" inputmode="decimal"></div>
+          <div class="field"><label>pitch</label><input type="text" id="tp-pitch" placeholder="—" inputmode="decimal"></div>
+        </div>
+        <div class="row">
+          <button class="primary" id="btn-tp">go</button>
+          <button class="ghost" id="btn-tp-clear">clear</button>
+        </div>
+        <div class="hint">
+          An empty field is omitted from the query, which the server reads as <code>NaN</code> —
+          "leave this one alone". So yaw and pitch alone re-aim without moving.
+        </div>
+      </div>
+    </section>
+
+    <section class="panel bevel">
+      <h2>time of day <span class="tag live">/time</span></h2>
+      <div class="body">
+        <div class="row" style="margin-top:0">
+          <input type="range" id="time-range" min="0" max="1" step="0.01" value="0.5">
+          <span style="min-width:3.2em; text-align:right; font-variant-numeric:tabular-nums" id="time-val">0.50</span>
+        </div>
+        <div class="row">
+          <button id="t-0">midnight</button>
+          <button id="t-25">dawn</button>
+          <button id="t-50">noon</button>
+          <button id="t-75">dusk</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel bevel">
+      <h2>benchmark <span class="tag" id="tag-bench">probing…</span></h2>
+      <div class="body">
+        <div class="grid5">
+          <div class="field"><label>x</label>    <input type="text" id="b-x"     placeholder="8"></div>
+          <div class="field"><label>y</label>    <input type="text" id="b-y"     placeholder="120"></div>
+          <div class="field"><label>z</label>    <input type="text" id="b-z"     placeholder="-5"></div>
+          <div class="field"><label>yaw</label>  <input type="text" id="b-yaw"   placeholder="45"></div>
+          <div class="field"><label>pitch</label><input type="text" id="b-pitch" placeholder="-15"></div>
+        </div>
+        <div class="row">
+          <button class="primary" id="btn-bench">run bench</button>
+          <span class="t" id="warmup"></span>
+        </div>
+        <div class="hint" id="bench-hint"></div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="console-head">
+    <span>console</span>
+    <div class="keys">
+      <span><kbd>B</kbd> bench</span>
+      <span><kbd>P</kbd> pause</span>
+      <span><kbd>1</kbd>–<kbd>4</kbd> time</span>
+      <span><kbd>C</kbd> clear</span>
+    </div>
+  </div>
+  <div id="console"></div>
+</footer>
+
+<script>
+"use strict";
+
+/* Spyglass — the browser half of the game's debug server.
+ *
+ * Everything here is a client of endpoints the Java side owns. /stats is polled and degrades to
+ * a "not wired" state on 404 or 501, so the panel is honest before the server can answer it.
+ *
+ * Nothing on this page may send a command endpoint a request it did not mean to run. /tp, /time
+ * and /bench all act on the game, and none of them inspect the HTTP method, so there is no such
+ * thing as a harmless probe of one.
+ */
+
+const STREAM_INTERVAL_MS = 80;    // matches the server's 100 ms capture cadence, slightly under
+const STATS_INTERVAL_MS  = 1000;  // the server recomputes percentiles once a second
+const SPARK_HISTORY      = 180;   // three minutes of once-a-second stats
+const FRAME_BUDGET_MS    = 16.67; // 60 fps
+const P99_BUDGET_MS      = 25.0;  // DG-17 Stage 9
+const WARMUP_SECONDS     = 10;    // BENCH_WARMUP_SECONDS
+
+const $ = id => document.getElementById(id);
+
+/* ---------- console ---------- */
+
+const consoleEl = $("console");
+
+function log(text, cls) {
+  const line = document.createElement("div");
+  const now = new Date();
+  const stamp = String(now.getHours()).padStart(2, "0") + ":" +
+                String(now.getMinutes()).padStart(2, "0") + ":" +
+                String(now.getSeconds()).padStart(2, "0");
+  line.innerHTML = '<span class="t">' + stamp + '</span> ';
+  const body = document.createElement("span");
+  if (cls) body.className = cls;
+  body.textContent = text;
+  line.appendChild(body);
+  const atBottom = consoleEl.scrollTop + consoleEl.clientHeight >= consoleEl.scrollHeight - 8;
+  consoleEl.appendChild(line);
+  while (consoleEl.childElementCount > 300) consoleEl.removeChild(consoleEl.firstChild);
+  if (atBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+/* ---------- tiny persistence for the fields, so a reload doesn't cost you the pose ----------
+   Every read and write is guarded: a private window or blocked site data throws on access, and
+   a debug tool that white-screens because localStorage is off would be a bad joke. */
+
+function store(key, value) {
+  try { localStorage.setItem("spyglass." + key, value); } catch (e) { /* not available */ }
+}
+function recall(key, fallback) {
+  try {
+    const v = localStorage.getItem("spyglass." + key);
+    return v === null ? fallback : v;
+  } catch (e) { return fallback; }
+}
+
+/* ---------- endpoint state ---------- */
+
+const state = {
+  streamUp: false,
+  statsUp: null,   // null = not polled yet
+  benchUp: true,   // assumed present; a 404 from a real click flips it
+  paused: false,
+  lastStats: null,
+};
+
+function setLed(el, cls) { el.className = "led" + (cls ? " " + cls : ""); }
+
+function setTag(el, up, liveText, plannedText) {
+  if (up === null) { el.textContent = "probing…"; el.className = "tag"; return; }
+  el.textContent = up ? liveText : plannedText;
+  el.className = "tag " + (up ? "live" : "unwired");
+}
+
+/* ---------- frame stream ---------- */
+
+const frameImg = $("frame");
+const noSignal = $("nosignal");
+let streamCount = 0, streamMark = performance.now();
+
+async function pollFrame() {
+  if (state.paused) { setTimeout(pollFrame, STREAM_INTERVAL_MS); return; }
+  try {
+    const res = await fetch("/frame.png?" + Date.now(), { cache: "no-store" });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const previous = frameImg.src;
+      frameImg.src = url;
+      if (previous.startsWith("blob:")) URL.revokeObjectURL(previous);
+      if (!state.streamUp) {
+        state.streamUp = true;
+        frameImg.classList.remove("hidden");
+        noSignal.style.display = "none";
+        setLed($("led-stream"), "up");
+        log("stream live", "ok");
+      }
+      streamCount++;
+    } else if (res.status === 503) {
+      // The server is up but hasn't captured a frame yet — a real distinction from "no server".
+      if (state.streamUp !== "waiting") {
+        state.streamUp = "waiting";
+        setLed($("led-stream"), "warn");
+      }
+    }
+  } catch (e) {
+    if (state.streamUp !== false) {
+      state.streamUp = false;
+      frameImg.classList.add("hidden");
+      noSignal.style.display = "";
+      setLed($("led-stream"), "down");
+      log("stream lost — is the game running?", "er");
+    }
+  }
+  const elapsed = performance.now() - streamMark;
+  if (elapsed > 1000) {
+    $("stream-fps").textContent = (streamCount * 1000 / elapsed).toFixed(1);
+    streamCount = 0;
+    streamMark = performance.now();
+  }
+  setTimeout(pollFrame, STREAM_INTERVAL_MS);
+}
+
+frameImg.addEventListener("load", () => {
+  $("chip-res").textContent = frameImg.naturalWidth + "×" + frameImg.naturalHeight;
+});
+
+/* ---------- stats ----------
+   Deliberately liberal about the response shape, because the endpoint doesn't exist yet and
+   guessing its exact format wrong shouldn't mean editing this file. Accepts a JSON object or
+   `key=value` / `key: value` lines, and ignores anything it doesn't recognise. */
+
+function parseStats(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{")) {
+    try { return JSON.parse(trimmed); } catch (e) { /* fall through to line parsing */ }
+  }
+  const out = {};
+  for (const raw of trimmed.split(/\r?\n/)) {
+    const m = raw.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*[=:]\s*(-?[0-9.]+)/);
+    if (m) out[m[1]] = parseFloat(m[2]);
+  }
+  return out;
+}
+
+// Case-insensitive field lookup, so the same panel reads a JSON object with camelCase keys and a
+// key=value dump with whatever casing the server felt like. NaN means "the server didn't send it",
+// which is what every renderer below treats as an em dash rather than a zero.
+function pick(stats, name) {
+  if (stats == null) return NaN;
+  if (name in stats) return Number(stats[name]);
+  const want = name.toLowerCase();
+  for (const key of Object.keys(stats)) {
+    if (key.toLowerCase() === want) return Number(stats[key]);
+  }
+  return NaN;
+}
+
+function count(value) {
+  return isFinite(value) ? value.toLocaleString() : "\u2014";
+}
+
+function setCount(el, value) {
+  el.textContent = count(value);
+  el.classList.toggle("dim", !isFinite(value));
+}
+
+const history = { p50: [], p99: [] };
+
+function classify(ms, budget) {
+  if (!isFinite(ms)) return "none";
+  if (ms <= budget) return "good";
+  if (ms <= budget * 1.5) return "warn";
+  return "bad";
+}
+
+function renderMetric(el, value, budget) {
+  if (!isFinite(value)) {
+    el.className = "v none";
+    el.textContent = "—";
+    return;
+  }
+  el.className = "v " + classify(value, budget);
+  el.innerHTML = value.toFixed(2) + "<small>ms</small>";
+}
+
+async function pollStats() {
+  try {
+    const res = await fetch("/stats?" + Date.now(), { cache: "no-store" });
+    // 404 = context not registered, 501 = registered but the body isn't written yet.
+    // Both mean the same thing to a reader: the number isn't available, the game is fine.
+    if (res.status === 404 || res.status === 501) {
+      if (state.statsUp !== false) {
+        state.statsUp = false;
+        setLed($("led-stats"), "warn");
+        setTag($("tag-stats"), false, "/stats", "not wired");
+        $("stats-hint").style.display = "";
+        log("/stats returns " + res.status + " — endpoint not implemented yet", "wa");
+      }
+    } else if (res.ok) {
+      const stats = parseStats(await res.text());
+      if (state.statsUp !== true) {
+        state.statsUp = true;
+        setLed($("led-stats"), "up");
+        setTag($("tag-stats"), true, "/stats", "not wired");
+        $("stats-hint").style.display = "none";
+        log("/stats live", "ok");
+      }
+      applyStats(stats);
+    }
+  } catch (e) {
+    if (state.statsUp !== null && state.statsUp !== "offline") {
+      state.statsUp = "offline";
+      setLed($("led-stats"), "down");
+    }
+  }
+  setTimeout(pollStats, STATS_INTERVAL_MS);
+}
+
+let peakEntries = NaN;
+
+function applyStats(s) {
+  state.lastStats = s;
+  const p50 = pick(s, "p50");
+  const p99 = pick(s, "p99");
+  const max = pick(s, "max");
+  const samples = pick(s, "count");
+
+  renderMetric($("m-p50"), p50, FRAME_BUDGET_MS);
+  renderMetric($("m-p99"), p99, P99_BUDGET_MS);
+  renderMetric($("m-max"), max, P99_BUDGET_MS);
+  $("l-count").textContent = "samples " + count(samples);
+
+  setCount($("c-opaque"), pick(s, "opaqueDrawCalls"));
+  setCount($("c-transparent"), pick(s, "transparentDrawCalls"));
+  setCount($("c-shadow"), pick(s, "shadowDrawCalls"));
+  setCount($("c-hud"), pick(s, "hudDrawCalls"));
+  setCount($("c-uniforms"), pick(s, "uniformUploads"));
+
+  // drawn/considered is the ratio MVP.md claims is about 70%; showing both halves plus the
+  // percentage is what lets a glance either confirm that or correct it.
+  const drawn = pick(s, "chunksDrawn");
+  const considered = pick(s, "chunksConsidered");
+  const chunks = $("c-chunks");
+  if (isFinite(drawn) && isFinite(considered) && considered > 0) {
+    const pct = Math.round((drawn / considered) * 100);
+    chunks.innerHTML = count(drawn) + " <em>/ " + count(considered) + " · " + pct + "%</em>";
+    chunks.classList.remove("dim");
+    $("c-ratio-bar").style.width = Math.min(100, pct) + "%";
+  } else {
+    chunks.textContent = "\u2014";
+    chunks.classList.add("dim");
+    $("c-ratio-bar").style.width = "0";
+  }
+
+  // A gauge, not a counter: a leak is a level that stops coming back down, so the peak beside it
+  // is the part worth watching once the world has finished streaming.
+  const entries = pick(s, "renderWorldEntries");
+  setCount($("c-entries"), entries);
+  if (isFinite(entries)) peakEntries = isFinite(peakEntries) ? Math.max(peakEntries, entries) : entries;
+  setCount($("c-entries-peak"), peakEntries);
+
+  if (isFinite(p50)) history.p50.push(p50);
+  if (isFinite(p99)) history.p99.push(p99);
+  while (history.p50.length > SPARK_HISTORY) history.p50.shift();
+  while (history.p99.length > SPARK_HISTORY) history.p99.shift();
+  drawSpark();
+}
+
+/* ---------- sparkline ---------- */
+
+const spark = $("spark");
+const ctx = spark.getContext("2d");
+
+function drawSpark() {
+  const ratio = window.devicePixelRatio || 1;
+  const w = spark.clientWidth, h = spark.clientHeight;
+  if (spark.width !== w * ratio || spark.height !== h * ratio) {
+    spark.width = w * ratio;
+    spark.height = h * ratio;
+  }
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  // Scale to the data but never below the p99 budget, so the budget line stays on screen and
+  // a good frame reads as "well under" rather than filling the panel.
+  const peak = Math.max(P99_BUDGET_MS, ...history.p99, ...history.p50);
+  const top = peak * 1.12;
+  const y = ms => h - (ms / top) * h;
+
+  ctx.strokeStyle = "#e5484d";
+  ctx.globalAlpha = .55;
+  ctx.setLineDash([3, 3]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, Math.round(y(FRAME_BUDGET_MS)) + .5);
+  ctx.lineTo(w, Math.round(y(FRAME_BUDGET_MS)) + .5);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  if (history.p50.length < 2) {
+    ctx.fillStyle = "#4a544d";
+    ctx.font = '10px ui-monospace, Consolas, monospace';
+    ctx.fillText("awaiting samples", 8, h / 2);
+    return;
+  }
+
+  const series = (values, color) => {
+    const step = w / Math.max(1, SPARK_HISTORY - 1);
+    const offset = w - (values.length - 1) * step;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    values.forEach((v, i) => {
+      const px = offset + i * step;
+      const py = y(v);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+  };
+
+  series(history.p50, "#4ee8e8");
+  series(history.p99, "#e0a930");
+}
+
+window.addEventListener("resize", drawSpark);
+
+/* ---------- commands ---------- */
+
+async function send(path, label) {
+  try {
+    const res = await fetch(path, { cache: "no-store" });
+    const body = (await res.text()).trim();
+    if (res.ok) log(label + "  →  " + (body || res.status), "ok");
+    else log(label + "  →  " + res.status + (body ? " " + body : ""), "er");
+    return res.ok;
+  } catch (e) {
+    log(label + "  →  unreachable", "er");
+    return false;
+  }
+}
+
+function poseQuery(prefix) {
+  const parts = [];
+  for (const key of ["x", "y", "z", "yaw", "pitch"]) {
+    const value = $(prefix + "-" + key).value.trim();
+    if (value !== "") parts.push(key + "=" + encodeURIComponent(value));
+  }
+  return parts.join("&");
+}
+
+$("btn-tp").addEventListener("click", () => {
+  const q = poseQuery("tp");
+  if (!q) { log("teleport: every field empty, nothing to send", "wa"); return; }
+  for (const key of ["x", "y", "z", "yaw", "pitch"]) store("tp." + key, $("tp-" + key).value);
+  send("/tp?" + q, "/tp " + q);
+});
+
+$("btn-tp-clear").addEventListener("click", () => {
+  for (const key of ["x", "y", "z", "yaw", "pitch"]) {
+    $("tp-" + key).value = "";
+    store("tp." + key, "");
+  }
+});
+
+const timeRange = $("time-range");
+let timeDebounce = null;
+function sendTime(t) {
+  timeRange.value = t;
+  $("time-val").textContent = Number(t).toFixed(2);
+  clearTimeout(timeDebounce);
+  timeDebounce = setTimeout(() => send("/time?t=" + t, "/time t=" + Number(t).toFixed(2)), 120);
+}
+timeRange.addEventListener("input", () => sendTime(timeRange.value));
+$("t-0").addEventListener("click",  () => sendTime(0));
+$("t-25").addEventListener("click", () => sendTime(0.25));
+$("t-50").addEventListener("click", () => sendTime(0.5));
+$("t-75").addEventListener("click", () => sendTime(0.75));
+
+/* ---------- bench ----------
+   When /bench exists this is one GET. Until it does, the same three effects are available
+   through the endpoints that already work — except the frame-log reset, which has no endpoint,
+   so the emulated run says so instead of quietly measuring a log full of pre-teleport frames. */
+
+let warmupTimer = null;
+
+async function runBench() {
+  for (const key of ["x", "y", "z", "yaw", "pitch"]) store("bench." + key, $("b-" + key).value);
+
+  // Ask the endpoint directly rather than probing for it beforehand. A 404 is the only answer
+  // that means "not wired"; anything else means the command ran.
+  let ran = false;
+  try {
+    const res = await fetch("/bench", { cache: "no-store" });
+    const body = (await res.text()).trim();
+    if (res.status === 404) {
+      setBenchAvailable(false);
+    } else {
+      setBenchAvailable(true);
+      ran = true;
+      log("/bench  →  " + (body || res.status), res.ok ? "ok" : "er");
+    }
+  } catch (e) {
+    log("/bench  →  unreachable", "er");
+    return;
+  }
+
+  if (!ran) {
+    const q = poseQuery("b");
+    if (!q) { log("bench: /bench is missing and no pose is filled in", "wa"); return; }
+    log("/bench not wired — emulating with /tp + /time", "wa");
+    await send("/tp?" + q, "/tp " + q);
+    await send("/time?t=0.5", "/time t=0.50");
+    log("frame log NOT reset — no endpoint for it; treat these numbers as approximate", "wa");
+  }
+
+  history.p50.length = 0;
+  history.p99.length = 0;
+  drawSpark();
+
+  let left = WARMUP_SECONDS;
+  clearInterval(warmupTimer);
+  $("warmup").textContent = "warmup " + left + "s";
+  warmupTimer = setInterval(() => {
+    left--;
+    if (left <= 0) {
+      clearInterval(warmupTimer);
+      $("warmup").textContent = "";
+      log("warmup complete — numbers are comparable from here", "ok");
+    } else {
+      $("warmup").textContent = "warmup " + left + "s";
+    }
+  }, 1000);
+}
+
+$("btn-bench").addEventListener("click", runBench);
+
+$("btn-clear").addEventListener("click", () => {
+  history.p50.length = 0;
+  history.p99.length = 0;
+  peakEntries = NaN;
+  drawSpark();
+  log("graph cleared", "di");
+});
+
+// DG-17 Stage 5 wants these numbers pasted into a markdown table, so hand them over in that shape.
+$("btn-copy").addEventListener("click", () => {
+  const s = state.lastStats;
+  if (!s) { log("nothing to copy — /stats has not answered", "wa"); return; }
+  const ms = v => (isFinite(v) ? v.toFixed(2) : "—");
+  const n = v => (isFinite(v) ? String(v) : "—");
+  const row = "| " + new Date().toISOString() +
+              " | " + ms(pick(s, "p50")) + " | " + ms(pick(s, "p99")) + " | " + ms(pick(s, "max")) +
+              " | " + n(pick(s, "opaqueDrawCalls")) + " | " + n(pick(s, "transparentDrawCalls")) +
+              " | " + n(pick(s, "shadowDrawCalls")) + " | " + n(pick(s, "hudDrawCalls")) +
+              " | " + n(pick(s, "uniformUploads")) +
+              " | " + n(pick(s, "chunksDrawn")) + " / " + n(pick(s, "chunksConsidered")) +
+              " | " + n(pick(s, "renderWorldEntries")) + " |";
+  navigator.clipboard.writeText(row)
+    .then(() => log("copied: " + row, "ok"))
+    .catch(() => log(row, "di"));
+});
+
+/* ---------- bench availability ----------
+   There is deliberately no probe here. /bench is a command, not a document: asking whether it
+   exists means running it, HEAD included, because the handler never looks at the method. An
+   earlier version of this file polled HEAD /bench every 8 seconds and quietly teleported the
+   player to BENCH_POSE and reset the clock to midday each time - the game appeared to "revert"
+   whenever you changed the time of day. Availability is now learned from a real click instead,
+   which costs nothing because a click was going to run it anyway. */
+
+function setBenchAvailable(up) {
+  if (state.benchUp === up) return;
+  state.benchUp = up;
+  setTag($("tag-bench"), up, "/bench", "emulated");
+  $("bench-hint").innerHTML = up
+    ? "Teleports to the server's <code>BENCH_POSE</code>, sets midday, and resets the frame log. "
+      + "The pose fields below are only used if the endpoint is missing."
+    : "<code>/bench</code> answered 404, so this is sending <code>/tp</code> and <code>/time</code> "
+      + "from the fields above instead. That reproduces the pose but cannot reset the frame log.";
+}
+
+/* ---------- keyboard ---------- */
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.ctrlKey || e.metaKey || e.altKey) return;
+  switch (e.key.toLowerCase()) {
+    case "b": runBench(); break;
+    case "p":
+      state.paused = !state.paused;
+      $("chip-paused").style.display = state.paused ? "" : "none";
+      log(state.paused ? "stream paused" : "stream resumed", "di");
+      break;
+    case "c": consoleEl.innerHTML = ""; break;
+    case "1": sendTime(0); break;
+    case "2": sendTime(0.25); break;
+    case "3": sendTime(0.5); break;
+    case "4": sendTime(0.75); break;
+  }
+});
+
+/* ---------- boot ---------- */
+
+for (const key of ["x", "y", "z", "yaw", "pitch"]) {
+  $("tp-" + key).value = recall("tp." + key, "");
+  $("b-" + key).value = recall("bench." + key, "");
+}
+setLed($("led-stream"), "");
+setLed($("led-stats"), "");
+drawSpark();
+setTag($("tag-bench"), true, "/bench", "emulated");
+$("bench-hint").innerHTML =
+  "Teleports to the server's <code>BENCH_POSE</code>, sets midday, and resets the frame log. "
+  + "The pose fields below are only used if the endpoint is missing.";
+state.benchUp = true;
+log("spyglass up — polling /frame.png, /stats", "di");
+pollFrame();
+pollStats();
+</script>
+</body>
+</html>

@@ -39,6 +39,12 @@ public class LocalConfig {
         }
     }
 
+    // gputimer.enabled=true turns on the per-pass GPU timers. Opt-in because a query per
+    // pass per frame is cheap but not free, and Act II of DG-17 wants to compare with it off.
+    public boolean gpuTimerEnabled() {
+        return "true".equals(props.getProperty("gputimer.enabled"));
+    }
+
     public boolean debugEnabled() {
         Optional<String> prop = Optional.ofNullable(props.getProperty("debug.enabled"));
         if (prop.isPresent()) {

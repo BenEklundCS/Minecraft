@@ -8,6 +8,7 @@ import static org.lwjgl.opengl.GL31C.glGetActiveUniformName;
 import static org.lwjgl.opengl.GL31C.glGetActiveUniformsi;
 import static org.lwjgl.system.MemoryStack.stackPush;
 
+import com.beneklund.minecraft.util.EngineStats;
 import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -66,6 +67,7 @@ public final class GlShader {
                 continue;
             }
             upload(uniform.location(), value);
+            EngineStats.countUniformUpload();
         }
     }
 

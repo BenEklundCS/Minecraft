@@ -2,6 +2,7 @@ package com.beneklund.minecraft.renderer;
 
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.util.AABB;
+import com.beneklund.minecraft.util.EngineStats;
 import java.util.ArrayList;
 import java.util.List;
 import org.joml.Vector3f;
@@ -35,6 +36,7 @@ public class ChunkRenderer implements IRenderable {
         Vector3f eye = camera.getPosition();
         List<DrawCall> result = new ArrayList<>();
         for (RenderWorld.Entry entry : renderWorld.getEntries()) {
+            EngineStats.countChunkConsidered();
             if (entry.opaqueMesh() != null) {
                 int cascades = cascadeMaskFor(entry.bounds(), eye);
                 if (cascades != 0) {
@@ -45,6 +47,7 @@ public class ChunkRenderer implements IRenderable {
             if (!frustum.isVisible(entry.bounds())) continue;
             if (entry.opaqueMesh() != null) {
                 result.add(new DrawCall(entry.opaqueMesh(), entry.model(), chunkShader, atlas, RenderPass.OPAQUE));
+                EngineStats.countChunkDrawn();
             }
             if (entry.transparentMesh() != null) {
                 result.add(new DrawCall(
@@ -64,7 +67,13 @@ public class ChunkRenderer implements IRenderable {
      * The near cascade covers a much smaller area, so most loaded chunks fail its test and are
      * never submitted to it — which is the saving that pays for rendering the scene twice.
      */
-    private static int cascadeMaskFor(AABB bounds, Vector3f eye) {
+    /*
+     * Which shadow cascades this box can cast into, as a bitmask. Package-private rather than
+     * private so ChunkRendererTest can pin it: it takes an AABB and a Vector3f, touches no GL
+     * and no renderer state, and the whole Case B prediction in DG-17 Stage 3 rests on it
+     * ignoring the frustum entirely.
+     */
+    static int cascadeMaskFor(AABB bounds, Vector3f eye) {
         float dx = Math.max(0.0f, Math.max(bounds.minX() - eye.x, eye.x - bounds.maxX()));
         float dz = Math.max(0.0f, Math.max(bounds.minZ() - eye.z, eye.z - bounds.maxZ()));
         float distanceSquared = dx * dx + dz * dz;

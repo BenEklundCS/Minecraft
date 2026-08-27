@@ -9,9 +9,11 @@ import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL30.GL_TEXTURE_2D_ARRAY;
 
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
+import com.beneklund.minecraft.platform.graphics.GpuTimer;
 import com.beneklund.minecraft.platform.graphics.ShadowFramebuffer;
 import com.beneklund.minecraft.platform.graphics.UniformValue;
 import com.beneklund.minecraft.util.Color;
+import com.beneklund.minecraft.util.EngineStats;
 import com.beneklund.minecraft.world.PreethamSky;
 import com.beneklund.minecraft.world.SkyModel;
 import java.util.ArrayList;
@@ -30,6 +32,25 @@ public class Renderer {
     private Vector3f sunDirection;
     private float skyBrightness;
     private float time;
+
+    // Frame ordinal, pushed in from Game each frame. Only the GPU timer reads it: the query
+    // rotation needs to know which frame is writing so it can read one from two frames back.
+    private long frame;
+
+    /*
+     * Which region each GPU timer slot measures. Flat ints rather than an enum because GpuTimer
+     * indexes an array with them, and Game owns TIMER_POST while this class owns the other four -
+     * one numbering shared by both is what keeps them from colliding.
+     */
+    public static final int TIMER_SHADOW = 0;
+    public static final int TIMER_CLOUDS = 1;
+    public static final int TIMER_OPAQUE = 2;
+    public static final int TIMER_TRANSPARENT = 3;
+    public static final int TIMER_POST = 4;
+    public static final int TIMER_PASS_COUNT = 5;
+
+    // Null when gputimer.enabled is off, which is the normal case.
+    private GpuTimer gpuTimer;
 
     private static final float TURBIDITY = 2.5f;
     private static final float EXTINCTION = (float) 1 / 350;
@@ -205,6 +226,7 @@ public class Renderer {
         // NOTE: getDrawCalls must not set GL state — Renderer owns it entirely.
         calls.clear();
         for (IRenderable renderable : registered) calls.addAll(renderable.getDrawCalls(camera));
+        for (DrawCall call : calls) EngineStats.countDrawCall(call.pass());
 
         // Guarded because this runs every frame — without the check we'd walk the call list three
         // extra times per frame just to build a message nobody is listening to.
@@ -218,13 +240,17 @@ public class Renderer {
                     countPass(calls, RenderPass.SHADOW));
         }
 
+        beginPass(TIMER_SHADOW);
         drawShadowPass(camera);
+        endPass(TIMER_SHADOW);
 
         // Before the scene, for the same reason the shadow pass is: it produces an input to it.
         // sky.frag samples what this writes. Order against the shadow pass does not matter — they
         // write to different buffers and neither reads the other — but both must be finished
         // before the target below is bound, because each one binds a framebuffer of its own.
+        beginPass(TIMER_CLOUDS);
         cloudRenderer.draw(cloudBuffer, frameUniforms);
+        endPass(TIMER_CLOUDS);
 
         // Back to the scene target the shadow pass just took us away from. This is why drawScene
         // takes the target rather than Game binding it — only one of them can own the sequencing.
@@ -241,7 +267,9 @@ public class Renderer {
         glEnable(GL_CULL_FACE);
         glDepthMask(true);
         glDisable(GL_BLEND);
+        beginPass(TIMER_OPAQUE);
         for (DrawCall call : calls) if (call.pass() == RenderPass.OPAQUE) submit(call, camera);
+        endPass(TIMER_OPAQUE);
 
         // Transparent pass: depth test on so water is occluded by terrain, but depth write
         // off so transparent surfaces behind other transparent surfaces still draw.
@@ -250,7 +278,9 @@ public class Renderer {
         glDepthMask(false);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        beginPass(TIMER_TRANSPARENT);
         for (DrawCall call : calls) if (call.pass() == RenderPass.TRANSPARENT) submit(call, camera);
+        endPass(TIMER_TRANSPARENT);
     }
 
     /*
@@ -316,6 +346,25 @@ public class Renderer {
     }
 
     // Seconds since GLFW init
+    public void setGpuTimer(GpuTimer gpuTimer) {
+        this.gpuTimer = gpuTimer;
+    }
+
+    public void setFrame(long frame) {
+        this.frame = frame;
+    }
+
+    // Only one GL_TIME_ELAPSED query may be open at a time for the whole context, so every
+    // beginPass must be closed by its endPass before the next one opens. The five regions are
+    // deliberately flat and sequential for that reason.
+    private void beginPass(int pass) {
+        if (gpuTimer != null) gpuTimer.begin(pass, frame);
+    }
+
+    private void endPass(int pass) {
+        if (gpuTimer != null) gpuTimer.end(pass);
+    }
+
     public void setTime(float time) {
         this.time = time;
     }
@@ -373,6 +422,8 @@ public class Renderer {
         }
     }
 
+    // Only ever called from behind the isTraceEnabled guard, so the four passes over the call
+    // list cost nothing unless someone is actually reading the trace.
     private static long countPass(List<DrawCall> calls, RenderPass pass) {
         return calls.stream().filter(c -> c.pass() == pass).count();
     }

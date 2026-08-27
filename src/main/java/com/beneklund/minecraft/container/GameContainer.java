@@ -16,6 +16,7 @@ import com.beneklund.minecraft.platform.audio.StbAudioLoader;
 import com.beneklund.minecraft.platform.debug.FrameStreamServer;
 import com.beneklund.minecraft.platform.graphics.DepthMode;
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
+import com.beneklund.minecraft.platform.graphics.GpuTimer;
 import com.beneklund.minecraft.platform.graphics.ShadowFramebuffer;
 import com.beneklund.minecraft.platform.images.StbImageLoader;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
@@ -89,6 +90,7 @@ public class GameContainer {
     private ShadowFramebuffer shadowBuffer;
     private ShadowCamera shadowCamera;
     private FrameStreamServer frameStream;
+    private GpuTimer gpuTimer;
     private GlFramebuffer bloomA;
     private GlFramebuffer bloomB;
     private GlFramebuffer godrayA;
@@ -226,6 +228,16 @@ public class GameContainer {
                 cloudRenderer,
                 cloudBuffer,
                 renderWorld::version);
+
+        // After the Renderer because it needs the pass numbering, and after window.init()
+        // because the constructor calls glGenQueries. Absent flag means no timer at all rather
+        // than a disabled one - a query per pass per frame is cheap but not free, and Act II
+        // wants a clean comparison with it off.
+        if (localConfig.gpuTimerEnabled()) {
+            gpuTimer = new GpuTimer(Renderer.TIMER_PASS_COUNT);
+            renderer.setGpuTimer(gpuTimer);
+            LOGGER.info("gpu timers on ({} passes)", Renderer.TIMER_PASS_COUNT);
+        }
 
         // The scene renders here instead of straight to the window, and PostProcessor draws it
         // back out. RGBA16F because sky.frag emits linear radiance now — the sun runs well past
@@ -371,7 +383,8 @@ public class GameContainer {
                 debugRenderer,
                 hudRenderer,
                 frameLog,
-                frameStream);
+                frameStream,
+                gpuTimer);
     }
 
     // Reverse dependency order: audio before window (AL before GLFW/GL).
@@ -395,6 +408,7 @@ public class GameContainer {
         cloudBuffer.delete();
         bloomB.delete();
         bloomA.delete();
+        if (gpuTimer != null) gpuTimer.delete();
         renderer.delete();
         atlas.delete();
         window.shutdown();

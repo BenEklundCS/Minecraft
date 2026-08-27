@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /*
  * Serves the last rendered frame over localhost, and accepts a few commands back.
@@ -41,6 +42,19 @@ public class FrameStreamServer {
     // thread's readPixels stay off the frame budget. 10 fps is plenty to see flicker.
     private static final long MIN_FRAME_INTERVAL_MS = 100;
     private static final int CHANNELS = 3;
+
+    // The benchmark viewpoint. Chosen once and then never changed - a number taken at a
+    // different pose is not comparable to the numbers already written down.
+    private static final float[] BENCH_POSE = {8.0f, 120.0f, -5.0f, 45.0f, -15.0f};
+
+    // Midday. Shadows, sky and clouds are all at full cost here; dawn is cheaper and would
+    // flatter the numbers.
+    private static final float BENCH_TIME_OF_DAY = 0.5f;
+
+    // How long the caller should wait after /bench before reading anything back. Reported in
+    // the /bench response rather than enforced here - the server cannot make anyone wait, and
+    // a number in the response is what stops the caller guessing.
+    private static final int BENCH_WARMUP_SECONDS = 10;
 
     private final int port;
     private final AtomicReference<byte[]> latestPng = new AtomicReference<>();
@@ -69,6 +83,15 @@ public class FrameStreamServer {
     private Consumer<float[]> teleportHandler = pose -> {};
     private Consumer<Float> timeHandler = t -> {};
 
+    // Returns the /stats body, or null while nothing is wired. A Supplier rather than a
+    // FrameLog: platform/debug has no business holding a util collector's lifetime, and the
+    // two handlers above already answer how this class reaches game state.
+    private Supplier<String> statsHandler = () -> null;
+
+    // Clears whatever /stats reads, so a bench run starts from an empty log. Runs on the main
+    // thread with the rest of the queued command, not on the HTTP thread that asked for it.
+    private Runnable resetHandler = () -> {};
+
     public FrameStreamServer(int port) {
         this.port = port;
     }
@@ -81,12 +104,22 @@ public class FrameStreamServer {
         timeHandler = handler;
     }
 
+    public void setStatsHandler(Supplier<String> handler) {
+        statsHandler = handler;
+    }
+
+    public void setResetHandler(Runnable handler) {
+        resetHandler = handler;
+    }
+
     public void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         server.createContext("/", this::serveViewer);
         server.createContext("/frame.png", this::serveFrame);
         server.createContext("/tp", this::acceptTeleport);
         server.createContext("/time", this::acceptTime);
+        server.createContext("/bench", this::acceptBench);
+        server.createContext("/stats", this::serveStats);
         server.setExecutor(Executors.newFixedThreadPool(2, r -> {
             Thread t = new Thread(r, "frame-http");
             t.setDaemon(true);
@@ -182,9 +215,29 @@ public class FrameStreamServer {
         }
     }
 
+    // "/" is the catch-all context, so this also catches /favicon.ico and every mistyped path.
+    // Reading the page back off the classpath for those is pure waste, so only the root gets it.
     private void serveViewer(HttpExchange exchange) throws IOException {
-        byte[] page = VIEWER_HTML.getBytes(StandardCharsets.UTF_8);
+        if (!"/".equals(exchange.getRequestURI().getPath())) {
+            exchange.sendResponseHeaders(404, -1);
+            exchange.close();
+            return;
+        }
+        byte[] page;
+        try (var in = getClass().getResourceAsStream("/debug/index.html")) {
+            // A missing resource means the page never reached build/resources - a stale build
+            // directory, usually. Falling back to the built-in viewer keeps the tool usable;
+            // dereferencing the null would close the exchange with nothing said about why.
+            if (in == null) {
+                RENDER.warn("/debug/index.html not on the classpath - serving the built-in viewer");
+                page = VIEWER_HTML.getBytes(StandardCharsets.UTF_8);
+            } else {
+                page = in.readAllBytes();
+            }
+        }
         exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+        // Re-read on every refresh, so editing the page only costs a processResources.
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
         exchange.sendResponseHeaders(200, page.length);
         try (OutputStream body = exchange.getResponseBody()) {
             body.write(page);
@@ -208,6 +261,52 @@ public class FrameStreamServer {
         float t = parse(q.get("t"));
         if (!Float.isNaN(t)) commands.add(() -> timeHandler.accept(t));
         respondOk(exchange);
+    }
+
+    // /bench - teleport to the fixed pose, set midday, clear the frame log.
+    //
+    // It takes no parameters on purpose. The entire value of the endpoint is that two runs are
+    // the same run, and a pose that can be overridden per call is a pose that will be, quietly,
+    // three weeks from now when the numbers stop matching. Ad-hoc posing is what /tp is for.
+    private void acceptBench(HttpExchange exchange) throws IOException {
+        // The reset rides in the queued command rather than running here because whatever it
+        // clears is written on the main thread. Draining it there is what keeps that object
+        // single-threaded - clearing it from this HTTP thread would be the first data race.
+        commands.add(() -> {
+            teleportHandler.accept(BENCH_POSE);
+            timeHandler.accept(BENCH_TIME_OF_DAY);
+            resetHandler.run();
+        });
+        byte[] body = "bench pose x=%.1f y=%.1f z=%.1f yaw=%.1f pitch=%.1f time=%.2f warmup=%ds"
+                .formatted(
+                        BENCH_POSE[0],
+                        BENCH_POSE[1],
+                        BENCH_POSE[2],
+                        BENCH_POSE[3],
+                        BENCH_POSE[4],
+                        BENCH_TIME_OF_DAY,
+                        BENCH_WARMUP_SECONDS)
+                .getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+        exchange.sendResponseHeaders(200, body.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(body);
+        }
+    }
+
+    // /stats - whatever the supplier hands back, verbatim. Null or blank means nothing is
+    // wired yet and becomes a 501, which the viewer renders as "not wired" rather than as the
+    // game being down.
+    private void serveStats(HttpExchange exchange) throws IOException {
+        String stats = statsHandler.get();
+        boolean wired = stats != null && !stats.isBlank();
+        byte[] body = (wired ? stats : "stats not implemented").getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(wired ? 200 : 501, body.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(body);
+        }
     }
 
     private static void respondOk(HttpExchange exchange) throws IOException {
