@@ -2,13 +2,13 @@ package com.beneklund.minecraft.world;
 
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.util.Direction;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Chunk {
     public static final int SIZE_XZ = 16;
     public static final int SIZE_Y = 256;
-    // Storage stays a packed byte[] (1 byte/block) for memory and cache; Block is the API face.
-    private byte[] blocks = new byte[size()];
+    private ChunkSection[] sections = new ChunkSection[SIZE_Y / ChunkSection.SIZE];
     private volatile LightMap light = null;
     private final AtomicReference<ChunkState> state = new AtomicReference<>(ChunkState.UNLOADED);
     // Tracks "has edits not yet written to disk" separately from the mesh-state machine,
@@ -18,19 +18,28 @@ public class Chunk {
     public Chunk() {}
 
     public Chunk(byte[] blocks) {
-        this.blocks = blocks;
+        sections = deserialize(blocks);
     }
 
-    public static int size() {
-        return SIZE_XZ * SIZE_XZ * SIZE_Y; // 16 * 16 * 256 == 65,536
+    public Block getBlock(int index) {
+        return getBlockImpl(index);
     }
 
     public Block getBlock(int x, int y, int z) {
-        return getBlock(index(x, y, z));
+        return getBlockImpl(index(x, y, z));
+    }
+
+    private Block getBlockImpl(int index) {
+        return Block.fromId(sectionFor(index)
+                .map(s -> s.get(index % ChunkSection.BLOCK_COUNT))
+                .orElse(Block.AIR.id()));
     }
 
     public void setBlock(int x, int y, int z, Block block) {
-        blocks[index(x, y, z)] = block.id();
+        int index = index(x, y, z);
+        Optional<ChunkSection> existing = sectionFor(index);
+        if (existing.isEmpty() && block == Block.AIR) return;
+        existing.orElseGet(() -> allocateSection(index)).set(index % ChunkSection.BLOCK_COUNT, block.id());
         needsPersisting = true;
     }
 
@@ -40,6 +49,24 @@ public class Chunk {
 
     public void clearNeedsPersisting() {
         needsPersisting = false;
+    }
+
+    // Only reached from setBlock's orElseGet, which fires only when the slot is empty — so this
+    // doesn't re-check before overwriting.
+    private ChunkSection allocateSection(int index) {
+        ChunkSection s = new ChunkSection();
+        sections[index / ChunkSection.BLOCK_COUNT] = s;
+        return s;
+    }
+
+    private Optional<ChunkSection> sectionFor(int index) {
+        return Optional.ofNullable(sections[index / ChunkSection.BLOCK_COUNT]);
+    }
+
+    // Blocks in a chunk, and the length of a serialize() payload. Also the size of a LightMap,
+    // which is a flat array addressed by index()
+    public static int size() {
+        return SIZE_XZ * SIZE_XZ * SIZE_Y; // 16 * 16 * 256 == 65,536 == sections.length * BLOCK_COUNT
     }
 
     protected static int index(int x, int y, int z) {
@@ -78,12 +105,6 @@ public class Chunk {
         return index(nx, ny, nz);
     }
 
-    // Read by packed index. Storage is index-addressed underneath, so a caller already holding an
-    // index shouldn't have to decode to three coordinates just to let index() re-pack them.
-    protected Block getBlock(int index) {
-        return Block.fromId(blocks[index]);
-    }
-
     public ChunkState getState() {
         return state.get(); // volatile read - always sees the latest write
     }
@@ -102,7 +123,27 @@ public class Chunk {
     }
 
     public byte[] serialize() {
+        byte[] blocks = new byte[sections.length * ChunkSection.BLOCK_COUNT];
+        int offset = 0;
+        for (ChunkSection section : sections) {
+            if (section == null) {
+                for (int i = 0; i < ChunkSection.BLOCK_COUNT; i++) blocks[offset++] = Block.AIR.id();
+            } else {
+                for (int i = 0; i < ChunkSection.BLOCK_COUNT; i++) blocks[offset++] = section.get(i);
+            }
+        }
         return blocks;
+    }
+
+    private static ChunkSection[] deserialize(byte[] blocks) {
+        ChunkSection[] sections = new ChunkSection[blocks.length / ChunkSection.BLOCK_COUNT];
+        int offset = 0;
+        for (int i = 0; i < sections.length; i++) {
+            ChunkSection section = new ChunkSection();
+            for (int j = 0; j < ChunkSection.BLOCK_COUNT; j++) section.set(j, blocks[offset++]);
+            sections[i] = section.isEmpty() ? null : section;
+        }
+        return sections;
     }
 
     public void setLightData(LightMap next) {
