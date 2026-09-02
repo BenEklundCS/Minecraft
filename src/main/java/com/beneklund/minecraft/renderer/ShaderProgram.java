@@ -47,8 +47,10 @@ public class ShaderProgram {
         return true;
     }
 
-    public void apply(Map<String, UniformValue<?>> frame, Map<String, UniformValue<?>> call) {
-        shader.apply(frame, call);
+    // Bind first — glUniform* writes into whichever program is active, not the one this object
+    // wraps. Safe to call on every draw: GlShader's own frame guard is what makes it once.
+    public void apply(long frame, Map<String, UniformValue<?>> uniforms) {
+        shader.apply(frame, uniforms);
     }
 
     public String readSource(String path) {

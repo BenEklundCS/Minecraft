@@ -11,9 +11,7 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 import com.beneklund.minecraft.util.EngineStats;
 import java.nio.FloatBuffer;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
@@ -37,9 +35,10 @@ public final class GlShader {
     private final String fragmentShaderSource;
     private int vertexShader;
     private int fragmentShader;
+    // -1 rather than 0: frame ordinals start at 1, and a program must upload once before it can
+    // skip. A reloaded program is a new GlShader, so this resets itself on F5.
+    private long uniformsUploadedForFrame = -1;
 
-    // tracking of complained about uniforms so a supplier logs once
-    private final Set<String> warned = new HashSet<>();
     private final Map<String, ActiveUniform> activeUniforms = new HashMap<>();
 
     private record ActiveUniform(String name, int location, int type) {}
@@ -55,19 +54,21 @@ public final class GlShader {
         glUseProgram(programId);
     }
 
-    public void apply(Map<String, UniformValue<?>> frame, Map<String, UniformValue<?>> call) {
+    // Uploads every driven uniform this program declares. Safe to call on every draw: frame is the
+    // render-loop counter, and a second call with the same value returns immediately, so the guard
+    // below is what makes it once per program per frame rather than the caller remembering to.
+    public void apply(long frame, Map<String, UniformValue<?>> uniforms) {
+        if (frame == uniformsUploadedForFrame) return;
+        uniformsUploadedForFrame = frame;
+
         for (ActiveUniform uniform : activeUniforms.values()) {
             if (!drivenByFrameUniforms(uniform.type())) continue;
-            UniformValue<?> value = call.get(uniform.name());
-            if (value == null) value = frame.get(uniform.name());
-            if (value == null) {
-                if (warned.add(uniform.name())) {
-                    GPU.warn("program {} declares {} but nothing supplies it", programId, uniform.name());
-                }
-                continue;
-            }
+            UniformValue<?> value = uniforms.get(uniform.name());
+            // Not an error. A uniform the frame map has no entry for is how a per-call uniform is
+            // told apart from a frame one - uModel is declared by both programs and supplied by
+            // neither map, because submit() sets it per draw.
+            if (value == null) continue;
             upload(uniform.location(), value);
-            EngineStats.countUniformUpload();
         }
     }
 
@@ -79,24 +80,28 @@ public final class GlShader {
         int location = location(name);
         if (location < 0) return;
         glUniform1i(location, value);
+        EngineStats.countUniformUpload();
     }
 
     public void setFloat(String name, float value) {
         int location = location(name);
         if (location < 0) return;
         glUniform1f(location, value);
+        EngineStats.countUniformUpload();
     }
 
     public void setVec2(String name, float x, float y) {
         int location = location(name);
         if (location < 0) return;
         glUniform2f(location, x, y);
+        EngineStats.countUniformUpload();
     }
 
     public void setVec3(String name, Vector3f vec3) {
         int location = location(name);
         if (location < 0) return;
         glUniform3f(location, vec3.x(), vec3.y(), vec3.z());
+        EngineStats.countUniformUpload();
     }
 
     // Uploads a 4x4 matrix into a mat4 uniform. The program must be bound (use()) first - glUniform*
@@ -112,6 +117,7 @@ public final class GlShader {
             FloatBuffer buffer = stack.mallocFloat(16);
             matrix.get(buffer);
             glUniformMatrix4fv(location, false, buffer);
+            EngineStats.countUniformUpload();
         }
     }
 
@@ -128,6 +134,7 @@ public final class GlShader {
                 }
             }
         }
+        EngineStats.countUniformUpload();
     }
 
     private static boolean drivenByFrameUniforms(int glType) {

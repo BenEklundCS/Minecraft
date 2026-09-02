@@ -44,14 +44,17 @@ public class CloudRenderer {
      * nothing to sort against. The clouds end up behind terrain anyway, because the sky pass that
      * reads this buffer draws before any of it.
      */
-    public void draw(GlFramebuffer target, Map<String, UniformValue<?>> frameUniforms) {
+    // frame is the render-loop ordinal, threaded in only so apply() can tell one frame from the
+    // next. This pass draws once per frame, so the guard inside GlShader never actually fires here —
+    // it is passed for the same reason every other program gets it, not because this one needs it.
+    public void draw(GlFramebuffer target, long frame, Map<String, UniformValue<?>> frameUniforms) {
         target.bind();
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
         glDisable(GL_BLEND);
 
         shader.bind();
-        shader.apply(frameUniforms, Map.of());
+        shader.apply(frame, frameUniforms);
         mesh.render();
     }
 

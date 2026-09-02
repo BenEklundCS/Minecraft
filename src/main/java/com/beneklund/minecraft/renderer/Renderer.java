@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.IntSupplier;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -72,7 +73,6 @@ public class Renderer {
     private final Matrix4f viewRotation = new Matrix4f();
     private final Matrix4f invViewRotation = new Matrix4f();
     private final Matrix4f invViewProj = new Matrix4f();
-    private final Matrix4f modelScratch = new Matrix4f();
     // Unit 0 is the block atlas, bound by submit() from the DrawCall. The shadow map needs a unit
     // of its own or the depth lookup samples the atlas instead — samplers cannot ride in
     // frameUniforms, because UniformValue is sealed over float/vec3/mat4 with no int variant.
@@ -84,6 +84,19 @@ public class Renderer {
     private static final int CLOUD_TEXTURE_UNIT = 2;
 
     private final Map<String, UniformValue<?>> frameUniforms = new HashMap<>();
+
+    /*
+     * What submit() last bound, so a run of calls sharing a program and an atlas costs one bind
+     * instead of one per draw. The chunk calls arrive in one run from ChunkRenderer, so in practice
+     * this collapses 1,157 opaque binds to one.
+     *
+     * null means "unknown, bind whatever comes next". Both are cleared at the top of every pass,
+     * and that is not belt-and-braces: CloudRenderer, PostProcessor and the HUD shaders all bind
+     * programs and textures of their own between passes, so a guard carried across a pass boundary
+     * would skip a bind that is genuinely needed and draw with whatever they left behind.
+     */
+    private ShaderProgram boundShader;
+    private Optional<TextureAtlas> boundAtlas;
 
     // Collected by drawScene, filtered again by drawHud. Render-thread-only, like everything here.
     private final List<DrawCall> calls = new ArrayList<>();
@@ -249,7 +262,7 @@ public class Renderer {
         // write to different buffers and neither reads the other — but both must be finished
         // before the target below is bound, because each one binds a framebuffer of its own.
         beginPass(TIMER_CLOUDS);
-        cloudRenderer.draw(cloudBuffer, frameUniforms);
+        cloudRenderer.draw(cloudBuffer, frame, frameUniforms);
         endPass(TIMER_CLOUDS);
 
         // Back to the scene target the shadow pass just took us away from. This is why drawScene
@@ -267,6 +280,8 @@ public class Renderer {
         glEnable(GL_CULL_FACE);
         glDepthMask(true);
         glDisable(GL_BLEND);
+        bindSharedTextures();
+        beginBindTracking();
         beginPass(TIMER_OPAQUE);
         for (DrawCall call : calls) if (call.pass() == RenderPass.OPAQUE) submit(call, camera);
         endPass(TIMER_OPAQUE);
@@ -278,6 +293,8 @@ public class Renderer {
         glDepthMask(false);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        bindSharedTextures();
+        beginBindTracking();
         beginPass(TIMER_TRANSPARENT);
         for (DrawCall call : calls) if (call.pass() == RenderPass.TRANSPARENT) submit(call, camera);
         endPass(TIMER_TRANSPARENT);
@@ -302,6 +319,12 @@ public class Renderer {
         // acne comes from. Works cleanly here because terrain is closed solid geometry; it would
         // break on single-sided planes, which this renderer does not produce.
         glCullFace(GL_FRONT);
+
+        // No bindSharedTextures here, unlike the scene passes. shadow.vert and shadow.frag declare
+        // no samplers, and unit 1 holds this very depth texture — binding it for reading while
+        // rendering into one of its layers is a feedback loop. It was harmless before only because
+        // nothing sampled it; not creating it is better than relying on that.
+        beginBindTracking();
 
         /*
          * Once per cascade — but only if anything it depends on moved.
@@ -336,10 +359,22 @@ public class Renderer {
 
             // shadow.vert takes one matrix under its own name rather than reading the array
             // chunk.frag uses — a vertex shader has no cascade to select, it IS the cascade.
-            frameUniforms.put("uCascadeViewProj", new UniformValue.M4(current));
-
+            //
+            // It cannot ride in frameUniforms any more. apply() uploads a program's frame
+            // uniforms on the first draw that uses it and no-ops for the rest of the frame, so
+            // cascades 1 and 2 would silently draw with cascade 0's matrix — casters projected from
+            // the wrong place, on exactly the frames that redraw. Setting it straight on the program
+            // holds because uniform values are program state: they survive the rebind submit() does
+            // per call, so one upload per cascade covers every caster in it.
+            boolean cascadeMatrixSet = false;
             for (DrawCall call : calls) {
-                if (call.pass() == RenderPass.SHADOW && call.castsInto(cascade)) submit(call, camera);
+                if (call.pass() != RenderPass.SHADOW || !call.castsInto(cascade)) continue;
+                if (!cascadeMatrixSet) {
+                    bindProgram(call.shader());
+                    call.shader().setUniformMat4("uCascadeViewProj", current);
+                    cascadeMatrixSet = true;
+                }
+                submit(call, camera);
             }
         }
         glCullFace(GL_BACK);
@@ -377,6 +412,8 @@ public class Renderer {
         glDepthMask(true);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        bindSharedTextures();
+        beginBindTracking();
         for (DrawCall call : calls) if (call.pass() == RenderPass.HUD) submit(call, camera);
 
         // Restore sane defaults for the next frame.
@@ -405,7 +442,6 @@ public class Renderer {
         frameUniforms.put("uE", new UniformValue.V3(coefficientE));
         frameUniforms.put("uZenith", new UniformValue.V3(skyZenith));
         frameUniforms.put("uZenithF", new UniformValue.V3(skyZenithF));
-        frameUniforms.put("uModel", new UniformValue.M4(modelScratch));
         frameUniforms.put("uExtinction", new UniformValue.F(EXTINCTION));
         frameUniforms.put("uCameraPos", new UniformValue.V3(camera.getPosition()));
         frameUniforms.put("uCameraNear", new UniformValue.F(Camera.NEAR_PLANE));
@@ -429,26 +465,61 @@ public class Renderer {
     }
 
     private void submit(DrawCall call, Camera camera) {
-        if (call.atlas().isPresent()) call.atlas().get().bind();
-        else glBindTexture(GL_TEXTURE_2D, 0);
-        modelScratch.set(call.transform());
-        call.shader().bind();
+        // Optional.equals compares the contained atlas by identity, which is what is wanted: two
+        // draws carrying the same atlas object need one bind, and null (start of a pass) matches
+        // neither present nor empty, so the first call in a pass always binds.
+        if (!call.atlas().equals(boundAtlas)) {
+            if (call.atlas().isPresent()) call.atlas().get().bind();
+            else glBindTexture(GL_TEXTURE_2D, 0);
+            boundAtlas = call.atlas();
+        }
+        bindProgram(call.shader());
 
-        // Bound per call because the shader changes per call and the sampler uniform lives on the
-        // program. setUniformInt is a no-op for shaders that do not declare it — GlShader.location
-        // returns -1 and the setter bails — so this costs one glUniform1i on chunk.frag alone.
-        //
-        // Both binds return the active unit to 0 before anything else runs. That is global state,
-        // and the atlas bind at the top of the next submit goes to whatever unit was left active.
+        // The only uniform that genuinely differs between two draws in the same frame. Everything
+        // else the program declares is frame-constant and went up in bindProgram's apply.
+        call.shader().setUniformMat4("uModel", call.transform());
+        call.mesh().render();
+    }
+
+    /*
+     * Binds a program and does everything that is per-program-per-frame rather than per-draw: its
+     * frame uniforms, and the two sampler units.
+     *
+     * The samplers are set on a program change rather than once at link time because a program is
+     * replaced wholesale by reload() — an F5 that rebuilt chunk.frag and left its samplers pointing
+     * at unit 0 would sample the atlas as a shadow map. Two glUniform1i per program change is not
+     * worth being clever about. setUniformInt is a no-op for a program that declares neither.
+     */
+    private void bindProgram(ShaderProgram shader) {
+        if (shader == boundShader) return;
+        shader.bind();
+        shader.setUniformInt("uShadowMap", SHADOW_TEXTURE_UNIT);
+        shader.setUniformInt("uCloudBuffer", CLOUD_TEXTURE_UNIT);
+        // Bind first, then upload: glUniform* writes into the active program. GlShader's own guard
+        // makes this once per frame however many times it is reached.
+        shader.apply(frame, frameUniforms);
+        boundShader = shader;
+    }
+
+    /*
+     * The two textures every scene program reads, on their own units for the whole pass. They are
+     * the same two objects all frame, so binding them per draw was 4,281 GL calls to arrive at the
+     * state that was already set.
+     *
+     * Leaves the active unit on 0, which is load-bearing: glActiveTexture is global state and the
+     * atlas bind in submit() goes to whatever unit was left selected.
+     */
+    private void bindSharedTextures() {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D_ARRAY, shadowBuffer.depthTexture());
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, cloudBuffer.colorTexture());
         glActiveTexture(GL_TEXTURE0);
-        call.shader().setUniformInt("uShadowMap", SHADOW_TEXTURE_UNIT);
-        call.shader().setUniformInt("uCloudBuffer", CLOUD_TEXTURE_UNIT);
+    }
 
-        call.shader().apply(frameUniforms, call.uniforms());
-        call.mesh().render();
+    // Every pass starts with no assumption about what is bound — see the fields.
+    private void beginBindTracking() {
+        boundShader = null;
+        boundAtlas = null;
     }
 }
