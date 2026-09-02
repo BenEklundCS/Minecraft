@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class Chunk {
     public static final int SIZE_XZ = 16;
     public static final int SIZE_Y = 256;
-    private ChunkSection[] sections = new ChunkSection[SIZE_Y / ChunkSection.SIZE];
+    private final ChunkSection[] sections = new ChunkSection[sectionCount()];
     private volatile LightMap light = null;
     private final AtomicReference<ChunkState> state = new AtomicReference<>(ChunkState.UNLOADED);
     // Tracks "has edits not yet written to disk" separately from the mesh-state machine,
@@ -18,7 +18,10 @@ public class Chunk {
     public Chunk() {}
 
     public Chunk(byte[] blocks) {
-        sections = deserialize(blocks);
+        if (blocks.length % ChunkSection.BLOCK_COUNT != 0) {
+            throw new IllegalArgumentException("chunk blocks must be a whole number of sections, got " + blocks.length);
+        }
+        deserialize(blocks);
     }
 
     public Block getBlock(int index) {
@@ -30,16 +33,14 @@ public class Chunk {
     }
 
     private Block getBlockImpl(int index) {
-        return Block.fromId(sectionFor(index)
-                .map(s -> s.get(index % ChunkSection.BLOCK_COUNT))
-                .orElse(Block.AIR.id()));
+        return Block.fromId(sectionFor(index).map(s -> s.get(offsetIn(index))).orElse(Block.AIR.id()));
     }
 
     public void setBlock(int x, int y, int z, Block block) {
         int index = index(x, y, z);
         Optional<ChunkSection> existing = sectionFor(index);
         if (existing.isEmpty() && block == Block.AIR) return;
-        existing.orElseGet(() -> allocateSection(index)).set(index % ChunkSection.BLOCK_COUNT, block.id());
+        existing.orElseGet(() -> allocateSection(index)).set(offsetIn(index), block.id());
         needsPersisting = true;
     }
 
@@ -55,16 +56,20 @@ public class Chunk {
     // doesn't re-check before overwriting.
     private ChunkSection allocateSection(int index) {
         ChunkSection s = new ChunkSection();
-        sections[index / ChunkSection.BLOCK_COUNT] = s;
+        sections[sectionOf(index)] = s;
         return s;
     }
 
     private Optional<ChunkSection> sectionFor(int index) {
-        return Optional.ofNullable(sections[index / ChunkSection.BLOCK_COUNT]);
+        return Optional.ofNullable(sections[sectionOf(index)]);
     }
 
-    // Blocks in a chunk, and the length of a serialize() payload. Also the size of a LightMap,
-    // which is a flat array addressed by index()
+    public boolean sectionEmptyAt(int y) {
+        return sectionFor(index(0, y, 0)).map(ChunkSection::isEmpty).orElse(true);
+    }
+
+    // Blocks in a chunk, and the length of a serialize() payload. Also what a LightMap covers,
+    // though it stores those cells per section rather than as one flat array.
     public static int size() {
         return SIZE_XZ * SIZE_XZ * SIZE_Y; // 16 * 16 * 256 == 65,536 == sections.length * BLOCK_COUNT
     }
@@ -83,6 +88,18 @@ public class Chunk {
 
     protected static int z(int index) {
         return (index / SIZE_XZ) % SIZE_XZ;
+    }
+
+    protected static int sectionOf(int index) {
+        return index / ChunkSection.BLOCK_COUNT;
+    }
+
+    protected static int offsetIn(int index) {
+        return index % ChunkSection.BLOCK_COUNT;
+    }
+
+    protected static int sectionCount() {
+        return SIZE_Y / ChunkSection.SIZE;
     }
 
     public static boolean inBounds(int x, int y, int z) {
@@ -135,15 +152,13 @@ public class Chunk {
         return blocks;
     }
 
-    private static ChunkSection[] deserialize(byte[] blocks) {
-        ChunkSection[] sections = new ChunkSection[blocks.length / ChunkSection.BLOCK_COUNT];
+    private void deserialize(byte[] blocks) {
         int offset = 0;
         for (int i = 0; i < sections.length; i++) {
             ChunkSection section = new ChunkSection();
             for (int j = 0; j < ChunkSection.BLOCK_COUNT; j++) section.set(j, blocks[offset++]);
             sections[i] = section.isEmpty() ? null : section;
         }
-        return sections;
     }
 
     public void setLightData(LightMap next) {

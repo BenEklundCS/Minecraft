@@ -3,6 +3,7 @@ package com.beneklund.minecraft.world;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.util.Direction;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Deque;
 
 public class LightEngine {
@@ -34,7 +35,7 @@ public class LightEngine {
     }
 
     public LightMap compute(ChunkWithNeighbors cn) {
-        LightMap lightMap = new LightMap(Chunk.size());
+        LightMap lightMap = new LightMap();
         Chunk chunk = cn.center();
         Deque<Integer> sky = new ArrayDeque<>();
         computeSkyColumnPass(cn, lightMap, sky);
@@ -45,29 +46,63 @@ public class LightEngine {
         computeBlocksPass(chunk, lightMap, block);
         computeAcrossChunksPass(cn, lightMap, block, Channel.BLOCK);
         computePropagationPass(chunk, lightMap, block, Channel.BLOCK);
+        // Every write above materialized whatever section it touched. Fold back the ones that ended
+        // up a single value — open sky over terrain, unlit rock — now that nothing else will write.
+        lightMap.compact();
         return lightMap;
     }
 
-    private void computeSkyColumnPass(ChunkWithNeighbors cn, LightMap map, Deque<Integer> propagationQueue) {
-        for (int x = 0; x < Chunk.SIZE_XZ; x++) {
-            for (int z = 0; z < Chunk.SIZE_XZ; z++) {
-                int y = Chunk.SIZE_Y - 1;
-                while (y >= 0 && !registry.get(cn.blockAt(x, y, z)).opaque()) {
-                    int index = Chunk.index(x, y, z);
-                    propagationQueue.add(index);
-                    map.setSky(index, LightMap.MAX_LEVEL);
-                    y--;
+    private void computeSkyColumnPass(ChunkWithNeighbors cn, LightMap map, Deque<Integer> queue) {
+        boolean[] open = new boolean[Chunk.SIZE_XZ * Chunk.SIZE_XZ];
+        Arrays.fill(open, true);
+        int openColumns = open.length;
+
+        for (int s = Chunk.sectionCount() - 1; s >= 0; s--) {
+            int base = s * ChunkSection.SIZE; // lowest y in this section
+
+            // All air, and nothing above it has closed a single column yet, so every cell is level 15.
+            // Store that as the section's uniform value: no array, no per-cell walk. Only the floor row
+            // goes on the queue — every other face of the section borders cells that are already at
+            // MAX_LEVEL, so propagating from them could only hand out a level nobody would take.
+            //
+            // openColumns is the whole guard. An empty section under a roof is still all air, and
+            // filling it would light the underside of every overhang — a bug you cannot see at noon.
+            if (openColumns == open.length && cn.center().sectionEmptyAt(base)) {
+                map.fillSky(s, LightMap.MAX_LEVEL);
+                for (int x = 0; x < Chunk.SIZE_XZ; x++) {
+                    for (int z = 0; z < Chunk.SIZE_XZ; z++) queue.add(Chunk.index(x, base, z));
+                }
+                continue;
+            }
+
+            for (int x = 0; x < Chunk.SIZE_XZ; x++) {
+                for (int z = 0; z < Chunk.SIZE_XZ; z++) {
+                    int column = x + z * Chunk.SIZE_XZ;
+                    if (!open[column]) continue;
+                    for (int y = base + ChunkSection.SIZE - 1; y >= base; y--) {
+                        if (registry.get(cn.blockAt(x, y, z)).opaque()) {
+                            open[column] = false;
+                            openColumns--;
+                            break;
+                        }
+                        int index = Chunk.index(x, y, z);
+                        queue.add(index);
+                        map.setSky(index, LightMap.MAX_LEVEL);
+                    }
                 }
             }
         }
     }
 
     private void computeBlocksPass(Chunk c, LightMap map, Deque<Integer> queue) {
-        for (int i = 0; i < Chunk.size(); i++) {
-            int level = registry.get(c.getBlock(i)).lightLevel();
-            if (level > 0) {
-                map.setBlock(i, level);
-                queue.add(i);
+        for (int base = 0; base < Chunk.size(); base += ChunkSection.BLOCK_COUNT) {
+            if (c.sectionEmptyAt(Chunk.y(base))) continue;
+            for (int i = base; i < base + ChunkSection.BLOCK_COUNT; i++) {
+                int level = registry.get(c.getBlock(i)).lightLevel();
+                if (level > 0) {
+                    map.setBlock(i, level);
+                    queue.add(i);
+                }
             }
         }
     }

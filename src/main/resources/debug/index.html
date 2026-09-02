@@ -219,6 +219,25 @@
   .v.bad  { color: var(--redstone); }
   .v.none { color: var(--text-faint); }
 
+  /* Delta against the stored baseline. Reserves its line whether or not a baseline exists, so
+     capturing one doesn't shove the panel down half a row. */
+  .metric .d {
+    font-size: 10px; font-variant-numeric: tabular-nums; letter-spacing: .04em;
+    margin-top: 3px; min-height: 13px; color: var(--text-faint); white-space: nowrap;
+  }
+  .d.better { color: var(--grass); }
+  .d.worse  { color: var(--redstone); }
+  .d.same   { color: var(--text-faint); }
+
+  /* The stored baseline's identity line. Gold because it is state the page is holding on to —
+     a number on screen that came from a different build is the one thing here that can mislead. */
+  .baseline {
+    margin-top: 9px; padding: 6px 8px; font-size: 10px; line-height: 1.6;
+    background: var(--panel-2); border-left: 2px solid var(--gold); color: var(--text-dim);
+  }
+  .baseline b { color: var(--text); font-weight: 600; }
+  .baseline em { font-style: normal; color: var(--text-faint); }
+
   canvas#spark {
     display: block;
     width: 100%;
@@ -392,9 +411,9 @@
       <h2>frame time <span class="tag" id="tag-stats">probing…</span></h2>
       <div class="body">
         <div class="metrics">
-          <div class="metric"><div class="k">p50</div><div class="v none" id="m-p50">—</div></div>
-          <div class="metric"><div class="k">p99</div><div class="v none" id="m-p99">—</div></div>
-          <div class="metric"><div class="k">max</div><div class="v none" id="m-max">—</div></div>
+          <div class="metric"><div class="k">p50</div><div class="v none" id="m-p50">—</div><div class="d" id="d-p50"></div></div>
+          <div class="metric"><div class="k">p99</div><div class="v none" id="m-p99">—</div><div class="d" id="d-p99"></div></div>
+          <div class="metric"><div class="k">max</div><div class="v none" id="m-max">—</div><div class="d" id="d-max"></div></div>
         </div>
         <canvas id="spark"></canvas>
         <div class="legend">
@@ -406,7 +425,10 @@
         <div class="row">
           <button class="ghost" id="btn-clear">clear graph</button>
           <button class="ghost" id="btn-copy">copy row</button>
+          <button class="ghost" id="btn-baseline">set baseline</button>
+          <button class="ghost" id="btn-baseline-clear">drop baseline</button>
         </div>
+        <div class="baseline" id="baseline-box" style="display:none"></div>
         <div class="hint" id="stats-hint" style="display:none">
           <code>/stats</code> is not wired yet — DG-17 Stage 2. This panel expects
           <code>text/plain</code>, one <code>key=value</code> per line
@@ -778,11 +800,107 @@ function applyStats(s) {
   if (isFinite(entries)) peakEntries = isFinite(peakEntries) ? Math.max(peakEntries, entries) : entries;
   setCount($("c-entries-peak"), peakEntries);
 
+  renderDeltas(s);
+
   if (isFinite(p50)) history.p50.push(p50);
   if (isFinite(p99)) history.p99.push(p99);
   while (history.p50.length > SPARK_HISTORY) history.p50.shift();
   while (history.p99.length > SPARK_HISTORY) history.p99.shift();
   drawSpark();
+}
+
+/* ---------- baseline ----------
+   /bench makes two runs the same run. It does not make them comparable on their own — that needs
+   the first run to still be on screen when the second one lands, and nothing here used to keep it.
+   The loop was: copy a markdown row, change the code, restart, compare against another window.
+
+   A baseline is that first row, held in localStorage, so the second run renders its own delta.
+
+   The whole stats object is stored, not the three numbers on display. Draw calls and chunk counts
+   are how you tell a real win from a scene that quietly got smaller between runs, and a baseline
+   that dropped them cannot answer that question later. */
+
+const NOISE_PCT = 2.0; // below this two runs of the *same* build disagree anyway — don't colour it
+
+let baseline = loadBaseline();
+
+function loadBaseline() {
+  try {
+    const raw = recall("baseline", "");
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null; // corrupt or half-written from an older schema: behave as if there is none
+  }
+}
+
+function fmtMs(v) {
+  return isFinite(v) ? v.toFixed(2) + " ms" : "—";
+}
+
+function captureBaseline() {
+  if (!state.lastStats) { log("baseline not set — /stats has not answered yet", "wa"); return; }
+  if (warmupLeft > 0) { log("baseline not set — warmup has " + warmupLeft + "s left", "wa"); return; }
+  baseline = { at: new Date().toISOString(), stats: state.lastStats };
+  store("baseline", JSON.stringify(baseline));
+  log("baseline set — " + fmtMs(pick(baseline.stats, "p50")) + " p50, "
+      + fmtMs(pick(baseline.stats, "p99")) + " p99", "ok");
+  renderBaselineBox();
+  renderDeltas(state.lastStats);
+}
+
+function dropBaseline() {
+  if (!baseline) { log("no baseline to drop", "di"); return; }
+  baseline = null;
+  store("baseline", "");
+  renderBaselineBox();
+  renderDeltas(state.lastStats);
+  log("baseline dropped", "di");
+}
+
+// Lower is better for every number this panel shows — milliseconds and draw calls alike — so one
+// direction test covers all of them. A missing number on either side prints nothing rather than
+// zero, for the same reason gpuShadowMs reports -1: "didn't run" and "ran instantly" are different.
+// The percentage goes on screen and the absolute goes in the tooltip, because a metric column is
+// three to a 250px rail and "−3.15 ms (−22%)" wraps to two lines there — which moves the panel
+// every time a baseline is set. The exact milliseconds are still one hover away, and "copy row"
+// writes them out in full.
+function renderDelta(el, now, before, unit) {
+  if (!isFinite(now) || !isFinite(before)) {
+    el.textContent = "";
+    el.className = "d";
+    el.removeAttribute("title");
+    return;
+  }
+  const diff = now - before;
+  const pct = before === 0 ? (diff === 0 ? 0 : Infinity) : (diff / before) * 100;
+  const sign = diff > 0 ? "+" : diff < 0 ? "−" : "±";
+  const magnitude = unit === "ms" ? Math.abs(diff).toFixed(2) : Math.round(Math.abs(diff)).toLocaleString();
+  el.textContent = isFinite(pct) ? sign + Math.abs(pct).toFixed(0) + "%" : sign + magnitude;
+  el.title = sign + magnitude + (unit === "ms" ? " ms" : "") + " vs baseline";
+  el.className = "d " + (Math.abs(pct) < NOISE_PCT ? "same" : diff < 0 ? "better" : "worse");
+}
+
+function renderDeltas(s) {
+  const b = baseline ? baseline.stats : null;
+  renderDelta($("d-p50"), pick(s, "p50"), pick(b, "p50"), "ms");
+  renderDelta($("d-p99"), pick(s, "p99"), pick(b, "p99"), "ms");
+  renderDelta($("d-max"), pick(s, "max"), pick(b, "max"), "ms");
+}
+
+function renderBaselineBox() {
+  const box = $("baseline-box");
+  if (!baseline) { box.style.display = "none"; box.innerHTML = ""; return; }
+  const b = baseline.stats;
+  box.style.display = "";
+  box.innerHTML =
+    "<b>baseline</b> " + new Date(baseline.at).toLocaleString()
+    + " · " + fmtMs(pick(b, "p50")) + " p50"
+    + " · " + fmtMs(pick(b, "p99")) + " p99"
+    + " · " + count(pick(b, "count")) + " samples<br>"
+    + "<em>" + count(pick(b, "opaqueDrawCalls")) + "o / " + count(pick(b, "transparentDrawCalls")) + "t / "
+    + count(pick(b, "shadowDrawCalls")) + "s draws · "
+    + count(pick(b, "chunksDrawn")) + " chunks drawn · "
+    + "only a comparison at the same pose and time of day</em>";
 }
 
 /* ---------- sparkline ---------- */
@@ -902,6 +1020,10 @@ $("t-75").addEventListener("click", () => sendTime(0.75));
    so the emulated run says so instead of quietly measuring a log full of pre-teleport frames. */
 
 let warmupTimer = null;
+// Module scope rather than a local, because "set baseline" has to be able to refuse while this is
+// still counting down. A baseline captured during warmup is a chunk-streaming number wearing a
+// steady-state label, and it makes the next build look better than it is.
+let warmupLeft = 0;
 
 async function runBench() {
   for (const key of ["x", "y", "z", "yaw", "pitch"]) store("bench." + key, $("b-" + key).value);
@@ -937,17 +1059,17 @@ async function runBench() {
   history.p99.length = 0;
   drawSpark();
 
-  let left = WARMUP_SECONDS;
+  warmupLeft = WARMUP_SECONDS;
   clearInterval(warmupTimer);
-  $("warmup").textContent = "warmup " + left + "s";
+  $("warmup").textContent = "warmup " + warmupLeft + "s";
   warmupTimer = setInterval(() => {
-    left--;
-    if (left <= 0) {
+    warmupLeft--;
+    if (warmupLeft <= 0) {
       clearInterval(warmupTimer);
       $("warmup").textContent = "";
       log("warmup complete — numbers are comparable from here", "ok");
     } else {
-      $("warmup").textContent = "warmup " + left + "s";
+      $("warmup").textContent = "warmup " + warmupLeft + "s";
     }
   }, 1000);
 }
@@ -963,22 +1085,56 @@ $("btn-clear").addEventListener("click", () => {
 });
 
 // DG-17 Stage 5 wants these numbers pasted into a markdown table, so hand them over in that shape.
+// With a baseline stored this copies three rows instead of one — before, after, and the difference —
+// in the same columns, so it drops into the same table without changing its shape.
+
+const ms = v => (isFinite(v) ? v.toFixed(2) : "—");
+const n = v => (isFinite(v) ? String(v) : "—");
+
+function statsRow(label, s) {
+  return "| " + label +
+         " | " + ms(pick(s, "p50")) + " | " + ms(pick(s, "p99")) + " | " + ms(pick(s, "max")) +
+         " | " + n(pick(s, "opaqueDrawCalls")) + " | " + n(pick(s, "transparentDrawCalls")) +
+         " | " + n(pick(s, "shadowDrawCalls")) + " | " + n(pick(s, "hudDrawCalls")) +
+         " | " + n(pick(s, "uniformUploads")) +
+         " | " + n(pick(s, "chunksDrawn")) + " / " + n(pick(s, "chunksConsidered")) +
+         " | " + n(pick(s, "renderWorldEntries")) + " |";
+}
+
+// Signed difference, or an em dash when either side is missing — never a zero standing in for
+// "one of these runs didn't report it".
+function deltaRow(now, before) {
+  const d = (name, fmt) => {
+    const a = pick(now, name), b = pick(before, name);
+    if (!isFinite(a) || !isFinite(b)) return "—";
+    const diff = a - b;
+    return (diff > 0 ? "+" : diff < 0 ? "−" : "±") + fmt(Math.abs(diff));
+  };
+  const dms = name => d(name, v => v.toFixed(2));
+  const dn = name => d(name, v => String(Math.round(v)));
+  return "| **delta** | " + dms("p50") + " | " + dms("p99") + " | " + dms("max") +
+         " | " + dn("opaqueDrawCalls") + " | " + dn("transparentDrawCalls") +
+         " | " + dn("shadowDrawCalls") + " | " + dn("hudDrawCalls") +
+         " | " + dn("uniformUploads") +
+         " | " + dn("chunksDrawn") + " / " + dn("chunksConsidered") +
+         " | " + dn("renderWorldEntries") + " |";
+}
+
 $("btn-copy").addEventListener("click", () => {
   const s = state.lastStats;
   if (!s) { log("nothing to copy — /stats has not answered", "wa"); return; }
-  const ms = v => (isFinite(v) ? v.toFixed(2) : "—");
-  const n = v => (isFinite(v) ? String(v) : "—");
-  const row = "| " + new Date().toISOString() +
-              " | " + ms(pick(s, "p50")) + " | " + ms(pick(s, "p99")) + " | " + ms(pick(s, "max")) +
-              " | " + n(pick(s, "opaqueDrawCalls")) + " | " + n(pick(s, "transparentDrawCalls")) +
-              " | " + n(pick(s, "shadowDrawCalls")) + " | " + n(pick(s, "hudDrawCalls")) +
-              " | " + n(pick(s, "uniformUploads")) +
-              " | " + n(pick(s, "chunksDrawn")) + " / " + n(pick(s, "chunksConsidered")) +
-              " | " + n(pick(s, "renderWorldEntries")) + " |";
-  navigator.clipboard.writeText(row)
-    .then(() => log("copied: " + row, "ok"))
-    .catch(() => log(row, "di"));
+  const text = baseline
+    ? [statsRow("baseline " + baseline.at, baseline.stats),
+       statsRow("current " + new Date().toISOString(), s),
+       deltaRow(s, baseline.stats)].join("\n")
+    : statsRow(new Date().toISOString(), s);
+  navigator.clipboard.writeText(text)
+    .then(() => log("copied " + (baseline ? "3 rows (baseline / current / delta)" : text), "ok"))
+    .catch(() => log(text, "di"));
 });
+
+$("btn-baseline").addEventListener("click", captureBaseline);
+$("btn-baseline-clear").addEventListener("click", dropBaseline);
 
 /* ---------- bench availability ----------
    There is deliberately no probe here. /bench is a command, not a document: asking whether it
@@ -1005,6 +1161,7 @@ document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.ctrlKey || e.metaKey || e.altKey) return;
   switch (e.key.toLowerCase()) {
     case "b": runBench(); break;
+    case "s": captureBaseline(); break;
     case "p":
       state.paused = !state.paused;
       $("chip-paused").style.display = state.paused ? "" : "none";
@@ -1032,7 +1189,12 @@ $("bench-hint").innerHTML =
   "Teleports to the server's <code>BENCH_POSE</code>, sets midday, and resets the frame log. "
   + "The pose fields below are only used if the endpoint is missing.";
 state.benchUp = true;
+renderBaselineBox();
+renderDeltas(null);
 log("spyglass up — polling /frame.png, /stats", "di");
+// A baseline outlives the page, so say out loud which run is being compared against. A delta
+// measured against a number from three days and four commits ago is the failure mode here.
+if (baseline) log("baseline recalled from " + new Date(baseline.at).toLocaleString(), "wa");
 pollFrame();
 pollStats();
 </script>

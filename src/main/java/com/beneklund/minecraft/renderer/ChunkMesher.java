@@ -7,10 +7,7 @@ import com.beneklund.minecraft.platform.graphics.Geometry;
 import com.beneklund.minecraft.platform.graphics.VertexFormat;
 import com.beneklund.minecraft.util.Color;
 import com.beneklund.minecraft.util.Direction;
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkPos;
-import com.beneklund.minecraft.world.ChunkWithNeighbors;
-import com.beneklund.minecraft.world.LightMap;
+import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.Biome;
 import java.util.List;
 
@@ -96,9 +93,13 @@ public class ChunkMesher {
         ChunkMeshingBuffer opaque = getBuffer();
         ChunkMeshingBuffer transparent = getBuffer();
 
-        for (int x = 0; x < Chunk.SIZE_XZ; x++) {
-            for (int y = 0; y < Chunk.SIZE_Y; y++) {
-                for (int z = 0; z < Chunk.SIZE_XZ; z++) {
+        for (int y = 0; y < Chunk.SIZE_Y; y++) {
+            if (cn.center().sectionEmptyAt(y)) {
+                y += ChunkSection.SIZE - 1; // skip to next y-level
+                continue;
+            }
+            for (int z = 0; z < Chunk.SIZE_XZ; z++) {
+                for (int x = 0; x < Chunk.SIZE_XZ; x++) {
                     Block blockId = cn.center().getBlock(x, y, z);
                     if (blockId == Block.AIR) continue;
 
