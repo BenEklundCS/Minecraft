@@ -449,6 +449,13 @@
         </div>
         <div class="rule"></div>
         <div class="kv">
+          <span class="k">opaque verts</span><span class="v2 dim" id="c-opaque-v">—</span>
+          <span class="k">transparent verts</span><span class="v2 dim" id="c-transparent-v">—</span>
+          <span class="k">shadow verts</span><span class="v2 dim" id="c-shadow-v">—</span>
+          <span class="k">hud verts</span><span class="v2 dim" id="c-hud-v">—</span>
+        </div>
+        <div class="rule"></div>
+        <div class="kv">
           <span class="k">uniform uploads</span><span class="v2 dim" id="c-uniforms">—</span>
           <span class="k">chunks drawn</span><span class="v2 dim" id="c-chunks">—</span>
         </div>
@@ -461,7 +468,36 @@
         <div class="hint">
           Counters describe the last complete frame; entries is a live gauge, so a leak shows as
           peak climbing while the world stops streaming. Pitch straight up: opaque should fall to
-          near zero and shadow should not move.
+          near zero and shadow should not move. Shadow verts count a caster once per cascade it
+          is drawn into, so they run several times the opaque count for the same chunks.
+        </div>
+      </div>
+    </section>
+
+    <section class="panel bevel">
+      <h2>gpu passes <span class="tag" id="tag-gpu">ms</span></h2>
+      <div class="body">
+        <div class="kv">
+          <span class="k">shadow c0 <em>64 blocks</em></span><span class="v2 dim" id="g-shadow0">—</span>
+          <span class="k">shadow c1 <em>256 blocks</em></span><span class="v2 dim" id="g-shadow1">—</span>
+          <span class="k">shadow c2 <em>1024 blocks</em></span><span class="v2 dim" id="g-shadow2">—</span>
+          <span class="k">shadow total</span><span class="v2 dim" id="g-shadow">—</span>
+        </div>
+        <div class="rule"></div>
+        <div class="kv">
+          <span class="k">clouds</span><span class="v2 dim" id="g-clouds">—</span>
+          <span class="k">opaque</span><span class="v2 dim" id="g-opaque">—</span>
+          <span class="k">transparent</span><span class="v2 dim" id="g-transparent">—</span>
+          <span class="k">post</span><span class="v2 dim" id="g-post">—</span>
+          <span class="k">sum</span><span class="v2 dim" id="g-sum">—</span>
+        </div>
+        <div class="hint" id="gpu-hint">
+          One frame's GPU time per pass, from <code>GL_TIME_ELAPSED</code> queries read two frames
+          late — so these lag the frame times above by two frames and jitter run to run. A dash is
+          the game's -1: that pass or cascade did not run at all, which for a shadow cascade is
+          the normal answer when nothing it depends on moved. Zero would say the opposite.
+          Needs <code>gputimer.enabled=true</code> in <code>local.properties</code>; without it
+          every row here stays a dash.
         </div>
       </div>
     </section>
@@ -775,7 +811,12 @@ function applyStats(s) {
   setCount($("c-transparent"), pick(s, "transparentDrawCalls"));
   setCount($("c-shadow"), pick(s, "shadowDrawCalls"));
   setCount($("c-hud"), pick(s, "hudDrawCalls"));
+  setCount($("c-opaque-v"), pick(s, "opaqueVertices"));
+  setCount($("c-transparent-v"), pick(s, "transparentVertices"));
+  setCount($("c-shadow-v"), pick(s, "shadowVertices"));
+  setCount($("c-hud-v"), pick(s, "hudVertices"));
   setCount($("c-uniforms"), pick(s, "uniformUploads"));
+  applyGpuPasses(s);
 
   // drawn/considered is the ratio MVP.md claims is about 70%; showing both halves plus the
   // percentage is what lets a glance either confirm that or correct it.
@@ -835,6 +876,43 @@ function loadBaseline() {
 
 function fmtMs(v) {
   return isFinite(v) ? v.toFixed(2) + " ms" : "—";
+}
+
+/* ---------- gpu passes ---------- */
+
+// The game sends -1 for a pass that did not run, and that is a different fact from 0.000: the
+// shadow cascades skip whenever nothing they depend on moved, which standing still is nearly
+// every frame. Printing a dash for it is the whole reason this panel is not just numbers —
+// rounding -1 to 0 would say the pass ran and cost nothing.
+function setPassMs(el, v) {
+  const ran = isFinite(v) && v >= 0;
+  el.textContent = ran ? v.toFixed(3) : "—";
+  el.classList.toggle("dim", !ran);
+  el.title = ran ? "" : "did not run this frame";
+}
+
+function applyGpuPasses(s) {
+  const names = ["gpuShadowC0Ms", "gpuShadowC1Ms", "gpuShadowC2Ms",
+                 "gpuCloudsMs", "gpuOpaqueMs", "gpuTransparentMs", "gpuPostMs"];
+  const ids = ["g-shadow0", "g-shadow1", "g-shadow2",
+               "g-clouds", "g-opaque", "g-transparent", "g-post"];
+  names.forEach((name, i) => setPassMs($(ids[i]), pick(s, name)));
+  setPassMs($("g-shadow"), pick(s, "gpuShadowMs"));
+
+  // Only the passes that ran are added up, and a frame where none did stays a dash rather than
+  // becoming a very fast zero.
+  let sum = -1;
+  for (const name of names) {
+    const v = pick(s, name);
+    if (!isFinite(v) || v < 0) continue;
+    sum = (sum < 0 ? 0 : sum) + v;
+  }
+  setPassMs($("g-sum"), sum);
+
+  // The timers are opt-in, so every row reading a dash is far more likely to be a missing
+  // local.properties line than seven skipped passes. Say which.
+  const anyRan = names.some(name => pick(s, name) >= 0);
+  setTag($("tag-gpu"), anyRan, "ms", "timers off");
 }
 
 function captureBaseline() {
@@ -1088,14 +1166,19 @@ $("btn-clear").addEventListener("click", () => {
 // With a baseline stored this copies three rows instead of one — before, after, and the difference —
 // in the same columns, so it drops into the same table without changing its shape.
 
-const ms = v => (isFinite(v) ? v.toFixed(2) : "—");
-const n = v => (isFinite(v) ? String(v) : "—");
+// Negative is never a real measurement here — no counter goes below zero and no pass takes less
+// than no time — so it is always the game's -1 for "did not run", and it copies as a dash.
+const ms = v => (isFinite(v) && v >= 0 ? v.toFixed(2) : "—");
+const n = v => (isFinite(v) && v >= 0 ? String(v) : "—");
 
 function statsRow(label, s) {
   return "| " + label +
          " | " + ms(pick(s, "p50")) + " | " + ms(pick(s, "p99")) + " | " + ms(pick(s, "max")) +
+         " | " + ms(pick(s, "gpuShadowC0Ms")) + " | " + ms(pick(s, "gpuShadowC1Ms")) +
+         " | " + ms(pick(s, "gpuShadowC2Ms")) + " | " + ms(pick(s, "gpuOpaqueMs")) +
          " | " + n(pick(s, "opaqueDrawCalls")) + " | " + n(pick(s, "transparentDrawCalls")) +
          " | " + n(pick(s, "shadowDrawCalls")) + " | " + n(pick(s, "hudDrawCalls")) +
+         " | " + n(pick(s, "opaqueVertices")) + " | " + n(pick(s, "shadowVertices")) +
          " | " + n(pick(s, "uniformUploads")) +
          " | " + n(pick(s, "chunksDrawn")) + " / " + n(pick(s, "chunksConsidered")) +
          " | " + n(pick(s, "renderWorldEntries")) + " |";
@@ -1106,15 +1189,18 @@ function statsRow(label, s) {
 function deltaRow(now, before) {
   const d = (name, fmt) => {
     const a = pick(now, name), b = pick(before, name);
-    if (!isFinite(a) || !isFinite(b)) return "—";
+    if (!isFinite(a) || !isFinite(b) || a < 0 || b < 0) return "—";
     const diff = a - b;
     return (diff > 0 ? "+" : diff < 0 ? "−" : "±") + fmt(Math.abs(diff));
   };
   const dms = name => d(name, v => v.toFixed(2));
   const dn = name => d(name, v => String(Math.round(v)));
   return "| **delta** | " + dms("p50") + " | " + dms("p99") + " | " + dms("max") +
+         " | " + dms("gpuShadowC0Ms") + " | " + dms("gpuShadowC1Ms") +
+         " | " + dms("gpuShadowC2Ms") + " | " + dms("gpuOpaqueMs") +
          " | " + dn("opaqueDrawCalls") + " | " + dn("transparentDrawCalls") +
          " | " + dn("shadowDrawCalls") + " | " + dn("hudDrawCalls") +
+         " | " + dn("opaqueVertices") + " | " + dn("shadowVertices") +
          " | " + dn("uniformUploads") +
          " | " + dn("chunksDrawn") + " / " + dn("chunksConsidered") +
          " | " + dn("renderWorldEntries") + " |";

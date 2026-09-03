@@ -165,6 +165,10 @@ public class Game {
         stats.addProperty("transparentDrawCalls", EngineStats.drawCalls(RenderPass.TRANSPARENT));
         stats.addProperty("shadowDrawCalls", EngineStats.drawCalls(RenderPass.SHADOW));
         stats.addProperty("hudDrawCalls", EngineStats.drawCalls(RenderPass.HUD));
+        stats.addProperty("opaqueVertices", EngineStats.vertices(RenderPass.OPAQUE));
+        stats.addProperty("transparentVertices", EngineStats.vertices(RenderPass.TRANSPARENT));
+        stats.addProperty("shadowVertices", EngineStats.vertices(RenderPass.SHADOW));
+        stats.addProperty("hudVertices", EngineStats.vertices(RenderPass.HUD));
         stats.addProperty("uniformUploads", EngineStats.uniformUploads());
         stats.addProperty("chunksConsidered", EngineStats.chunksConsidered());
         stats.addProperty("chunksDrawn", EngineStats.chunksDrawn());
@@ -173,12 +177,27 @@ public class Game {
         // pass that ran instantly must not look the same, or Stage 4's triage reads backwards.
         // drawShadowPass skips entirely when nothing changed, so this is a normal answer, not
         // an error.
-        stats.addProperty("gpuShadowMs", gpuPassMillis(Renderer.TIMER_SHADOW));
+        float shadowC0 = gpuPassMillis(Renderer.TIMER_SHADOW_C0);
+        float shadowC1 = gpuPassMillis(Renderer.TIMER_SHADOW_C1);
+        float shadowC2 = gpuPassMillis(Renderer.TIMER_SHADOW_C2);
+        stats.addProperty("gpuShadowC0Ms", shadowC0);
+        stats.addProperty("gpuShadowC1Ms", shadowC1);
+        stats.addProperty("gpuShadowC2Ms", shadowC2);
+        stats.addProperty("gpuShadowMs", sumOfPassesThatRan(shadowC0, shadowC1, shadowC2));
         stats.addProperty("gpuCloudsMs", gpuPassMillis(Renderer.TIMER_CLOUDS));
         stats.addProperty("gpuOpaqueMs", gpuPassMillis(Renderer.TIMER_OPAQUE));
         stats.addProperty("gpuTransparentMs", gpuPassMillis(Renderer.TIMER_TRANSPARENT));
         stats.addProperty("gpuPostMs", gpuPassMillis(Renderer.TIMER_POST));
         return stats.toString();
+    }
+
+    private static float sumOfPassesThatRan(float... millis) {
+        float total = -1.0f;
+        for (float ms : millis) {
+            if (ms < 0.0f) continue;
+            total = (total < 0.0f ? 0.0f : total) + ms;
+        }
+        return total;
     }
 
     // Nanoseconds to milliseconds, with -1 preserved rather than divided.

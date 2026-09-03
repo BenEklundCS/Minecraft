@@ -139,3 +139,269 @@ tasks.register('installGitHooks', Exec) {
     commandLine 'git', 'config', 'core.hooksPath', '.githooks'
 }
 tasks.named('build') { dependsOn 'installGitHooks' }
+
+/*
+ * One command, one table: ./gradlew perfTest
+ *
+ * Launches the game, drives it through three fixed viewpoints over the debug HTTP server, and
+ * prints every counter /stats reports — median across the sampling window, with the observed
+ * range beside it, because one frame's GPU timing says almost nothing on its own.
+ *
+ * Not a Test task, and deliberately not in the test source set. This needs a window, a GL
+ * context and a real driver; `check` can never run it, and keeping it out of `src/test` is what
+ * stops it being wired into CI by accident.
+ *
+ * The three regimes exist to separate costs that only show up apart:
+ *
+ *   sky-facing      pitched at the sky, terrain out of frustum. What a frame costs before a
+ *                   single chunk is drawn — sky, clouds, post, HUD.
+ *   standing-still  the bench pose, untouched. The cascade matrices are unchanged frame to
+ *                   frame here, so the shadow pass skips and this is the frame without it.
+ *   moving          teleported along a diagonal at walking pace. Chunks stream and the cascades
+ *                   rebuild, which is the regime the frame budget is actually lost in.
+ *
+ * Moving is stepped, not smooth: ten teleports a second of half a block each, because the only
+ * way in from outside the process is /tp and the game runs at two hundred frames a second. So
+ * the eye is stationary for twenty frames and then jumps, where a walking player's eye moves
+ * every frame. What that costs is worth knowing before reading the number. A cascade redraws
+ * when the eye crosses one of its texels; the far cascade's are a block wide, so half-block
+ * steps cross one about five times a second, which is what walking at five blocks a second does
+ * anyway. The near cascade's texels are a sixteenth of a block, so it redraws ten times a second
+ * here against roughly eighty for a real walk — it is under-counted by eight, and at its
+ * measured third of a millisecond that hides about 0.01 ms a frame. The expensive cascade is
+ * measured honestly; the cheap one is not, and it does not matter yet.
+ *
+ * The two static regimes are posed once and then not touched, and that is load-bearing rather
+ * than tidy: a teleport puts the player back at the bench altitude and gravity pulls them down
+ * again, and that fall moves the eye far enough to invalidate all three cascade matrices every
+ * frame. "Holding" a pose at 10 Hz measures a regime that never happens in play — it reports the
+ * shadow pass as always-on, and standing still as costing 18 ms rather than 4.
+ *
+ * Knobs: -PperfSamples=20 -PperfWarmup=14 -PperfSettle=90 -PperfKeepOpen
+ */
+tasks.register('perfTest') {
+    group = 'verification'
+    description = 'Runs the game through three viewpoints and prints a table of every tracked stat.'
+    dependsOn 'classes'
+
+    def samples = (providers.gradleProperty('perfSamples').getOrElse('20')) as int
+    def warmupSeconds = (providers.gradleProperty('perfWarmup').getOrElse('14')) as double
+    def settleSeconds = (providers.gradleProperty('perfSettle').getOrElse('90')) as double
+    def keepOpen = providers.gradleProperty('perfKeepOpen').present
+
+    def launcher = javaToolchains.launcherFor(java.toolchain)
+    def runtimeClasspath = sourceSets.main.runtimeClasspath
+    def heap = providers.gradleProperty('gameHeap').getOrElse('24g')
+    def reportDir = layout.buildDirectory.dir('reports/perf')
+
+    doLast {
+        // The game reads these from local.properties in its working directory, not from system
+        // properties, so the task cannot switch them on for one run. Failing with the two lines
+        // to paste beats measuring a run that had no GPU timers and no way to ask for them.
+        def local = new Properties()
+        def localFile = file('local.properties')
+        if (localFile.exists()) localFile.withInputStream { local.load(it) }
+        def port = local.getProperty('framestream.port')
+        if (port == null || local.getProperty('gputimer.enabled') != 'true') {
+            throw new GradleException('perfTest needs the debug server and the GPU timers. Add to local.properties:\n' +
+                '  framestream.port=8099\n  gputimer.enabled=true')
+        }
+
+        def out = reportDir.get().asFile
+        out.mkdirs()
+        def gameLog = new File(out, 'game.log')
+
+        def base = "http://127.0.0.1:${port}"
+        def get = { String path ->
+            def connection = java.net.URI.create(base + path).toURL().openConnection()
+            connection.connectTimeout = 3000
+            connection.readTimeout = 8000
+            connection.inputStream.withReader('UTF-8') { it.text }
+        }
+        def stats = { new groovy.json.JsonSlurper().parseText(get('/stats')) }
+        def tp = { Map query -> get('/tp?' + query.collect { k, v -> "${k}=${v}" }.join('&')) }
+
+        // Every element coerced to String: ProcessBuilder takes List<String>, and one GString in
+        // the list fails the array copy with a cast error that says nothing about where it came from.
+        def command = [launcher.get().executablePath.asFile.absolutePath,
+                       '--enable-preview', '--enable-native-access=ALL-UNNAMED', '-Xmx' + heap,
+                       '-cp', runtimeClasspath.asPath, 'com.beneklund.minecraft.Main']*.toString()
+        def process = new ProcessBuilder(command)
+            .directory(projectDir)
+            .redirectErrorStream(true)
+            .redirectOutput(gameLog)
+            .start()
+
+        try {
+            logger.lifecycle("game starting — log at ${gameLog}")
+            def deadline = System.currentTimeMillis() + 180_000
+            def up = false
+            while (!up && System.currentTimeMillis() < deadline) {
+                if (!process.alive) throw new GradleException("the game exited during startup — see ${gameLog}")
+                // /stats answers 501 until the first snapshot is built a second in, and the socket
+                // refuses before that. Both are "not yet", not failures.
+                try { stats(); up = true } catch (ignored) { Thread.sleep(1000) }
+            }
+            if (!up) throw new GradleException("the game never answered on ${base}/stats — see ${gameLog}")
+
+            /*
+             * Waits for the world to stop moving under the measurement.
+             *
+             * Two things have to go quiet, not one. Chunk streaming stops first; frame time keeps
+             * falling for another twenty seconds after it while meshes finish uploading, and a
+             * sample taken in that window measures streaming rather than the frame. So: entries
+             * unchanged AND a full ring, four polls running.
+             */
+            def settle = { double seconds ->
+                def end = System.currentTimeMillis() + (long) (seconds * 1000)
+                def lastEntries = -1
+                def steady = 0
+                while (System.currentTimeMillis() < end) {
+                    def s = stats()
+                    steady = (s.renderWorldEntries == lastEntries && s.count >= 300) ? steady + 1 : 0
+                    lastEntries = s.renderWorldEntries
+                    logger.lifecycle(String.format('  settling: entries=%d p50=%.2f ms', s.renderWorldEntries, s.p50))
+                    if (steady >= 4) return
+                    Thread.sleep(2000)
+                }
+                logger.lifecycle('  settle timed out — sampling anyway, treat this run as suspect')
+            }
+
+            // mover is null for a regime that must not be touched once posed; see the note above.
+            def sample = { String name, Closure mover ->
+                logger.lifecycle("== ${name} ==")
+                def start = System.currentTimeMillis()
+                def nextSample = start + (long) (warmupSeconds * 1000)
+                def rows = []
+                while (rows.size() < samples) {
+                    if (!process.alive) throw new GradleException("the game exited mid-run — see ${gameLog}")
+                    def now = System.currentTimeMillis()
+                    if (mover != null) mover((now - start) / 1000.0d)
+                    if (now >= nextSample) {
+                        def s = stats()
+                        rows << s
+                        nextSample += 1000
+                        logger.lifecycle(String.format('  %2d/%d  p50 %6.2f  p99 %6.2f  shadow %7.3f  opaque %6.3f',
+                            rows.size(), samples, s.p50, s.p99, s.gpuShadowMs, s.gpuOpaqueMs))
+                    }
+                    // /stats only rebuilds once a second, so polling faster re-reads one snapshot.
+                    // The moving regime ticks faster because it is also the thing doing the moving.
+                    Thread.sleep(mover != null ? 100 : 250)
+                }
+                rows
+            }
+
+            def pose = [x: 8.0d, y: 120.0d, z: -5.0d, yaw: 45.0d, pitch: -15.0d]
+            def walk = { double t ->
+                // x and z only: y is left out so the player keeps the height physics gave them
+                // after the fall from the bench altitude. Sending y would re-loft them every step
+                // and measure a repeated fall rather than a walk.
+                def d = 5.0d * t / Math.sqrt(2.0d)
+                tp([x: pose.x + d, z: pose.z + d, yaw: pose.yaw, pitch: pose.pitch])
+            }
+
+            def results = [:]
+            get('/bench')
+            settle(settleSeconds)
+            results['standing-still'] = sample('standing-still', null)
+            tp([pitch: -89.0d])
+            Thread.sleep(1000)
+            results['sky-facing'] = sample('sky-facing', null)
+            get('/bench')
+            settle(settleSeconds)
+            results['moving'] = sample('moving', walk)
+
+            def order = ['p50', 'p99', 'max', 'count',
+                         'gpuShadowMs', 'gpuShadowC0Ms', 'gpuShadowC1Ms', 'gpuShadowC2Ms',
+                         'gpuCloudsMs', 'gpuOpaqueMs', 'gpuTransparentMs', 'gpuPostMs',
+                         'opaqueDrawCalls', 'transparentDrawCalls', 'shadowDrawCalls', 'hudDrawCalls',
+                         'opaqueVertices', 'transparentVertices', 'shadowVertices', 'hudVertices',
+                         'uniformUploads', 'chunksConsidered', 'chunksDrawn', 'renderWorldEntries']
+            def regimes = ['sky-facing', 'standing-still', 'moving']
+
+            // Every key the game reported, in a readable order, with anything the server has grown
+            // since this list was written appended rather than dropped.
+            def keys = new LinkedHashSet<String>()
+            order.each { key -> if (results.values().any { rows -> rows[0].containsKey(key) }) keys << key }
+            results.values().each { rows -> rows[0].keySet().each { keys << it } }
+
+            def median = { List values ->
+                def sorted = values.collect { it as double }.sort()
+                int n = sorted.size()
+                n % 2 == 1 ? sorted[n.intdiv(2)] : (sorted[n.intdiv(2) - 1] + sorted[n.intdiv(2)]) / 2.0d
+            }
+            def isTime = { String key -> key.endsWith('Ms') || key in ['p50', 'p99', 'max'] }
+            def format = { String key, double v ->
+                // -1 is the game's "this did not run", and printing it as a number would erase the
+                // one distinction the convention exists for: skipped is not the same as instant.
+                if (isTime(key)) return v < 0.0d ? '-' : String.format('%.3f', v)
+                String.format('%,d', Math.round(v))
+            }
+            /*
+             * One cell: the middle of the window, and the range under it.
+             *
+             * Timings get counted as well as measured. A median taken over a column of -1s and
+             * real milliseconds invents a number for a pass that was mostly absent, and the
+             * shadow cascades are never a little bit expensive — they skip, or they are the
+             * frame. So the median is over the samples where the pass ran, and how many of the
+             * samples that was goes beside it. A pass that ran in 2 of 20 frames at 15 ms each
+             * and one that ran in all 20 at 1.5 ms cost the same per second and feel nothing
+             * alike, and this is the cell that tells them apart.
+             */
+            def cell = { String key, List rows ->
+                def values = rows.collect { it[key] as double }
+                def range = { List v -> v.min() == v.max() ? '' : " <sub>${format(key, v.min())} .. ${format(key, v.max())}</sub>" }
+                if (!isTime(key)) return format(key, median(values)) + range(values)
+
+                def ran = values.findAll { it >= 0.0d }
+                if (ran.isEmpty()) return "- <sub>ran 0/${values.size()}</sub>"
+                def text = format(key, median(ran)) + range(ran)
+                (ran.size() < values.size()) ? text + " <sub>ran ${ran.size()}/${values.size()}</sub>" : text
+            }
+
+            // Logback colours the console, so the escapes come out in the redirected log too.
+            def escape = String.valueOf((char) 27)
+            def glLine = gameLog.readLines()
+                .collect { it.replaceAll(escape + '\\[[;0-9]*m', '') }
+                .find { it =~ / GL [0-9]/ }
+            def commit = 'git rev-parse --short HEAD'.execute(null, projectDir).text.trim()
+            def now = new Date()
+
+            def md = new StringBuilder()
+            md << "# perfTest - ${now.format('yyyy-MM-dd HH:mm')}\n\n"
+            md << "| | |\n|---|---|\n"
+            md << "| Commit | `${commit}` |\n"
+            // The GL line is vendor/renderer/version separated by pipes, which would end the
+            // table cell three columns early if it went in raw.
+            def gpu = glLine ? glLine.replaceAll(/^.*?(GL [0-9])/, '$1').replace('|', '\\|') : '_(no GL line in the log)_'
+            md << "| GPU | ${gpu} |\n"
+            md << "| Config | `ContainerConfig.defaults()` - seed, render distance, window, FOV |\n"
+            md << "| Pose | `FrameStreamServer.BENCH_POSE`, time of day 0.50 |\n"
+            md << "| Samples | ${samples} per regime, 1 s apart, after ${warmupSeconds} s of warm-up |\n\n"
+            md << "Median across the window; the small range under it is min-max over the same samples.\n"
+            md << "Timings are medianed over the samples where the pass ran, with `ran k/n` beside them\n"
+            md << "when it did not run every time; `-` is the game's -1, meaning it never ran.\n"
+            md << "`moving` steps ten times a second rather than moving every frame — see the perfTest\n"
+            md << "comment in `build.gradle` for what that does and does not measure.\n\n"
+            md << "| stat | " + regimes.join(' | ') + " |\n|---|" + regimes.collect { '---' }.join('|') + "|\n"
+            keys.each { key ->
+                md << "| `${key}` | " + regimes.collect { cell(key, results[it]) }.join(' | ') + " |\n"
+            }
+
+            def report = new File(out, "perf-${now.format('yyyy-MM-dd-HHmm')}.md")
+            report.text = md.toString()
+            new File(out, 'latest.md').text = md.toString()
+            new File(out, 'latest.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(results))
+
+            logger.lifecycle('\n' + md.toString())
+            logger.lifecycle("written to ${report}")
+        } finally {
+            if (keepOpen) {
+                logger.lifecycle("-PperfKeepOpen: leaving the game running on ${base}/")
+            } else {
+                process.destroy()
+                if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) process.destroyForcibly()
+            }
+        }
+    }
+}

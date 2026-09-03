@@ -38,17 +38,29 @@ public class Renderer {
     // rotation needs to know which frame is writing so it can read one from two frames back.
     private long frame;
 
+    public static final int TIMER_SHADOW_C0 = 0;
+    public static final int TIMER_SHADOW_C1 = 1;
+    public static final int TIMER_SHADOW_C2 = 2;
+    public static final int TIMER_CLOUDS = 3;
+    public static final int TIMER_OPAQUE = 4;
+    public static final int TIMER_TRANSPARENT = 5;
+    public static final int TIMER_POST = 6;
+    public static final int TIMER_PASS_COUNT = 7;
+
     /*
-     * Which region each GPU timer slot measures. Flat ints rather than an enum because GpuTimer
-     * indexes an array with them, and Game owns TIMER_POST while this class owns the other four -
-     * one numbering shared by both is what keeps them from colliding.
+     * The timer slot for one cascade. The three constants above are contiguous so this is plain
+     * index arithmetic.
+     *
+     * A fourth cascade needs a fourth constant here before ShadowCamera grows one, and the check
+     * is worth its three lines because the failure is silent: cascade 3 would land on
+     * TIMER_CLOUDS and the clouds would appear to have taken 10 ms.
      */
-    public static final int TIMER_SHADOW = 0;
-    public static final int TIMER_CLOUDS = 1;
-    public static final int TIMER_OPAQUE = 2;
-    public static final int TIMER_TRANSPARENT = 3;
-    public static final int TIMER_POST = 4;
-    public static final int TIMER_PASS_COUNT = 5;
+    public static int timerForCascade(int cascade) {
+        if (cascade < 0 || TIMER_SHADOW_C0 + cascade > TIMER_SHADOW_C2) {
+            throw new IllegalArgumentException("no timer slot reserved for cascade " + cascade);
+        }
+        return TIMER_SHADOW_C0 + cascade;
+    }
 
     // Null when gputimer.enabled is off, which is the normal case.
     private GpuTimer gpuTimer;
@@ -253,9 +265,9 @@ public class Renderer {
                     countPass(calls, RenderPass.SHADOW));
         }
 
-        beginPass(TIMER_SHADOW);
+        // Timed from inside, one query per cascade — see the note on the TIMER_ constants for why
+        // it cannot also be bracketed from out here.
         drawShadowPass(camera);
-        endPass(TIMER_SHADOW);
 
         // Before the scene, for the same reason the shadow pass is: it produces an input to it.
         // sky.frag samples what this writes. Order against the shadow pass does not matter — they
@@ -351,6 +363,11 @@ public class Renderer {
             lastCascadeMatrix[cascade].set(current);
             lastWorldVersion[cascade] = worldVersion;
 
+            // Below the `continue` on purpose: a cascade that skipped never opens a query, so it
+            // reads back as -1 rather than 0. "Did no work" and "did its work instantly" have to
+            // stay distinguishable, and standing still every cascade takes the first branch.
+            beginPass(timerForCascade(cascade));
+
             // The clear has to sit inside the loop and after bindLayer, because it acts on
             // whichever layer is attached — clearing once outside would wipe one layer and leave
             // the others holding last frame's depth.
@@ -376,6 +393,7 @@ public class Renderer {
                 }
                 submit(call, camera);
             }
+            endPass(timerForCascade(cascade));
         }
         glCullFace(GL_BACK);
     }
@@ -478,6 +496,12 @@ public class Renderer {
         // The only uniform that genuinely differs between two draws in the same frame. Everything
         // else the program declares is frame-constant and went up in bindProgram's apply.
         call.shader().setUniformMat4("uModel", call.transform());
+
+        // Counted here rather than where the calls are built, because this is the point where a
+        // mesh is actually submitted. The shadow pass walks the same call list once per cascade,
+        // so a caster in two cascades lands here twice and is counted twice — which is the truth
+        // about how much vertex work it caused.
+        EngineStats.countVertices(call.pass(), call.mesh().vertexCount());
         call.mesh().render();
     }
 

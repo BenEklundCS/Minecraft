@@ -10,6 +10,7 @@ public abstract class Mesh {
     private final GlElementArrayBuffer ebo;
 
     private final int indexCount;
+    private final int vertexCount;
 
     public Mesh(Geometry geometry, VertexFormat vf, PrimitiveMode primitive) {
         vf.checkVertexCount(geometry.vertices().length);
@@ -25,6 +26,11 @@ public abstract class Mesh {
         vf.describe(vao);
         vao.unbind();
         indexCount = geometry.indices().length;
+        vertexCount = geometry.vertices().length / vf.floatsPerVertex();
+    }
+
+    public int vertexCount() {
+        return vertexCount;
     }
 
     public void render() {

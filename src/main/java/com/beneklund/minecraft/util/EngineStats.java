@@ -25,6 +25,7 @@ public final class EngineStats {
 
     // Live accumulators for the frame being built. Main thread only.
     private static final Map<RenderPass, Integer> drawCalls = new EnumMap<>(RenderPass.class);
+    private static final Map<RenderPass, Integer> vertices = new EnumMap<>(RenderPass.class);
     private static int uniformUploads;
     private static int chunksConsidered;
     private static int chunksDrawn;
@@ -32,6 +33,7 @@ public final class EngineStats {
     // The last frame that finished. Everything that reports reads these, never the accumulators
     // above, so a reader can never catch a half-built frame and wonder why opaque draws halved.
     private static final Map<RenderPass, Integer> lastDrawCalls = new EnumMap<>(RenderPass.class);
+    private static final Map<RenderPass, Integer> lastVertices = new EnumMap<>(RenderPass.class);
     private static int lastUniformUploads;
     private static int lastChunksConsidered;
     private static int lastChunksDrawn;
@@ -40,20 +42,18 @@ public final class EngineStats {
      * Closes the frame just finished and opens the next one. Call once at the top of the game
      * loop, from the main thread.
      *
-     * The swap is what makes the numbers per-frame rather than per-second. Stage 3 of DG-17
-     * predicts uniform uploads per frame - roughly 52,000 - and a counter that only reset once a
-     * second would report about 3.1 million, which reads as the prediction being wrong rather
-     * than the units being different. It also stops uniformUploads overflowing int, which at
-     * that rate takes about eleven minutes.
      */
     public static void beginFrame() {
         lastDrawCalls.clear();
         lastDrawCalls.putAll(drawCalls);
+        lastVertices.clear();
+        lastVertices.putAll(vertices);
         lastUniformUploads = uniformUploads;
         lastChunksConsidered = chunksConsidered;
         lastChunksDrawn = chunksDrawn;
 
         drawCalls.clear();
+        vertices.clear();
         uniformUploads = 0;
         chunksConsidered = 0;
         chunksDrawn = 0;
@@ -61,6 +61,10 @@ public final class EngineStats {
 
     public static void countDrawCall(RenderPass pass) {
         drawCalls.merge(pass, 1, Integer::sum);
+    }
+
+    public static void countVertices(RenderPass pass, int count) {
+        vertices.merge(pass, count, Integer::sum);
     }
 
     public static void countUniformUpload() {
@@ -77,6 +81,10 @@ public final class EngineStats {
 
     public static int drawCalls(RenderPass pass) {
         return lastDrawCalls.getOrDefault(pass, 0);
+    }
+
+    public static int vertices(RenderPass pass) {
+        return lastVertices.getOrDefault(pass, 0);
     }
 
     public static int uniformUploads() {
@@ -96,6 +104,8 @@ public final class EngineStats {
     public static void reset() {
         drawCalls.clear();
         lastDrawCalls.clear();
+        vertices.clear();
+        lastVertices.clear();
         uniformUploads = 0;
         chunksConsidered = 0;
         chunksDrawn = 0;
