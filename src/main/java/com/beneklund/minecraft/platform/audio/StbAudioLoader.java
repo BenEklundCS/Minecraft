@@ -85,7 +85,8 @@ public class StbAudioLoader implements IAudioLoader {
         if (url == null) return List.of();
 
         // Only an exploded classpath directory can be walked as a filesystem. Inside a jar the
-        // protocol is "jar" and this comes back empty — see DG-14 before shipping a build.
+        // protocol is "jar" and this comes back empty, so a packaged build finds no music here
+        // and needs a jar-aware listing before it ships.
         if (!"file".equals(url.getProtocol())) return List.of();
 
         try {

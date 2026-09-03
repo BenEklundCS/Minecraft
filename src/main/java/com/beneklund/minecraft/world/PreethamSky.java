@@ -144,7 +144,7 @@ public class PreethamSky {
     /*
      * The whole model evaluated on the CPU for a single view direction, returning linear RGB
      * before exposure. sky.frag does exactly this per pixel; this exists so the fog colour can
-     * be sampled from the same model (GG-4 step 7) and distant terrain dissolves into the
+     * be sampled from the same model and distant terrain dissolves into the
      * colour the sky actually is in that direction, instead of into a constant that the sky
      * never contains.
      *

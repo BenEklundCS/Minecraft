@@ -430,7 +430,7 @@
         </div>
         <div class="baseline" id="baseline-box" style="display:none"></div>
         <div class="hint" id="stats-hint" style="display:none">
-          <code>/stats</code> is not wired yet — DG-17 Stage 2. This panel expects
+          <code>/stats</code> is not wired yet. This panel expects
           <code>text/plain</code>, one <code>key=value</code> per line
           (<code>p50</code>, <code>p99</code>, <code>max</code>, <code>count</code>),
           or a JSON object with those keys. It will light up on its own once the endpoint answers.
@@ -554,7 +554,7 @@ const STREAM_INTERVAL_MS = 80;    // matches the server's 100 ms capture cadence
 const STATS_INTERVAL_MS  = 1000;  // the server recomputes percentiles once a second
 const SPARK_HISTORY      = 180;   // three minutes of once-a-second stats
 const FRAME_BUDGET_MS    = 16.67; // 60 fps
-const P99_BUDGET_MS      = 25.0;  // DG-17 Stage 9
+const P99_BUDGET_MS      = 25.0;  // the frame you feel, not the average one
 const WARMUP_SECONDS     = 10;    // BENCH_WARMUP_SECONDS
 
 const $ = id => document.getElementById(id);
@@ -1084,7 +1084,7 @@ $("btn-clear").addEventListener("click", () => {
   log("graph cleared", "di");
 });
 
-// DG-17 Stage 5 wants these numbers pasted into a markdown table, so hand them over in that shape.
+// These numbers get pasted into a markdown table, so hand them over in that shape.
 // With a baseline stored this copies three rows instead of one — before, after, and the difference —
 // in the same columns, so it drops into the same table without changing its shape.
 

@@ -126,9 +126,14 @@ Rules that keep it honest:
 
 - **It is a client, never a source of truth.** Every number on the page came from an endpoint.
   The page does no measurement of its own and stores no game state.
-- **Degrade, don't break.** An endpoint that 404s is shown as unwired, with a note saying which
-  DG stage adds it — never as an error, and never as a blank panel. The page probes on a timer so
-  a newly wired endpoint lights up without a reload.
+- **Degrade, don't break.** An endpoint that 404s is shown as unwired, with a note describing the
+  response shape the panel expects — never as an error, and never as a blank panel. The page
+  probes on a timer so a newly wired endpoint lights up without a reload.
+- **Never cite a guide from code.** No `DG-*`, `GG-*` or `MC-*` identifier appears anywhere under
+  `src/` — not in this page, not in a Java comment, not in a shader. Those numbers live in a vault
+  that never reaches the remote, so a reference to one is a dead pointer to every reader who
+  clones this repo. State the reason itself instead: the behaviour, the number, or the constraint
+  the guide was going to explain.
 - **Parse liberally.** Text responses are read as `key=value` lines *or* JSON, so tightening a
   response format on the Java side doesn't require a matching edit here.
 - **No dependencies.** It is served from a socket that is off by default, to a browser that may

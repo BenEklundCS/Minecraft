@@ -70,7 +70,7 @@ public class ChunkRenderer implements IRenderable {
     /*
      * Which shadow cascades this box can cast into, as a bitmask. Package-private rather than
      * private so ChunkRendererTest can pin it: it takes an AABB and a Vector3f, touches no GL
-     * and no renderer state, and the whole Case B prediction in DG-17 Stage 3 rests on it
+     * and no renderer state, and the draw-call counts predicted for a still camera rest on it
      * ignoring the frustum entirely.
      */
     static int cascadeMaskFor(AABB bounds, Vector3f eye) {

@@ -111,7 +111,7 @@ class ChunkMesherTest {
         assertEquals(0, data.transparent().indices().length);
     }
 
-    // The seam rule that is MC-4 (ChunkMesher.isCulled, the resolve()-came-back-empty branch).
+    // The seam rule in ChunkMesher.isCulled, the resolve()-came-back-empty branch.
     // A block at (0,64,0) has two faces that leave the chunk: -x resolves to west, -z to north.
     // With neither loaded the guess splits by block type — transparent culls, opaque emits.
     @Test

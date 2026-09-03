@@ -252,7 +252,7 @@ const float CLOUD_AMBIENT = 0.55;
 const float CLOUD_AMBIENT_BASE = 0.35;
 
 // Air is about 0.76: strongly forward-scattering, which is why haze glows toward the sun and stays
-// dim away from it. Same value GG-8 Stage 3's raymarch uses - keep them equal.
+// dim away from it. Same value the godray raymarch uses - keep them equal.
 const float CLOUD_SCATTER_G = 0.76;
 const float PI = 3.14159265;
 

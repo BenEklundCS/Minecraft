@@ -9,9 +9,9 @@ import org.junit.jupiter.api.Test;
 
 /*
  * cascadeMaskFor is the one piece of ChunkRenderer that can be tested without a GL context - it
- * takes an AABB and an eye position and consults nothing else. That matters because DG-17
- * Stage 3's Case B prediction rests entirely on this method ignoring the frustum: looking at the
- * sky must not change the shadow draw-call count, and this is why.
+ * takes an AABB and an eye position and consults nothing else. That matters because the shadow
+ * draw-call counts rest entirely on this method ignoring the frustum: looking at the sky must
+ * not change the shadow draw-call count, and this is why.
  *
  * The radii come from ShadowCamera: casterRadius(i) is BOX_HALVES[i] + 128 over {32, 128, 512},
  * so 160, 256 and 640 blocks.

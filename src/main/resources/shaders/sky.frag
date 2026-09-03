@@ -60,7 +60,7 @@ void main() {
     vec4 cloud = texture(uCloudBuffer, vScreenUV);
     rgb = rgb * cloud.a + cloud.rgb;
 
-    // Unchanged from GG-4: Preetham has no night, so the whole daylight result — clouds now
+    // Preetham has no night, so the whole daylight result — clouds now
     // included — fades to the night gradient across civil twilight.
     FragColor = vec4(mix(nightRadiance(dir), rgb, uDayFactor), 1.0);
 }
