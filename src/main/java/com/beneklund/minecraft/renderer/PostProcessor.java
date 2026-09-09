@@ -19,8 +19,10 @@ import org.joml.Vector2f;
  * outputs is a wide blur whose high frequencies are being destroyed on purpose.
  *
  * The first two are the light shafts and are skipped on any frame where the sun is behind the
- * camera; the middle three are bloom. draw() is the map — each step is one named call, and the
- * ordering constraints between them live on the methods themselves.
+ * camera; the middle three are bloom. Either group can also be switched off for the whole run by
+ * RenderFeatures, in which case only the combine survives — that is the floor, because the scene
+ * arrives in linear radiance and something has to tonemap it. draw() is the map — each step is one
+ * named call, and the ordering constraints between them live on the methods themselves.
  */
 public class PostProcessor {
     private static final String VERT_PATH = "/shaders/post.vert";
@@ -70,9 +72,19 @@ public class PostProcessor {
     private final GlFramebuffer godrayB;
     private final float exposure;
 
+    // Which of the passes below actually run. Only bloom and the light shafts are optional here;
+    // the tonemap is not, because everything upstream writes linear radiance.
+    private final RenderFeatures features;
+
     public PostProcessor(
-            float exposure, GlFramebuffer bloomA, GlFramebuffer bloomB, GlFramebuffer godrayA, GlFramebuffer godrayB) {
+            float exposure,
+            GlFramebuffer bloomA,
+            GlFramebuffer bloomB,
+            GlFramebuffer godrayA,
+            GlFramebuffer godrayB,
+            RenderFeatures features) {
         this.exposure = exposure;
+        this.features = features;
         this.bloomA = bloomA;
         this.bloomB = bloomB;
         this.godrayA = godrayA;
@@ -127,22 +139,25 @@ public class PostProcessor {
         // 0. Godrays, scene+depth -> godrayA -> godrayB. Skipped entirely when the sun is behind
         // the camera: there is no screen position to radiate from, and marching toward a phantom
         // one puts shafts around nothing.
-        boolean godrays = sunUV.isPresent();
+        boolean godrays = sunUV.isPresent() && features.godrays();
         if (godrays) {
             occlusionPass(sceneTexture, sceneDepthTexture);
             godrayPass(sunUV.get());
         }
 
-        // 1. Bright pass, scene -> bloomA.
-        brightPass(sceneTexture);
-
-        // 2 and 3. Ping-pong, because a framebuffer cannot sample the texture it is rendering
-        // into - that's undefined, and it fails as driver-dependent garbage rather than an error.
-        blurPass(bloomB, bloomA.colorTexture(), 1.0f, 0.0f);
-        blurPass(bloomA, bloomB.colorTexture(), 0.0f, 1.0f);
+        // 1, 2 and 3. Bright pass into bloomA, then a ping-pong blur - a framebuffer cannot sample
+        // the texture it is rendering into, and that fails as driver-dependent garbage rather than
+        // an error. Skipped together: the composite reads bloomA either way, and a stale buffer
+        // multiplied by a zero strength is the same pattern the sun-behind-camera case already uses.
+        boolean bloom = features.bloom();
+        if (bloom) {
+            brightPass(sceneTexture);
+            blurPass(bloomB, bloomA.colorTexture(), 1.0f, 0.0f);
+            blurPass(bloomA, bloomB.colorTexture(), 0.0f, 1.0f);
+        }
 
         // 4. Combine and tonemap, into the window.
-        compositePass(sceneTexture, godrays, windowWidth, windowHeight);
+        compositePass(sceneTexture, godrays, bloom, windowWidth, windowHeight);
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
@@ -164,12 +179,12 @@ public class PostProcessor {
      * The only pass that writes to the window rather than to a framebuffer, and the only one that
      * tonemaps. Everything upstream is linear radiance; what leaves here is display values.
      *
-     * Three inputs on three units: the scene, the blurred bright parts, and the light shafts. The
-     * godray bind is unconditional even on a frame that produced no shafts — a sampler pointing at
-     * a unit with nothing bound is undefined, so the stale buffer stays bound and godrayStrength
-     * multiplies it out instead.
+     * Three inputs on three units: the scene, the blurred bright parts, and the light shafts. Both
+     * the godray and the bloom binds are unconditional even on a frame that produced neither — a
+     * sampler pointing at a unit with nothing bound is undefined, so the stale buffers stay bound
+     * and their strength uniforms multiply them out instead.
      */
-    private void compositePass(int sceneTexture, boolean godrays, int windowWidth, int windowHeight) {
+    private void compositePass(int sceneTexture, boolean godrays, boolean bloom, int windowWidth, int windowHeight) {
         GlFramebuffer.bindDefault(windowWidth, windowHeight);
         shader.bind();
         shader.setUniformInt("uScene", 0);
@@ -177,7 +192,7 @@ public class PostProcessor {
         shader.setUniformInt("uGodray", 2);
         shader.setUniformFloat("uGodrayStrength", godrays ? GODRAY_STRENGTH : 0.0f);
         shader.setUniformFloat("uExposure", exposure);
-        shader.setUniformFloat("uBloomStrength", BLOOM_STRENGTH);
+        shader.setUniformFloat("uBloomStrength", bloom ? BLOOM_STRENGTH : 0.0f);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sceneTexture);
         glActiveTexture(GL_TEXTURE1);

@@ -134,6 +134,10 @@ public class Renderer {
      */
     private final IntSupplier worldVersion_;
 
+    // Which optional passes this build of the frame runs. Fixed at construction: it comes from
+    // local.properties, which is read once at startup.
+    private final RenderFeatures features;
+
     private final Matrix4f[] lastCascadeMatrix = new Matrix4f[ShadowCamera.cascadeCount()];
     private final int[] lastWorldVersion = new int[ShadowCamera.cascadeCount()];
 
@@ -144,8 +148,10 @@ public class Renderer {
             ShadowCamera shadowCamera,
             CloudRenderer cloudRenderer,
             GlFramebuffer cloudBuffer,
-            IntSupplier worldVersion) {
+            IntSupplier worldVersion,
+            RenderFeatures features) {
         this.registered = registered;
+        this.features = features;
         this.fogColor = fogColor;
         this.shadowBuffer = shadowBuffer;
         this.shadowCamera = shadowCamera;
@@ -274,7 +280,8 @@ public class Renderer {
         // write to different buffers and neither reads the other — but both must be finished
         // before the target below is bound, because each one binds a framebuffer of its own.
         beginPass(TIMER_CLOUDS);
-        cloudRenderer.draw(cloudBuffer, frame, frameUniforms);
+        if (features.clouds()) cloudRenderer.draw(cloudBuffer, frame, frameUniforms);
+        else clearCloudBuffer();
         endPass(TIMER_CLOUDS);
 
         // Back to the scene target the shadow pass just took us away from. This is why drawScene
@@ -319,7 +326,31 @@ public class Renderer {
      * No colour state to set: ShadowFramebuffer has no colour attachment, so there is nothing to
      * clear or blend and glClear takes the depth bit alone.
      */
+    /*
+     * What the cloud buffer has to hold on a frame that ran no cloud pass.
+     *
+     * sky.frag composites it as rgb * cloud.a + cloud.rgb, so alpha 1 with no colour is
+     * "nothing in front of the sky" and leaves the Preetham result exactly as computed.
+     * CloudRenderer deliberately never clears — it writes every pixel — so skipping it leaves a
+     * freshly allocated buffer at alpha 0, and that multiplies the whole sky to black.
+     *
+     * The clear colour is global state and the scene clear below reads it, so it goes back to the
+     * fog colour on the way out rather than relying on Game setting it again before the next frame.
+     */
+    private void clearCloudBuffer() {
+        cloudBuffer.bind();
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(fogColor.red(), fogColor.green(), fogColor.blue(), fogColor.alpha());
+    }
+
     private void drawShadowPass(Camera camera) {
+        // Nothing downstream needs the map: setUniforms uploads every cascade split as 0 when
+        // shadows are off, so cascadeFor() puts every fragment past the last split and chunk.frag
+        // reads it as lit without a lookup. Returning here is what makes that free rather than
+        // merely unused — the three cascades are the most expensive passes in the frame.
+        if (!features.sunShadows()) return;
+
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glDepthMask(true);
@@ -460,19 +491,30 @@ public class Renderer {
         frameUniforms.put("uE", new UniformValue.V3(coefficientE));
         frameUniforms.put("uZenith", new UniformValue.V3(skyZenith));
         frameUniforms.put("uZenithF", new UniformValue.V3(skyZenithF));
-        frameUniforms.put("uExtinction", new UniformValue.F(EXTINCTION));
+        // Zero extinction is how haze turns off. chunk.frag computes exp(-dist * uExtinction * d),
+        // which is 1 for every fragment at zero, and its mix() then returns the lit colour
+        // untouched — the same result as deleting the term, with no branch in the shader.
+        frameUniforms.put("uExtinction", new UniformValue.F(features.distanceHaze() ? EXTINCTION : 0.0f));
         frameUniforms.put("uCameraPos", new UniformValue.V3(camera.getPosition()));
         frameUniforms.put("uCameraNear", new UniformValue.F(Camera.NEAR_PLANE));
         frameUniforms.put("uCameraFar", new UniformValue.F(Camera.FAR_PLANE));
 
-        // One entry per cascade. glGetUniformLocation accepts an array element by name, so the
-        // sealed UniformValue needs no array variant — "uLightViewProj[1]" is just a uniform.
+        /*
+         * One entry per cascade. glGetUniformLocation accepts an array element by name, so the
+         * sealed UniformValue needs no array variant — "uLightViewProj[1]" is just a uniform.
+         *
+         * A split of 0 is how shadows turn off. chunk.frag's cascadeFor() walks the splits looking
+         * for the first one the view distance is under; no distance is under 0, so it falls
+         * through to CASCADE_COUNT, which the shader already treats as "outside every box, read as
+         * lit". The other two uniforms still upload because a program that declares them is
+         * entitled to a value, and nothing reads them once the cascade is out of range.
+         */
         for (int cascade = 0; cascade < ShadowCamera.cascadeCount(); cascade++) {
             frameUniforms.put(
                     "uLightViewProj[" + cascade + "]", new UniformValue.M4(shadowCamera.lightViewProj(cascade)));
             frameUniforms.put("uShadowBias[" + cascade + "]", new UniformValue.F(shadowCamera.normalizedBias(cascade)));
-            frameUniforms.put(
-                    "uCascadeSplit[" + cascade + "]", new UniformValue.F(ShadowCamera.splitDistance(cascade)));
+            float split = features.sunShadows() ? ShadowCamera.splitDistance(cascade) : 0.0f;
+            frameUniforms.put("uCascadeSplit[" + cascade + "]", new UniformValue.F(split));
         }
     }
 

@@ -102,6 +102,11 @@ public class GameContainer {
     private CloudRenderer cloudRenderer;
     private PostProcessor postProcessor;
 
+    // Which optional passes this run draws. Read from local.properties in initConfig, used by
+    // initRenderer — the only two consumers are Renderer and PostProcessor, and both take it in
+    // their constructor rather than being told to change mid-run.
+    private RenderFeatures renderFeatures;
+
     // audio
     private AudioPlayer music;
 
@@ -183,6 +188,11 @@ public class GameContainer {
                 localConfig.debugEnabled());
         cameraConfig = new CameraConfig(cfg.fov());
         worldConfig = new WorldConfig(cfg.seed(), cfg.renderDistance());
+        // shaders.simple strips the frame back to terrain and sky. Logged at info rather than
+        // debug: it changes the image enough that a screenshot taken with it on and read back
+        // later is otherwise a mystery.
+        renderFeatures = localConfig.simpleShaders() ? RenderFeatures.simple() : RenderFeatures.full();
+        if (localConfig.simpleShaders()) LOGGER.info("simple shaders: {}", renderFeatures);
         LOGGER.info("seed={} renderDistance={} fov={}", cfg.seed(), cfg.renderDistance(), cfg.fov());
     }
 
@@ -230,7 +240,8 @@ public class GameContainer {
                 shadowCamera,
                 cloudRenderer,
                 cloudBuffer,
-                renderWorld::version);
+                renderWorld::version,
+                renderFeatures);
 
         // After the Renderer because it needs the pass numbering, and after window.init()
         // because the constructor calls glGenQueries. Absent flag means no timer at all rather
@@ -256,7 +267,7 @@ public class GameContainer {
 
         constructBloomBuffers();
         constructGodrayBuffers();
-        postProcessor = new PostProcessor(Renderer.EXPOSURE, bloomA, bloomB, godrayA, godrayB);
+        postProcessor = new PostProcessor(Renderer.EXPOSURE, bloomA, bloomB, godrayA, godrayB, renderFeatures);
     }
 
     private void constructBloomBuffers() {

@@ -45,6 +45,15 @@ public class LocalConfig {
         return "true".equals(props.getProperty("gputimer.enabled"));
     }
 
+    // shaders.simple=true strips the frame back to terrain and sky — no cast shadows, no clouds,
+    // no light shafts, no bloom, no distance haze. Opt-in and absent-means-off like the rest of
+    // this file, so the full pipeline is what anyone without a local.properties sees.
+    // GameContainer turns this into a RenderFeatures preset; the list of what that covers lives
+    // there, not here.
+    public boolean simpleShaders() {
+        return "true".equals(props.getProperty("shaders.simple"));
+    }
+
     public boolean debugEnabled() {
         Optional<String> prop = Optional.ofNullable(props.getProperty("debug.enabled"));
         if (prop.isPresent()) {
