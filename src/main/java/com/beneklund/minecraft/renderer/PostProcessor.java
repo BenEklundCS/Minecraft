@@ -37,7 +37,7 @@ public class PostProcessor {
     private static final float GODRAY_DECAY = 0.95f;
     private static final float GODRAY_WEIGHT = 0.052f; // (1 - DECAY) / (1 - DECAY^64)
     private static final float GODRAY_DENSITY = 0.6f;
-    private static final float GODRAY_STRENGTH = 0.25f;
+    private static final float GODRAY_STRENGTH = 0.6f;
 
     // Scene radiance units, the same scale chunk.frag and sky.frag write in - not display units.
     // Measured at turbidity 2.5: a fully lit face reaches 15.4, and the sky peaks at 36 in the
