@@ -65,6 +65,7 @@ public class Game {
     private final InputMapper mapper;
     private final DebugRenderer debugRenderer;
     private final HudRenderer hudRenderer;
+    private final ChunkRenderer chunkRenderer;
     private final FrameLog frameLog;
 
     private int uploadsThisSecond;
@@ -105,6 +106,7 @@ public class Game {
             InputMapper mapper,
             DebugRenderer debugRenderer,
             HudRenderer hudRenderer,
+            ChunkRenderer chunkRenderer,
             FrameLog frameLog,
             FrameStreamServer frameStream,
             GpuTimer gpuTimer) {
@@ -124,6 +126,7 @@ public class Game {
         this.delta = delta;
         this.mapper = mapper;
         this.debugRenderer = debugRenderer;
+        this.chunkRenderer = chunkRenderer;
         this.hudRenderer = hudRenderer;
         this.frameLog = frameLog;
         this.frameStream = frameStream;
@@ -296,6 +299,10 @@ public class Game {
         renderer.setFrame(frame);
         renderer.setSkyBrightness(cycle.skyBrightness());
         renderer.setSunDirection(cycle.sunDirection());
+        // Same vector, same frame: ChunkRenderer's caster test and the Renderer's light matrix
+        // must be built from one reading of the sun, or a chunk gets culled against a sun the
+        // shadow map was not rendered from.
+        chunkRenderer.setSunDirection(cycle.sunDirection());
         window.setClearColor(renderer.fogColor());
     }
 

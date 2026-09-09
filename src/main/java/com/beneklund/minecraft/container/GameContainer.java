@@ -85,6 +85,9 @@ public class GameContainer {
     private RenderWorld renderWorld;
     private DebugRenderer debugRenderer;
     private HudRenderer hudRenderer;
+    // Held rather than local: Game pushes the sun to it each frame, the same way it does the
+    // Renderer, so the caster test and the light matrix cannot disagree within a frame.
+    private ChunkRenderer chunkRenderer;
     private Renderer renderer;
     private GlFramebuffer sceneBuffer;
     private ShadowFramebuffer shadowBuffer;
@@ -205,7 +208,7 @@ public class GameContainer {
         registry = BlockRegistry.createDefault();
         renderWorld = new RenderWorld();
         SkyRenderer skyRenderer = new SkyRenderer();
-        ChunkRenderer chunkRenderer = new ChunkRenderer(renderWorld, atlas);
+        chunkRenderer = new ChunkRenderer(renderWorld, atlas);
         debugRenderer = new DebugRenderer();
         hudRenderer = new HudRenderer(registry, atlas);
         // No initial sky brightness here on purpose — Game.run sets it from the DayNightCycle
@@ -382,6 +385,7 @@ public class GameContainer {
                 inputMapper,
                 debugRenderer,
                 hudRenderer,
+                chunkRenderer,
                 frameLog,
                 frameStream,
                 gpuTimer);

@@ -6,6 +6,7 @@ import com.beneklund.minecraft.util.EngineStats;
 import java.util.ArrayList;
 import java.util.List;
 import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
 public class ChunkRenderer implements IRenderable {
     private static final String VERT_PATH = "/shaders/chunk.vert";
@@ -19,6 +20,23 @@ public class ChunkRenderer implements IRenderable {
     // guaranteed to be after the GL context exists.
     private final ShaderProgram chunkShader;
     private final ShaderProgram shadowShader;
+
+    /*
+     * Pushed once per frame from Game, beside renderer.setSunDirection.
+     *
+     * Pushed rather than pulled from the DayNightCycle because the caster test and the light
+     * matrix have to agree on where the sun is within a frame. cycle.advance() runs early in the
+     * tick and getDrawCalls runs late inside drawScene; a second read could legally differ, and a
+     * chunk rejected against a sun the shadow map was not rendered from is a shadow that pops.
+     *
+     * Starts on the horizon, the most conservative reach, so the first frame cannot under-draw
+     * before Game has pushed anything.
+     */
+    private final Vector3f sunDirection = new Vector3f(0.0f, 0.0f, 1.0f);
+
+    public void setSunDirection(Vector3fc sunDirection) {
+        this.sunDirection.set(sunDirection);
+    }
 
     public ChunkRenderer(RenderWorld renderWorld, TextureAtlas atlas) {
         this.renderWorld = renderWorld;
@@ -38,7 +56,7 @@ public class ChunkRenderer implements IRenderable {
         for (RenderWorld.Entry entry : renderWorld.getEntries()) {
             EngineStats.countChunkConsidered();
             if (entry.opaqueMesh() != null) {
-                int cascades = cascadeMaskFor(entry.bounds(), eye);
+                int cascades = cascadeMaskFor(entry.bounds(), eye, sunDirection);
                 if (cascades != 0) {
                     result.add(new DrawCall(
                             entry.opaqueMesh(), entry.model(), shadowShader, atlas, RenderPass.SHADOW, cascades));
@@ -69,21 +87,50 @@ public class ChunkRenderer implements IRenderable {
      */
     /*
      * Which shadow cascades this box can cast into, as a bitmask. Package-private rather than
-     * private so ChunkRendererTest can pin it: it takes an AABB and a Vector3f, touches no GL
-     * and no renderer state, and the draw-call counts predicted for a still camera rest on it
-     * ignoring the frustum entirely.
+     * private so ChunkRendererTest can pin it: it takes plain vectors, touches no GL and no
+     * renderer state, and the draw-call counts predicted for a still camera rest on it ignoring
+     * the frustum entirely.
+     *
+     * The sun is a parameter rather than the field so the test can sweep it. Which cascades a
+     * chunk can cast into depends on where the light comes from and how low it is, not on
+     * distance alone - see upSunFraction below and ShadowCamera.shadowReach.
      */
-    static int cascadeMaskFor(AABB bounds, Vector3f eye) {
+    static int cascadeMaskFor(AABB bounds, Vector3f eye, Vector3f sunDirection) {
         float dx = Math.max(0.0f, Math.max(bounds.minX() - eye.x, eye.x - bounds.maxX()));
         float dz = Math.max(0.0f, Math.max(bounds.minZ() - eye.z, eye.z - bounds.maxZ()));
         float distanceSquared = dx * dx + dz * dz;
 
+        float upSun = upSunFraction(bounds, eye, sunDirection);
+
         int mask = 0;
         for (int cascade = 0; cascade < ShadowCamera.cascadeCount(); cascade++) {
-            float radius = ShadowCamera.casterRadius(cascade);
+            float radius = ShadowCamera.casterRadius(cascade, sunDirection, upSun);
             if (distanceSquared <= radius * radius) mask |= 1 << cascade;
         }
         return mask;
+    }
+
+    /*
+     * How much this chunk sits on the side the light comes from, 0 to 1.
+     *
+     * Bearing comes from the chunk's centre, not from the nearest corner the distance above is
+     * measured to: a 16-block box straddling the eye has no meaningful bearing from a corner. A
+     * chunk sitting on the eye returns 1, which costs nothing because it is inside every box
+     * already.
+     */
+    private static float upSunFraction(AABB bounds, Vector3f eye, Vector3f sunDirection) {
+        float sx = sunDirection.x();
+        float sz = sunDirection.z();
+        float sunLength = (float) Math.sqrt(sx * sx + sz * sz);
+        // Sun overhead: no side to be on, and shadowReach is ~0 anyway, so the answer is unused.
+        if (sunLength < 1.0e-4f) return 0.0f;
+
+        float ox = (bounds.minX() + bounds.maxX()) * 0.5f - eye.x;
+        float oz = (bounds.minZ() + bounds.maxZ()) * 0.5f - eye.z;
+        float offsetLength = (float) Math.sqrt(ox * ox + oz * oz);
+        if (offsetLength < 1.0e-4f) return 1.0f;
+
+        return Math.max(0.0f, (ox * sx + oz * sz) / (offsetLength * sunLength));
     }
 
     @Override

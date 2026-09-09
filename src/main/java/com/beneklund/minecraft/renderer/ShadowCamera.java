@@ -54,6 +54,46 @@ public class ShadowCamera {
         return BOX_HALVES[cascade] + 128.0f;
     }
 
+    // World height. The tallest a caster can stand above what it shadows, which is what turns a
+    // sun elevation into a horizontal shadow length.
+    private static final float MAX_CASTER_HEIGHT = 256.0f;
+
+    // The flat margin above, kept as the ceiling: it is roughly the answer for a sun low enough
+    // that the exact formula stops being useful.
+    private static final float MAX_SHADOW_REACH = 128.0f;
+
+    /*
+     * How far a shadow reaches horizontally at this sun elevation, in blocks.
+     *
+     * A caster h blocks above the surface it shadows lands its shadow h / tan(elevation) away
+     * along the ground. For a normalised sun direction tan(elevation) is y / |xz|, so the reach
+     * is h * |xz| / y.
+     *
+     * The flat 128 is that number worked out once for a low sun and then paid at every hour of
+     * the day. At noon |xz| is ~0 and the true reach is ~0: shadows fall straight down, and a
+     * caster outside the box cannot reach into it at all.
+     *
+     * Clamped, because the formula runs to infinity as the sun touches the horizon. With the sun
+     * below it there is nothing to cast, so the conservative old answer is the safe one.
+     */
+    public static float shadowReach(Vector3fc sunDirection) {
+        float up = sunDirection.y();
+        if (up <= 0.0f) return MAX_SHADOW_REACH;
+        float horizontal = (float) Math.sqrt(sunDirection.x() * sunDirection.x() + sunDirection.z() * sunDirection.z());
+        return Math.min(MAX_CASTER_HEIGHT * horizontal / up, MAX_SHADOW_REACH);
+    }
+
+    /*
+     * Caster radius for one cascade, with the sun taken into account.
+     *
+     * upSun is how much the chunk sits on the side the light comes FROM, 0 to 1. A caster
+     * down-sun of the box throws its shadow further away and can never reach in, so it gets no
+     * margin at all and is tested against the bare box.
+     */
+    public static float casterRadius(int cascade, Vector3fc sunDirection, float upSun) {
+        return BOX_HALVES[cascade] + shadowReach(sunDirection) * upSun;
+    }
+
     public static int cascadeCount() {
         return BOX_HALVES.length;
     }
