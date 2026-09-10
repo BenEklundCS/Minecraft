@@ -2,12 +2,11 @@ package com.beneklund.minecraft.util;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
-import com.beneklund.minecraft.world.IWorldAuthority;
+import com.beneklund.minecraft.world.IWorldView;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -22,14 +21,12 @@ class RaycastTest {
 
     // A world that is solid exactly at the given block coordinates, AIR everywhere else.
     // Only getBlock is exercised by the raycaster.
-    private static IWorldAuthority worldWith(Vector3i... solidBlocks) {
+    private static IWorldView worldWith(Vector3i... solidBlocks) {
         Set<Vector3i> solid = new HashSet<>(List.of(solidBlocks));
-        return new IWorldAuthority() {
+        return new IWorldView() {
             public BlockDef getBlock(int x, int y, int z) {
                 return solid.contains(new Vector3i(x, y, z)) ? STONE : AIR;
             }
-
-            public void setBlock(int x, int y, int z, Block block) {}
 
             public Chunk getChunk(ChunkPos pos) {
                 return null;
@@ -38,14 +35,12 @@ class RaycastTest {
             public List<Entity> getEntities(AABB aabb) {
                 return List.of();
             }
-
-            public void markNeighborsDirty(ChunkPos pos) {}
         };
     }
 
     @Test
     void cast_hitsBlockAhead_reportsNorthFaceAtDistanceOne() {
-        IWorldAuthority world = worldWith(new Vector3i(0, 64, 0));
+        IWorldView world = worldWith(new Vector3i(0, 64, 0));
 
         RaycastResult result = Raycast.cast(new Vector3f(0.5f, 64.5f, -1.0f), new Vector3f(0, 0, 1), world, REACH);
 
@@ -57,7 +52,7 @@ class RaycastTest {
 
     @Test
     void cast_emptyWorld_returnsMiss() {
-        IWorldAuthority world = worldWith(); // nothing solid anywhere
+        IWorldView world = worldWith(); // nothing solid anywhere
 
         RaycastResult result = Raycast.cast(new Vector3f(0.5f, 64.5f, -1.0f), new Vector3f(0, 0, 1), world, REACH);
 
@@ -68,7 +63,7 @@ class RaycastTest {
     void cast_stopsAtNearestBlock_notTheOneBehind() {
         Vector3i near = new Vector3i(0, 64, 0);
         Vector3i far = new Vector3i(0, 64, 3);
-        IWorldAuthority world = worldWith(near, far);
+        IWorldView world = worldWith(near, far);
 
         RaycastResult result = Raycast.cast(new Vector3f(0.5f, 64.5f, -1.0f), new Vector3f(0, 0, 1), world, REACH);
 

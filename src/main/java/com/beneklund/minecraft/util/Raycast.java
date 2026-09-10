@@ -1,13 +1,13 @@
 package com.beneklund.minecraft.util;
 
-import com.beneklund.minecraft.world.IWorldAuthority;
+import com.beneklund.minecraft.world.IWorldView;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
 // https://web.archive.org/web/20121024081332/www.xnawiki.com/index.php?title=Voxel_traversal
 
 public class Raycast {
-    public static RaycastResult cast(Vector3f origin, Vector3f direction, IWorldAuthority world, float maxDistance) {
+    public static RaycastResult cast(Vector3f origin, Vector3f direction, IWorldView world, float maxDistance) {
         // Start in the voxel that contains the ray origin
         int x = (int) Math.floor(origin.x);
         int y = (int) Math.floor(origin.y);

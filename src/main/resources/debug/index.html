@@ -503,6 +503,40 @@
     </section>
 
     <section class="panel bevel">
+      <h2>cpu frame <span class="tag" id="tag-cpu">ms</span></h2>
+      <div class="body">
+        <div class="kv">
+          <span class="k">input</span><span class="v2 dim" id="c-input">&mdash;</span>
+          <span class="k">physics</span><span class="v2 dim" id="c-physics">&mdash;</span>
+          <span class="k">chunks <em>uploads + tick</em></span><span class="v2 dim" id="c-chunks">&mdash;</span>
+          <span class="k">scene <em>issuing, not drawing</em></span><span class="v2 dim" id="c-scene">&mdash;</span>
+        </div>
+        <div class="rule"></div>
+        <div class="kv">
+          <span class="k">post</span><span class="v2 dim" id="c-post">&mdash;</span>
+          <span class="k">hud</span><span class="v2 dim" id="c-hud">&mdash;</span>
+          <span class="k">capture <em>readPixels</em></span><span class="v2 dim" id="c-capture">&mdash;</span>
+          <span class="k">swap <em>waiting on the gpu</em></span><span class="v2 dim" id="c-swap">&mdash;</span>
+        </div>
+        <div class="rule"></div>
+        <div class="kv">
+          <span class="k">accounted</span><span class="v2 dim" id="c-accounted">&mdash;</span>
+          <span class="k">unaccounted <em>vs p50</em></span><span class="v2 dim" id="c-gap">&mdash;</span>
+        </div>
+        <div class="hint" id="cpu-hint">
+          The main thread's frame, region by region &mdash; the counterpart to the gpu panel above.
+          <b>Read them against each other:</b> when p50 sits far above the gpu sum, the difference
+          is in here. A big <code>swap</code> with everything else small is the cpu waiting on the
+          gpu, which means the frame is gpu-bound and nothing on this list is the problem.
+          <code>chunks</code> is the one that separates standing still from flying.
+          <b>unaccounted</b> is p50 minus the sum: consistently large means time is going somewhere
+          no region covers &mdash; gc pauses are the usual answer, and they are not attributable to
+          any one region because they can land in all of them.
+        </div>
+      </div>
+    </section>
+
+    <section class="panel bevel">
       <h2>teleport <span class="tag live">/tp</span></h2>
       <div class="body">
         <div class="grid5">
@@ -817,6 +851,7 @@ function applyStats(s) {
   setCount($("c-hud-v"), pick(s, "hudVertices"));
   setCount($("c-uniforms"), pick(s, "uniformUploads"));
   applyGpuPasses(s);
+  applyCpuPhases(s);
 
   // drawn/considered is the ratio MVP.md claims is about 70%; showing both halves plus the
   // percentage is what lets a glance either confirm that or correct it.
@@ -913,6 +948,40 @@ function applyGpuPasses(s) {
   // local.properties line than seven skipped passes. Say which.
   const anyRan = names.some(name => pick(s, name) >= 0);
   setTag($("tag-gpu"), anyRan, "ms", "timers off");
+}
+
+/* ---------- cpu frame ---------- */
+
+// Unlike the gpu passes there is no -1 here: a region that did nothing genuinely took ~0 ms, and
+// CAPTURE reading 0.000 is the correct, informative answer when no viewer is attached. So this
+// dims a zero rather than dashing it, and keeps a dash for "the field is absent", which is what
+// an older game build looks like.
+function setCpuMs(el, v) {
+  const has = isFinite(v);
+  el.textContent = has ? v.toFixed(3) : "—";
+  el.classList.toggle("dim", !has || v < 0.005);
+  el.title = has ? "" : "not reported by this build";
+}
+
+function applyCpuPhases(s) {
+  const names = ["cpuInputMs", "cpuPhysicsMs", "cpuChunksMs", "cpuSceneMs",
+                 "cpuPostMs", "cpuHudMs", "cpuCaptureMs", "cpuSwapMs"];
+  const ids = ["c-input", "c-physics", "c-chunks", "c-scene",
+               "c-post", "c-hud", "c-capture", "c-swap"];
+  names.forEach((name, i) => setCpuMs($(ids[i]), pick(s, name)));
+
+  const accounted = pick(s, "cpuAccountedMs");
+  setCpuMs($("c-accounted"), accounted);
+
+  // p50 is a median over 300 frames and the regions are one frame, so this is a rough read, not
+  // an identity. It is still the fastest way to see gc: a gap that stays wide while every region
+  // stays small is time nobody claimed.
+  const p50 = pick(s, "p50");
+  const gap = (isFinite(accounted) && isFinite(p50)) ? p50 - accounted : NaN;
+  setCpuMs($("c-gap"), gap);
+
+  const reported = names.some(name => isFinite(pick(s, name)));
+  setTag($("tag-cpu"), reported, "ms", "unwired");
 }
 
 function captureBaseline() {

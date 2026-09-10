@@ -10,6 +10,7 @@ import java.util.Properties;
 // shipped config. Missing file is normal; all getters just return Optional.empty().
 public class LocalConfig {
     private static final boolean DEFAULT_DEBUG_MODE = false;
+    private static final int DEFAULT_DEBUG_SERVER_PORT = 8099;
     private final Properties props = new Properties();
 
     public LocalConfig() {
@@ -29,13 +30,31 @@ public class LocalConfig {
         return Optional.ofNullable(props.getProperty("preferred.album"));
     }
 
-    // Port for the live frame stream, e.g. framestream.port=8099. Absent means off — this opens
-    // a socket, so it stays opt-in rather than defaulting on.
-    public Optional<Integer> frameStreamPort() {
+    /*
+     * debugserver.enabled=true turns on the debug HTTP server and the frame stream it serves.
+     *
+     * Its own flag rather than "the port is set", because the two answer different questions and
+     * the server is not free: it does a glReadPixels every 100 ms whether or not a browser is
+     * connected, and glReadPixels drains the whole GL pipeline. Measured on an RTX 2070 at render
+     * distance 32, that is worth ~10 ms of p99 — invisible standing still, obvious while flying.
+     *
+     * Keeping the port in a separate key means you can switch the server off for a timing run and
+     * back on without losing the port you always use.
+     */
+    public boolean debugServerEnabled() {
+        return "true".equals(props.getProperty("debugserver.enabled"));
+    }
+
+    // Port for the debug server and its live frame stream. Only read when debugserver.enabled is
+    // true; a malformed or absent value falls back to the default rather than silently not
+    // starting, because "enabled" already said what was wanted.
+    public int debugServerPort() {
         try {
-            return Optional.ofNullable(props.getProperty("framestream.port")).map(Integer::parseInt);
+            return Optional.ofNullable(props.getProperty("framestream.port"))
+                    .map(Integer::parseInt)
+                    .orElse(DEFAULT_DEBUG_SERVER_PORT);
         } catch (NumberFormatException e) {
-            return Optional.empty();
+            return DEFAULT_DEBUG_SERVER_PORT;
         }
     }
 

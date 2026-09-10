@@ -16,6 +16,11 @@ public class ChunkRenderer implements IRenderable {
 
     private final RenderWorld renderWorld;
     private final TextureAtlas atlas;
+
+    // Whether the shadow pass runs at all. Without it this class builds a SHADOW DrawCall per
+    // loaded chunk per frame for a pass that returns immediately — measured at ~3,000 objects a
+    // frame, allocated and dropped, which is GC pressure paid for nothing.
+    private final RenderFeatures features;
     // Instance, not static final: a static initializer runs at class-load, which isn't
     // guaranteed to be after the GL context exists.
     private final ShaderProgram chunkShader;
@@ -38,9 +43,10 @@ public class ChunkRenderer implements IRenderable {
         this.sunDirection.set(sunDirection);
     }
 
-    public ChunkRenderer(RenderWorld renderWorld, TextureAtlas atlas) {
+    public ChunkRenderer(RenderWorld renderWorld, TextureAtlas atlas, RenderFeatures features) {
         this.renderWorld = renderWorld;
         this.atlas = atlas;
+        this.features = features;
         // Constructing directly rather than calling reload() — a shader that won't compile at
         // startup should stop the game with the GLSL error, and reload() has nothing to fall
         // back to before this assignment anyway.
@@ -53,9 +59,22 @@ public class ChunkRenderer implements IRenderable {
         Frustum frustum = new Frustum(camera.getViewProjectionMatrix());
         Vector3f eye = camera.getPosition();
         List<DrawCall> result = new ArrayList<>();
+        // Hoisted out of the loop: it cannot change within a frame, and testing it per entry was
+        // the point of the measurement below, not a saving.
+        boolean shadows = features.sunShadows();
         for (RenderWorld.Entry entry : renderWorld.getEntries()) {
             EngineStats.countChunkConsidered();
-            if (entry.opaqueMesh() != null) {
+            /*
+             * Casters are collected before the frustum test on purpose — a chunk behind the camera
+             * still casts into the view. But when the shadow pass is off, every one of these is an
+             * allocation for a pass that returns immediately at the top of drawShadowPass.
+             *
+             * Measured while flying at render distance 32: ~3,000 SHADOW DrawCalls a frame against
+             * ~900 opaque ones, submitting zero vertices. JFR put ChunkRenderer.getDrawCalls among
+             * the top allocation sites in the process, and the GC that follows lands on the main
+             * thread, which is where the frame is.
+             */
+            if (shadows && entry.opaqueMesh() != null) {
                 int cascades = cascadeMaskFor(entry.bounds(), eye, sunDirection);
                 if (cascades != 0) {
                     result.add(new DrawCall(

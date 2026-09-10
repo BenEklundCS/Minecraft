@@ -2,7 +2,7 @@ package com.beneklund.minecraft.player;
 
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.util.AABB;
-import com.beneklund.minecraft.world.IWorldAuthority;
+import com.beneklund.minecraft.world.IWorldView;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
@@ -21,7 +21,7 @@ public class Physics {
     private static final float GRAVITY = 32.0f;
     private static final float TERMINAL_VELOCITY = 40.0f;
 
-    public void update(IPhysicsBody body, IWorldAuthority world, float dt, boolean flying) {
+    public void update(IPhysicsBody body, IWorldView world, float dt, boolean flying) {
         if (flying) {
             fly(body, dt);
         } else {
@@ -34,7 +34,7 @@ public class Physics {
         body.getPosition().add(body.getVelocity().x * dt, body.getVelocity().y * dt, body.getVelocity().z * dt);
     }
 
-    private void nofly(IPhysicsBody body, IWorldAuthority world, float dt) {
+    private void nofly(IPhysicsBody body, IWorldView world, float dt) {
         Vector3f velocity = body.getVelocity();
         velocity.y -= GRAVITY * dt;
         if (velocity.y < -TERMINAL_VELOCITY) velocity.y = -TERMINAL_VELOCITY;
@@ -46,7 +46,7 @@ public class Physics {
         resolveY(body, world, dt);
     }
 
-    private void resolveX(IPhysicsBody body, IWorldAuthority world, float dt) {
+    private void resolveX(IPhysicsBody body, IWorldView world, float dt) {
         Vector3f position = body.getPosition();
         Vector3f velocity = body.getVelocity();
         position.x += velocity.x * dt; // tentatively move, then push back out of anything solid
@@ -76,7 +76,7 @@ public class Physics {
         velocity.x = 0;
     }
 
-    private void resolveZ(IPhysicsBody body, IWorldAuthority world, float dt) {
+    private void resolveZ(IPhysicsBody body, IWorldView world, float dt) {
         Vector3f position = body.getPosition();
         Vector3f velocity = body.getVelocity();
         position.z += velocity.z * dt;
@@ -103,7 +103,7 @@ public class Physics {
         velocity.z = 0;
     }
 
-    private void resolveY(IPhysicsBody body, IWorldAuthority world, float dt) {
+    private void resolveY(IPhysicsBody body, IWorldView world, float dt) {
         Vector3f position = body.getPosition();
         Vector3f velocity = body.getVelocity();
         position.y += velocity.y * dt;
@@ -136,7 +136,7 @@ public class Physics {
         velocity.y = 0;
     }
 
-    private boolean isSolid(IWorldAuthority world, Vector3i cell) {
+    private boolean isSolid(IWorldView world, Vector3i cell) {
         BlockDef block = world.getBlock(cell.x, cell.y, cell.z);
         return block != null && block.solid();
     }

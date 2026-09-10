@@ -14,10 +14,7 @@ import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbAudioLoader;
 import com.beneklund.minecraft.platform.debug.FrameStreamServer;
-import com.beneklund.minecraft.platform.graphics.DepthMode;
-import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
-import com.beneklund.minecraft.platform.graphics.GpuTimer;
-import com.beneklund.minecraft.platform.graphics.ShadowFramebuffer;
+import com.beneklund.minecraft.platform.graphics.*;
 import com.beneklund.minecraft.platform.images.StbImageLoader;
 import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
@@ -218,7 +215,7 @@ public class GameContainer {
         registry = BlockRegistry.createDefault();
         renderWorld = new RenderWorld();
         SkyRenderer skyRenderer = new SkyRenderer();
-        chunkRenderer = new ChunkRenderer(renderWorld, atlas);
+        chunkRenderer = new ChunkRenderer(renderWorld, atlas, renderFeatures);
         debugRenderer = new DebugRenderer();
         hudRenderer = new HudRenderer(registry, atlas);
         // No initial sky brightness here on purpose — Game.run sets it from the DayNightCycle
@@ -364,17 +361,26 @@ public class GameContainer {
         player.setOrientation(spawn.pitch(), spawn.yaw());
     }
 
-    // Opt-in: absent framestream.port means no socket is opened at all.
+    /*
+     * Opt-in, behind debugserver.enabled: without it no socket is opened and no frame is ever
+     * read back.
+     *
+     * Off is the right default for anything you intend to measure. The server captures the
+     * framebuffer every 100 ms with no check for whether a browser is attached, and glReadPixels
+     * is a synchronous stall that waits for the whole pipeline to drain. Logged at info when it
+     * starts, so a timing run that quietly included it is identifiable afterwards.
+     */
     private void initFrameStream() {
-        localConfig.frameStreamPort().ifPresent(port -> {
-            try {
-                frameStream = new FrameStreamServer(port);
-                frameStream.start();
-            } catch (IOException e) {
-                LOGGER.warn("frame stream failed to start on port {}", port, e);
-                frameStream = null;
-            }
-        });
+        if (!localConfig.debugServerEnabled()) return;
+        int port = localConfig.debugServerPort();
+        try {
+            frameStream = new FrameStreamServer(port);
+            frameStream.start();
+            LOGGER.info("debug server on http://127.0.0.1:{}/ - captures a frame every 100 ms", port);
+        } catch (IOException e) {
+            LOGGER.warn("debug server failed to start on port {}", port, e);
+            frameStream = null;
+        }
     }
 
     private Game buildGame() {

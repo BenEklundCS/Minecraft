@@ -2,13 +2,12 @@ package com.beneklund.minecraft.player;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.util.AABB;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
-import com.beneklund.minecraft.world.IWorldAuthority;
+import com.beneklund.minecraft.world.IWorldView;
 import java.util.List;
 import java.util.function.Predicate;
 import org.joml.Vector3f;
@@ -64,13 +63,11 @@ class PhysicsTest {
     }
 
     // A world where a cell is solid iff the predicate says so. Only getBlock is exercised.
-    private static IWorldAuthority worldWhere(Predicate<Vector3i> solid) {
-        return new IWorldAuthority() {
+    private static IWorldView worldWhere(Predicate<Vector3i> solid) {
+        return new IWorldView() {
             public BlockDef getBlock(int x, int y, int z) {
                 return solid.test(new Vector3i(x, y, z)) ? SOLID : AIR;
             }
-
-            public void setBlock(int x, int y, int z, Block block) {}
 
             public Chunk getChunk(ChunkPos pos) {
                 return null;
@@ -79,8 +76,6 @@ class PhysicsTest {
             public List<Entity> getEntities(AABB aabb) {
                 return List.of();
             }
-
-            public void markNeighborsDirty(ChunkPos pos) {}
         };
     }
 
@@ -88,7 +83,7 @@ class PhysicsTest {
     void gravity_fallsAndStopsOnFloor() {
         Physics physics = new Physics();
         FakeBody body = new FakeBody(new Vector3f(0, 5, 0), new Vector3f());
-        IWorldAuthority world = worldWhere(cell -> cell.y < 0);
+        IWorldView world = worldWhere(cell -> cell.y < 0);
 
         for (int i = 0; i < 10; i++) {
             physics.update(body, world, 0.1f, false);
@@ -103,7 +98,7 @@ class PhysicsTest {
     void wall_blocksHorizontalMovement() {
         Physics physics = new Physics();
         FakeBody body = new FakeBody(new Vector3f(0.5f, 50, 0.5f), new Vector3f(10, 0, 0));
-        IWorldAuthority world = worldWhere(cell -> cell.x >= 1);
+        IWorldView world = worldWhere(cell -> cell.x >= 1);
 
         physics.update(body, world, 0.1f, false);
 
@@ -120,7 +115,7 @@ class PhysicsTest {
     void wallOnTheLeft_movingNegativeXSnapsToTheNearFace() {
         Physics physics = new Physics();
         FakeBody body = new FakeBody(new Vector3f(3f, 50, 0.5f), new Vector3f(-20, 0, 0));
-        IWorldAuthority world = worldWhere(cell -> cell.x <= 1); // slab two cells deep: x=0 and x=1
+        IWorldView world = worldWhere(cell -> cell.x <= 1); // slab two cells deep: x=0 and x=1
 
         physics.update(body, world, 0.1f, false); // moves -2.0 in one tick, spanning both cells
 
@@ -134,7 +129,7 @@ class PhysicsTest {
     void wallBehind_movingNegativeZSnapsToTheNearFace() {
         Physics physics = new Physics();
         FakeBody body = new FakeBody(new Vector3f(0.5f, 50, 3f), new Vector3f(0, 0, -20));
-        IWorldAuthority world = worldWhere(cell -> cell.z <= 1);
+        IWorldView world = worldWhere(cell -> cell.z <= 1);
 
         physics.update(body, world, 0.1f, false);
 
@@ -153,7 +148,7 @@ class PhysicsTest {
     void flying_hovering_holdsAltitude() {
         Physics physics = new Physics();
         FakeBody body = new FakeBody(new Vector3f(0.5f, 80, 0.5f), new Vector3f());
-        IWorldAuthority world = worldWhere(cell -> cell.y < 0);
+        IWorldView world = worldWhere(cell -> cell.y < 0);
 
         for (int i = 0; i < 60; i++) {
             body.getVelocity().set(0, 0, 0); // what Player.tick does every frame while hovering
@@ -169,7 +164,7 @@ class PhysicsTest {
     void flying_ascending_isNotDraggedDownByGravity() {
         Physics physics = new Physics();
         FakeBody body = new FakeBody(new Vector3f(0.5f, 80, 0.5f), new Vector3f(0, 50, 0));
-        IWorldAuthority world = worldWhere(cell -> cell.y < 0);
+        IWorldView world = worldWhere(cell -> cell.y < 0);
 
         physics.update(body, world, 0.1f, true);
 
@@ -182,7 +177,7 @@ class PhysicsTest {
     void flying_passesThroughSolidBlocks() {
         Physics physics = new Physics();
         FakeBody body = new FakeBody(new Vector3f(0.5f, 50, 0.5f), new Vector3f(10, 0, 0));
-        IWorldAuthority world = worldWhere(cell -> true); // solid everywhere
+        IWorldView world = worldWhere(cell -> true); // solid everywhere
 
         physics.update(body, world, 0.1f, true);
 
@@ -196,7 +191,7 @@ class PhysicsTest {
     void flying_movesOnEveryAxis() {
         Physics physics = new Physics();
         FakeBody body = new FakeBody(new Vector3f(0, 50, 0), new Vector3f(3, -4, 5));
-        IWorldAuthority world = worldWhere(cell -> cell.y < 0);
+        IWorldView world = worldWhere(cell -> cell.y < 0);
 
         physics.update(body, world, 2f, true);
 

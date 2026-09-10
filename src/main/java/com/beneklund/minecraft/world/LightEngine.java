@@ -179,7 +179,7 @@ public class LightEngine {
     // Two phases, because "dimmer than where I came from" is the only local test for "this light
     // was mine". Walk outward zeroing those cells; a cell as bright or brighter belongs to some
     // other emitter, so park it and let it refill the hole afterwards.
-    public void removeBlockLight(IWorldAuthority world, int x, int y, int z, int removedLevel) {
+    public void removeBlockLight(IWorldView world, int x, int y, int z, int removedLevel) {
         Deque<LitCell> removal = new ArrayDeque<>();
         Deque<LitCell> relight = new ArrayDeque<>();
 
@@ -227,19 +227,19 @@ public class LightEngine {
     // A chunk that isn't loaded, or is loaded but has never been through compute(), reads as dark
     // and swallows writes. Neither is a cell we can be wrong about: there's no mesh built from it
     // yet, and whenever one is, it comes from a full recompute.
-    private int blockLight(IWorldAuthority world, int x, int y, int z) {
+    private int blockLight(IWorldView world, int x, int y, int z) {
         Chunk chunk = chunkAt(world, x, z);
         if (chunk == null || !chunk.hasLight()) return LightMap.MIN_LEVEL;
         return chunk.getBlockLight(local(x), y, local(z));
     }
 
-    private void setBlockLight(IWorldAuthority world, int x, int y, int z, int level) {
+    private void setBlockLight(IWorldView world, int x, int y, int z, int level) {
         Chunk chunk = chunkAt(world, x, z);
         if (chunk == null || !chunk.hasLight()) return;
         chunk.setBlockLight(local(x), y, local(z), level);
     }
 
-    private Chunk chunkAt(IWorldAuthority world, int x, int z) {
+    private Chunk chunkAt(IWorldView world, int x, int z) {
         return world.getChunk(new ChunkPos(Math.floorDiv(x, Chunk.SIZE_XZ), Math.floorDiv(z, Chunk.SIZE_XZ)));
     }
 

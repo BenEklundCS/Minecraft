@@ -20,10 +20,7 @@ import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.RenderPass;
-import com.beneklund.minecraft.util.DeltaTracker;
-import com.beneklund.minecraft.util.EngineStats;
-import com.beneklund.minecraft.util.FrameLog;
-import com.beneklund.minecraft.util.RaycastResult;
+import com.beneklund.minecraft.util.*;
 import com.beneklund.minecraft.world.*;
 import com.google.gson.JsonObject;
 import java.io.IOException;
@@ -191,7 +188,30 @@ public class Game {
         stats.addProperty("gpuOpaqueMs", gpuPassMillis(Renderer.TIMER_OPAQUE));
         stats.addProperty("gpuTransparentMs", gpuPassMillis(Renderer.TIMER_TRANSPARENT));
         stats.addProperty("gpuPostMs", gpuPassMillis(Renderer.TIMER_POST));
+
+        /*
+         * The main thread's own frame, region by region. Named cpu* so they sort beside the gpu*
+         * pair they are meant to be read against: when p50 is far above the gpu total, the
+         * difference is in here.
+         *
+         * cpuAccountedMs is the sum, and it is reported rather than left to be added up because
+         * the useful check is against p50 - a large shortfall means time is going somewhere no
+         * region covers, and that is a different bug from any one region being slow.
+         */
+        float accounted = 0.0f;
+        for (CpuPhase phase : CpuPhase.values()) {
+            float ms = EngineStats.phaseMillis(phase);
+            stats.addProperty("cpu" + name(phase) + "Ms", ms);
+            accounted += ms;
+        }
+        stats.addProperty("cpuAccountedMs", accounted);
         return stats.toString();
+    }
+
+    // INPUT -> Input, so the JSON key reads cpuInputMs rather than cpuINPUTMs.
+    private static String name(CpuPhase phase) {
+        String n = phase.name();
+        return n.charAt(0) + n.substring(1).toLowerCase(java.util.Locale.ROOT);
     }
 
     private static float sumOfPassesThatRan(float... millis) {
@@ -236,10 +256,23 @@ public class Game {
             EngineStats.beginFrame();
             frame++;
             processTitle();
+            EngineStats.beginPhase(CpuPhase.INPUT);
             processInput();
+            EngineStats.endPhase(CpuPhase.INPUT);
+
+            EngineStats.beginPhase(CpuPhase.PHYSICS);
             processPhysics();
+            EngineStats.endPhase(CpuPhase.PHYSICS);
+
             if (frameStream != null) frameStream.drainCommands();
+
+            // Chunk uploads and whatever ChunkManager does on this thread. Standing still this is
+            // near zero and flying it is not, which is the difference the whole instrument exists
+            // to size.
+            EngineStats.beginPhase(CpuPhase.CHUNKS);
             processChunks();
+            EngineStats.endPhase(CpuPhase.CHUNKS);
+
             cycle.advance(delta.getDelta());
             Hotbar hotbar = player.getHotbar();
             hudRenderer.setHotbar(hotbar.snapshot(), hotbar.selected());
@@ -247,13 +280,16 @@ public class Game {
             window.beginFrame();
             // drawScene binds the shadow map first and the scene target second — passing the
             // target in rather than binding it here keeps that ordering in one place.
+            EngineStats.beginPhase(CpuPhase.SCENE);
             renderer.drawScene(camera, sceneBuffer);
+            EngineStats.endPhase(CpuPhase.SCENE);
 
             // draw() owns the return to the default framebuffer now — it runs several half-res
             // passes first, so it has to do its own binding between them.
             //
             // depthTexture() only answers because sceneBuffer is built with DepthMode.TEXTURE; if
             // this throws, the argument to fix is the one in GameContainer, not the one here.
+            EngineStats.beginPhase(CpuPhase.POST);
             if (gpuTimer != null) gpuTimer.begin(Renderer.TIMER_POST, frame);
             postProcessor.draw(
                     sceneBuffer.colorTexture(),
@@ -262,6 +298,7 @@ public class Game {
                     window.getWidth(),
                     window.getHeight());
             if (gpuTimer != null) gpuTimer.end(Renderer.TIMER_POST);
+            EngineStats.endPhase(CpuPhase.POST);
 
             // After the tonemap and before the HUD: an instrument drawn over the finished frame,
             // deliberately not part of the image it is being used to debug.
@@ -276,21 +313,27 @@ public class Game {
             }
 
             // After the tonemap, straight to the window. HUD colours are display values already.
+            EngineStats.beginPhase(CpuPhase.HUD);
             renderer.drawHud(camera);
+            EngineStats.endPhase(CpuPhase.HUD);
 
             // After the HUD so the stream shows exactly what is on screen, overlay included.
             // wantsFrame() gates before readPixels, so a declined frame costs nothing.
+            EngineStats.beginPhase(CpuPhase.CAPTURE);
             if (frameStream != null && frameStream.wantsFrame(System.currentTimeMillis())) {
                 int w = window.getWidth();
                 int h = window.getHeight();
                 frameStream.submit(ScreenCapture.readPixels(w, h), w, h);
             }
+            EngineStats.endPhase(CpuPhase.CAPTURE);
 
             if (screenshotRequested) {
                 captureScreenshot();
                 screenshotRequested = false;
             }
+            EngineStats.beginPhase(CpuPhase.SWAP);
             window.endFrame();
+            EngineStats.endPhase(CpuPhase.SWAP);
         }
     }
 

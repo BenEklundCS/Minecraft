@@ -33,10 +33,14 @@ run of the game; a startup crash fails the build.
   `chunk, world, render, gpu, input, player, io, audio, perf` (see `util/Log.java`,
   `resources/logback.xml`). Logback re-scans every 5s, so levels can change mid-run.
 - **`local.properties`** (repo root, gitignored, optional): `startup.disc`, `preferred.album`,
-  `debug.enabled`, `framestream.port`, `gputimer.enabled`, `shaders.simple`. Read by
+  `debug.enabled`, `debugserver.enabled`, `framestream.port`, `gputimer.enabled`,
+  `shaders.simple`. Read by
   `container/LocalConfig`. `shaders.simple=true` strips the frame back to terrain and sky —
   no cast shadows, clouds, light shafts, bloom or distance haze; see `renderer/RenderFeatures`
   for what each flag switches off and what deliberately survives.
+  `debugserver.enabled=true` starts the debug HTTP server; **off is the right default for a
+  timing run**, because it captures the framebuffer every 100 ms with a synchronous
+  `glReadPixels` whether or not a browser is attached. `framestream.port` only sets the port.
 - **Shader hot reload:** the `RELOAD_SHADERS` input action calls `renderer.reloadAll()` in-game.
 - **Launch config:** `container/ContainerConfig.defaults()` — seed, render distance, FOV,
   window, resource pack, spawn.

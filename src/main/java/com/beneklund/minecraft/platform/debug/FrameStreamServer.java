@@ -41,6 +41,11 @@ public class FrameStreamServer {
     // The browser polls faster than this; the limit is here so the encode worker and the render
     // thread's readPixels stay off the frame budget. 10 fps is plenty to see flicker.
     private static final long MIN_FRAME_INTERVAL_MS = 100;
+
+    // How long after a viewer's last /frame.png request capture keeps running. Comfortably more
+    // than the viewer's own poll interval, so a browser that is watching never sees a gap, and
+    // short enough that closing the tab stops the cost within a couple of seconds.
+    private static final long VIEWER_IDLE_TIMEOUT_MS = 2_000;
     private static final int CHANNELS = 3;
 
     // The benchmark viewpoint. Chosen once and then never changed - a number taken at a
@@ -67,6 +72,21 @@ public class FrameStreamServer {
 
     private HttpServer server;
     private long lastFrameAt;
+
+    /*
+     * When a viewer last asked for /frame.png. Capture stops entirely once nobody has asked
+     * inside VIEWER_IDLE_TIMEOUT_MS.
+     *
+     * Without this the game reads back and encodes the framebuffer forever, whether or not a
+     * browser exists — and that is not a small background cost. Measured while flying at render
+     * distance 32: glReadPixels is a synchronous stall that drains the pipeline, encodePng
+     * allocates a width x height int[] on top of the direct ByteBuffer and the byte[] copy, and
+     * JFR put encodePng among the top allocation sites in the process with 5,621 GC phases in
+     * 20 seconds. The GC that follows lands on the main thread, which is where the frame is.
+     *
+     * volatile because the HTTP threads write it and the render thread reads it.
+     */
+    private volatile long lastViewerPollAt;
 
     // Whether an encode is still in flight. Without it the render thread hands the worker a
     // frame every MIN_FRAME_INTERVAL_MS whether or not the last one finished, and a PNG encode
@@ -139,6 +159,9 @@ public class FrameStreamServer {
     // which matters twice over, because readPixels allocates a fresh direct ByteBuffer per call
     // and those are freed only when the GC gets round to them.
     public boolean wantsFrame(long nowMillis) {
+        // Nobody is watching, so there is nothing to produce. Checked first because it is the
+        // common case: the server is usually up for /stats and /tp while no browser is open.
+        if (nowMillis - lastViewerPollAt > VIEWER_IDLE_TIMEOUT_MS) return false;
         if (nowMillis - lastFrameAt < MIN_FRAME_INTERVAL_MS) return false;
         if (encoding.get()) return false;
         lastFrameAt = nowMillis;
@@ -201,6 +224,10 @@ public class FrameStreamServer {
     }
 
     private void serveFrame(HttpExchange exchange) throws IOException {
+        // Before the null check, so the first request primes capture rather than being refused
+        // forever: it 503s once, capture starts, and the viewer's next poll finds a frame.
+        lastViewerPollAt = System.currentTimeMillis();
+
         byte[] png = latestPng.get();
         if (png == null) {
             exchange.sendResponseHeaders(503, -1);
