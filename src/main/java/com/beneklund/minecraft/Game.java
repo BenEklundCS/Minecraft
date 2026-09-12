@@ -59,6 +59,7 @@ public class Game {
     private final World world;
     private final IWorldAuthority authority;
     private final DeltaTracker delta;
+    private final FixedTimestep timestep;
     private final InputMapper mapper;
     private final DebugRenderer debugRenderer;
     private final HudRenderer hudRenderer;
@@ -100,6 +101,7 @@ public class Game {
             World world,
             IWorldAuthority authority,
             DeltaTracker delta,
+            FixedTimestep timestep,
             InputMapper mapper,
             DebugRenderer debugRenderer,
             HudRenderer hudRenderer,
@@ -121,6 +123,7 @@ public class Game {
         this.world = world;
         this.authority = authority;
         this.delta = delta;
+        this.timestep = timestep;
         this.mapper = mapper;
         this.debugRenderer = debugRenderer;
         this.chunkRenderer = chunkRenderer;
@@ -451,26 +454,12 @@ public class Game {
     }
 
     private void processPhysics() {
-        // TODO: physics steps once per frame on the raw delta, so the simulation is only as
-        // stable as the frame rate. Collision is discrete — resolveY checks the cells the box
-        // lands in, never the ones it passed through — so a long frame (GC pause, the spawn
-        // mesh-upload storm) can move the player far enough to skip clean through a floor.
-        //
-        // Real engines don't scale dt down to hide this, they stop letting the frame rate set
-        // the step at all. Fixed timestep: bank the elapsed time in an accumulator, run as many
-        // fixed 1/60 sub-steps as the bank affords, carry the remainder into next frame. A 0.25s
-        // hitch becomes 15 small correct steps instead of one huge wrong one, and the sim
-        // becomes deterministic — same inputs, same steps, regardless of machine. That's
-        // Unity's FixedUpdate, Source's tick rate, and Quake before either of them.
-        //
-        // The other half is swept collision: test the path the box travels, not just where it
-        // lands. Unity calls it Continuous collision detection, Box2D calls it a bullet body.
-        // Fixed step is the one to do first — it's what buys determinism.
-        //
-        // Backlog: "Fixed timestep for physics" on the warm-up shelf in docs/BACKLOG.md.
         float dt = delta.getDelta();
+        int steps = timestep.stepsFor(dt);
         if (physicsReady()) {
-            physics.update(player, authority, dt, player.isFlyMode());
+            for (int i = 0; i < steps; i++) {
+                physics.update(player, authority, FixedTimestep.STEP_SECONDS, player.isFlyMode());
+            }
         }
         player.syncCamera();
     }

@@ -27,6 +27,7 @@ import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.util.DeltaTracker;
+import com.beneklund.minecraft.util.FixedTimestep;
 import com.beneklund.minecraft.util.FrameLog;
 import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.IGenerationSpec;
@@ -74,6 +75,7 @@ public class GameContainer {
     private Window window;
     private Camera camera;
     private DeltaTracker delta;
+    private FixedTimestep timestep;
     private FrameLog frameLog;
 
     // renderer
@@ -203,6 +205,7 @@ public class GameContainer {
         window = new Window(windowConfig, inputEventQueue);
         inputHandler = new InputHandler(window, camera);
         delta = new DeltaTracker(window::getTime);
+        timestep = new FixedTimestep();
         // Beside delta because they are one concern, not because it needs anything from this
         // phase - FrameLog touches no GL and no window, so it is safe anywhere above buildGame.
         frameLog = new FrameLog(FrameLog.FRAME_HISTORY);
@@ -399,6 +402,7 @@ public class GameContainer {
                 world,
                 authority,
                 delta,
+                timestep,
                 inputMapper,
                 debugRenderer,
                 hudRenderer,
