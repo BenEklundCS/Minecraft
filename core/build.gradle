@@ -1,0 +1,17 @@
+/*
+ * The domain, and nothing else. No GL, no GLFW, no threads, no window. That used to be a rule you
+ * had to hold in your head while editing; here it is enforced by the fact that those libraries are
+ * simply not on this classpath, so breaking it fails the compile rather than review.
+ *
+ * Holds: block/ · world/ (minus the generator and LocalWorldAuthority) · player/ (minus Player) ·
+ * entity/ · util/ · net/. Also world/gen/Biome and world/gen/TerrainProfile, which are biome
+ * *data* rather than generation logic — the mesher needs the grass and foliage tints, and a client
+ * that had to ask the server for a colour constant would be the wrong shape. The package therefore
+ * spans core and server; that's legal on a plain classpath and deliberate, but it's the first thing
+ * to revisit if those two files ever grow behaviour.
+ */
+dependencies {
+    // api, not implementation: Vector3f and friends appear in signatures core hands out, so a
+    // consumer that can't see JOML can't call them.
+    api 'org.joml:joml:1.10.5'
+}

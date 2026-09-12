@@ -5,3 +5,15 @@ plugins {
 }
 
 rootProject.name = 'Minecraft'
+
+/*
+ * launcher ──→ client ──→ core
+ *     └──────→ server ──→ core
+ *
+ * client must not see server and server must not see client. That is the whole reason these are
+ * Gradle modules and not just packages: "the domain depends on nothing, the renderer may depend
+ * on the domain, only the composition root wires platform types" stops being a convention you have
+ * to remember and becomes a compile error. The one edge that still breaks it is marked TEMPORARY
+ * in client/build.gradle and is meant to be deleted.
+ */
+include 'core', 'client', 'server', 'launcher'

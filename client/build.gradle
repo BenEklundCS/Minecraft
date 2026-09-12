@@ -1,0 +1,72 @@
+import org.gradle.internal.os.OperatingSystem
+
+/*
+ * Everything that touches a GPU, a window, a keyboard or a speaker.
+ *
+ * Holds: renderer/ · platform/ · input/ · container/ · infra/RenderWorld · Game. Plus the three
+ * classes that have not been split yet — see the TEMPORARY block below.
+ */
+
+def lwjglVersion = '3.3.4'
+def lwjglNatives = OperatingSystem.current().isWindows()
+    ? 'natives-windows'
+    : OperatingSystem.current().isMacOsX()
+        ? (System.getProperty('os.arch').contains('arm') || System.getProperty('os.arch').contains('aarch64')
+            ? 'natives-macos-arm64'
+            : 'natives-macos')
+        : (System.getProperty('os.arch').startsWith('arm') || System.getProperty('os.arch').startsWith('aarch64')
+            ? 'natives-linux-arm64'
+            : 'natives-linux')
+
+dependencies {
+    api project(':core')
+
+    /*
+     * ─── TEMPORARY — this line is the remaining work, and deleting it is how you start ───
+     *
+     * Three classes still straddle the client/server line and only compile because of it:
+     *
+     *   infra/ChunkManager   → world.gen.IWorldGenerator   (server)
+     *   container/GameContainer → world.gen.WorldGenerator, IGenerationSpec, LocalWorldAuthority
+     *   player/Player        → nothing server-side, but it is the client half of a class whose
+     *                          authoritative half belongs to the server
+     *
+     * Delete this line and `./gradlew build` prints exactly what has to move. The dependency is
+     * one-way and unused at runtime by anything except those three, so it costs nothing while it
+     * is here — but the module split is not actually done until it is gone.
+     */
+    implementation project(':server')
+
+    implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
+
+    implementation 'org.lwjgl:lwjgl'
+    implementation 'org.lwjgl:lwjgl-glfw'
+    implementation 'org.lwjgl:lwjgl-opengl'
+    implementation 'org.lwjgl:lwjgl-stb'
+    implementation 'org.lwjgl:lwjgl-openal'
+
+    runtimeOnly "org.lwjgl:lwjgl::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-glfw::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-opengl::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-stb::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-openal::$lwjglNatives"
+
+    implementation 'com.google.code.gson:gson:2.11.0'
+}
+
+// Integration tests: minutes, not seconds, and they spin up real ChunkManagers.
+// Deliberately not wired into `check`, so `./gradlew build` never picks them up —
+// run them by hand when you're touching the chunk pipeline.
+tasks.register('integrationTest', Test) {
+    description = 'Runs the slow integration suite (not part of check/build).'
+    group = 'verification'
+    useJUnitPlatform()
+    jvmArgs '--enable-preview'
+    include '**/integration/**'
+    // Default 512m isn't enough here — generating+meshing a full load-radius
+    // footprint runs into multiple hundred MB.
+    maxHeapSize = '2g'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    shouldRunAfter test
+}

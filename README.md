@@ -130,15 +130,22 @@ Logback re-scans its config every five seconds, so levels can also be changed mi
 ## Architecture
 
 ```
-src/main/java/com/beneklund/minecraft/
-  block/           Pure domain — block types, BlockDef, BlockRegistry
-  world/           Pure domain — Chunk, World, IWorldAuthority, ChunkState, lighting
-    gen/           World generation (pure factory: ChunkPos + seed → Chunk)
-  player/          Pure domain — Player, IPhysicsBody, Physics, Hotbar
+core/      no GL, no GLFW, no threads, no window — none of it is even on the classpath
+  block/           Block types, BlockDef, BlockRegistry
+  world/           Chunk, World, IWorldAuthority, ChunkState, lighting
+    gen/           Biome and TerrainProfile only — biome *data*, which the mesher needs
+  player/          IPhysicsBody, Physics, PlayerState, Interaction, Hotbar
   entity/          Entity, IEntityStrategy — stubs, no mobs yet
-  input/           Game-vocabulary input actions, not GLFW keycodes
   util/            Stateless utilities — Raycast (DDA), AABB, Direction, OpenSimplex2
-  renderer/        Rendering logic — ChunkMesher, Camera, ShaderProgram, TextureAtlas
+  net/             Packets, links, sessions — the client/server seam
+
+server/    headless: generates, stores, owns the authoritative world; never meshes
+  world/gen/       World generation (pure factory: ChunkPos + seed → Chunk)
+  world/           LocalWorldAuthority
+  infra/           SaveFile + ChunkStore + PlayerStore (persistence)
+
+client/    everything that touches a GPU, a window, a keyboard or a speaker
+  renderer/        ChunkMesher, Camera, ShaderProgram, TextureAtlas
   platform/
     window/        GLFW window lifecycle
     input/         Raw GLFW events → IInputAction (anti-corruption layer)
@@ -146,11 +153,20 @@ src/main/java/com/beneklund/minecraft/
     audio/         OpenAL playback, STB Vorbis decoding
     images/        STB image loading
     resources/     JSON resource packs
-  infra/           Infrastructure — ChunkManager (thread pools, queues),
-                   SaveFile + ChunkStore + PlayerStore (persistence)
+  input/           Game-vocabulary input actions, not GLFW keycodes
+  infra/           ChunkManager (thread pools, queues), RenderWorld
   container/       GameContainer — DI composition root, all `new` calls live here;
                    ContainerConfig carries every launch knob
+
+launcher/  Main — the only module allowed to see both client and server
 ```
+
+The arrows are `launcher → client → core` and `launcher → server → core`. Client cannot see
+server and server cannot see client, which is the entire reason these are Gradle modules rather
+than packages: the dependency rule below is a compile error instead of something you have to
+remember. One temporary edge from client to server survives while `ChunkManager`, `Player` and
+`GameContainer` are still single classes straddling the line; it is marked in
+`client/build.gradle` and is meant to be deleted.
 
 Three rules shape the codebase:
 
@@ -185,7 +201,7 @@ world rather than overwriting an existing one. `saves/` is gitignored.
 The engine code is MIT licensed — see [LICENSE](LICENSE).
 
 The bundled assets are third-party work under their own terms. Full attribution lives in
-[`src/main/resources/CREDITS.txt`](src/main/resources/CREDITS.txt); the short version:
+[`client/src/main/resources/CREDITS.txt`](client/src/main/resources/CREDITS.txt); the short version:
 
 | Asset | Source | License |
 |-------|--------|---------|

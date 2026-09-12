@@ -1,0 +1,14 @@
+/*
+ * Headless. Generates, stores, and owns the authoritative world; never meshes, never draws, never
+ * opens a window.
+ *
+ * Holds: world/gen/ (the generator itself) · world/LocalWorldAuthority · infra/ChunkStore ·
+ * infra/PlayerStore · infra/SaveFile.
+ *
+ * The acceptance test for the whole module split is one line — `./gradlew :server:build` succeeds
+ * with no LWJGL anywhere on this classpath. Nothing below adds it, and nothing below should. If a
+ * class here ever needs the mesher, the line has been drawn in the wrong place.
+ */
+dependencies {
+    api project(':core')
+}
