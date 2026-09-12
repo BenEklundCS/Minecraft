@@ -3,6 +3,7 @@ package com.beneklund.minecraft.net;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.beneklund.minecraft.block.Block;
+import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.ChunkPos;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,7 @@ class PacketTest {
             case IPacket.ToServer.PlayerInput p -> "input @" + p.tick();
             case IPacket.ToServer.BlockEdit p -> "edit @" + p.tick();
             case IPacket.ToServer.Disconnect p -> "bye " + p.reason();
+            case IPacket.ToServer.PlayerPosition p -> "at " + p.x();
         };
     }
 
@@ -34,7 +36,7 @@ class PacketTest {
     // switch arm with nothing routed through it is an arm nobody has ever seen run.
     @Test
     void everyToClientPacketIsHandledWithoutADefaultBranch() {
-        assertEquals("join 7", describe(new IPacket.Join.Accepted(7, 1234L, 0L)));
+        assertEquals("join 7", describe(new IPacket.Join.Accepted(7, 1234L, 0L, new PlayerState(0f, 65f, 0f, 0f, 0f))));
         assertEquals("rejected old client", describe(new IPacket.Join.Rejected("old client")));
         assertEquals(
                 "chunk ChunkPos[x=1, z=2]", describe(new IPacket.ToClient.ChunkData(new ChunkPos(1, 2), new byte[0])));
@@ -52,5 +54,6 @@ class PacketTest {
         assertEquals("input @7", describe(new IPacket.ToServer.PlayerInput(7L, 1f, 0f, false, false, 0f, 90f)));
         assertEquals("edit @9", describe(new IPacket.ToServer.BlockEdit(9L, 0, 64, 0, Block.STONE, true)));
         assertEquals("bye quit", describe(new IPacket.ToServer.Disconnect("quit")));
+        assertEquals("at 8.0", describe(new IPacket.ToServer.PlayerPosition(8f, 70f, -5f, 0f, 90f)));
     }
 }

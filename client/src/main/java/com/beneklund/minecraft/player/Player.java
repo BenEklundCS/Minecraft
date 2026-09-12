@@ -9,7 +9,6 @@ import com.beneklund.minecraft.renderer.Camera;
 import com.beneklund.minecraft.util.AABB;
 import com.beneklund.minecraft.util.Raycast;
 import com.beneklund.minecraft.util.RaycastResult;
-import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.IWorldAuthority;
 import java.util.ArrayList;
@@ -112,10 +111,8 @@ public class Player implements IPhysicsBody {
         return pitch;
     }
 
-    // Converts world position to chunk grid coordinates using floor division so negative coords map correctly.
     public ChunkPos getChunkPos() {
-        return new ChunkPos(
-                Math.floorDiv((int) position.x, Chunk.SIZE_XZ), Math.floorDiv((int) position.z, Chunk.SIZE_XZ));
+        return ChunkPos.containing(position.x, position.z);
     }
 
     // Spherical -> cartesian from yaw/pitch. Yaw=0 faces +Z; yaw grows clockwise.

@@ -41,7 +41,7 @@ class ChunkMesherTest {
         return verts[vertex * FLOATS_PER_VERTEX + 1];
     }
 
-    // Light then mesh, the same order ChunkManager's mesh job uses — mesh() reads the LightMap
+    // Light then mesh, the same order ClientChunkManager.mesh uses — mesh() reads the LightMap
     // the engine leaves on the chunk.
     private ChunkMeshData meshLit(Chunk chunk) {
         ChunkWithNeighbors cn = ChunkWithNeighbors.noNeighbors(chunk);

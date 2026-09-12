@@ -2,15 +2,15 @@ package com.beneklund.minecraft.container;
 
 import static com.beneklund.minecraft.util.Log.AUDIO;
 import static com.beneklund.minecraft.util.Log.LOGGER;
-import static com.beneklund.minecraft.util.Log.PLAYER;
 import static com.beneklund.minecraft.util.Log.WORLD;
 import static org.lwjgl.opengl.GL30.GL_RGBA16F;
 
 import com.beneklund.minecraft.Game;
-import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.*;
 import com.beneklund.minecraft.input.InputHandler;
+import com.beneklund.minecraft.net.IPacket;
+import com.beneklund.minecraft.net.IServerLink;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbAudioLoader;
 import com.beneklund.minecraft.platform.debug.FrameStreamServer;
@@ -20,18 +20,14 @@ import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.resources.JsonResourcePack;
 import com.beneklund.minecraft.platform.window.Window;
-import com.beneklund.minecraft.player.IPlayerStore;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
-import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMesher;
 import com.beneklund.minecraft.util.DeltaTracker;
 import com.beneklund.minecraft.util.FixedTimestep;
 import com.beneklund.minecraft.util.FrameLog;
 import com.beneklund.minecraft.world.*;
-import com.beneklund.minecraft.world.gen.IGenerationSpec;
-import com.beneklund.minecraft.world.gen.WorldGenerator;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
@@ -64,7 +60,6 @@ public class GameContainer {
     private LocalConfig localConfig;
     private WindowConfig windowConfig;
     private CameraConfig cameraConfig;
-    private WorldConfig worldConfig;
 
     // input
     private InputEventQueue inputEventQueue;
@@ -109,20 +104,24 @@ public class GameContainer {
     // audio
     private AudioPlayer music;
 
+    private final IServerLink serverLink;
+
     // world
-    private World world;
-    private LocalWorldAuthority authority;
-    private WorldGenerator worldGen;
-    private ChunkManager chunkManager;
+    private ClientWorldAuthority authority;
+    private ClientChunkManager chunkManager;
     private Physics physics;
     private DayNightCycle cycle;
 
     // player
-    private IPlayerStore playerStore;
     private Player player;
 
-    public GameContainer(ContainerConfig cfg) {
+    // Not checked by the server yet.
+    private static final String USERNAME = "player";
+    private static final int PROTOCOL_VERSION = 1;
+
+    public GameContainer(ContainerConfig cfg, IServerLink serverLink) {
         this.cfg = cfg;
+        this.serverLink = serverLink;
     }
 
     public void run() throws IOException {
@@ -154,6 +153,8 @@ public class GameContainer {
         initWorld();
         initPlayer();
         initFrameStream();
+        // The server only sends chunks to a joined player, connect to the server using serverLink.
+        serverLink.send(new IPacket.Join.Request(USERNAME, PROTOCOL_VERSION));
         phaseDone("world+player", startedAt);
 
         LOGGER.info("startup complete in {} ms, entering game loop", millisSince(startedAt));
@@ -186,7 +187,6 @@ public class GameContainer {
                 cfg.clearColor(),
                 localConfig.debugEnabled());
         cameraConfig = new CameraConfig(cfg.fov());
-        worldConfig = new WorldConfig(cfg.seed(), cfg.renderDistance());
         // shaders.simple strips the frame back to terrain and sky. Logged at info rather than
         // debug: it changes the image enough that a screenshot taken with it on and read back
         // later is otherwise a mystery.
@@ -338,30 +338,21 @@ public class GameContainer {
         return discs.get(ThreadLocalRandom.current().nextInt(discs.size()));
     }
 
+    // A replica filled by the server; generation and saves live in ServerContainer.
     private void initWorld() {
-        world = new World(new ConcurrentHashMap<>());
+        World world = new World(new ConcurrentHashMap<>());
         LightEngine lightEngine = new LightEngine(registry);
-        authority = new LocalWorldAuthority(world, registry, lightEngine);
-        List<IGenerationSpec> generationSpecs = IGenerationSpec.DEFAULT_WORLD_GENERATION;
-        worldGen = new WorldGenerator(registry, generationSpecs);
+        authority = new ClientWorldAuthority(world, registry, serverLink);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
-        ChunkStore store = new ChunkStore(worldConfig.seed());
-        chunkManager = new ChunkManager(worldConfig, world, worldGen, mesher, authority, store, lightEngine);
+        chunkManager = new ClientChunkManager(world, mesher, lightEngine, registry, authority);
         physics = new Physics();
         cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.VERY_SHORT_DAY_SECONDS);
-        WORLD.debug("world ready: {} generation spec(s), seed {}", generationSpecs.size(), worldConfig.seed());
+        WORLD.debug("client world ready, chunks come from the server");
     }
 
+    // Placed at the spawn when Join.Accepted arrives.
     private void initPlayer() {
-        playerStore = new PlayerStore(worldConfig.seed());
         player = new Player(cfg.player(), camera, authority);
-
-        PlayerState saved = playerStore.load().orElse(null);
-        PlayerState spawn = saved != null ? saved : defaultSpawn();
-        PLAYER.info(
-                "spawn {} at ({}, {}, {})", saved != null ? "restored" : "measured", spawn.x(), spawn.y(), spawn.z());
-        player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
-        player.setOrientation(spawn.pitch(), spawn.yaw());
     }
 
     /*
@@ -399,7 +390,7 @@ public class GameContainer {
                 physics,
                 cycle,
                 inputHandler,
-                world,
+                serverLink,
                 authority,
                 delta,
                 timestep,
@@ -413,20 +404,18 @@ public class GameContainer {
     }
 
     // Reverse dependency order: audio before window (AL before GLFW/GL).
-    // Stop chunk workers before flushing so no async setBlock can dirty a chunk
-    // after we've already persisted it.
+    // Chunk flushing is ServerContainer.stop's.
     private void shutdown() {
         // First: it holds a socket and a worker thread, and neither depends on anything below.
         if (frameStream != null) frameStream.stop();
         long startedAt = System.nanoTime();
-        savePlayerState();
+        leaveServer();
         try {
             chunkManager.shutdown(cfg.shutdownTimeoutSeconds());
         } catch (InterruptedException e) {
-            LOGGER.warn("interrupted waiting for chunk workers, some chunks may not have flushed");
+            LOGGER.warn("interrupted waiting for meshing workers");
             Thread.currentThread().interrupt();
         }
-        chunkManager.flushAllDirty();
         music.shutdown();
         postProcessor.delete();
         sceneBuffer.delete();
@@ -440,44 +429,10 @@ public class GameContainer {
         LOGGER.info("shutdown complete in {} ms", millisSince(startedAt));
     }
 
-    private void savePlayerState() {
+    // The server saves the player from this last position.
+    private void leaveServer() {
         Vector3f p = player.getPosition();
-        float pi = player.getPitch();
-        float yaw = player.getYaw();
-        playerStore.save(new PlayerState(p.x(), p.y(), p.z(), pi, yaw));
-    }
-
-    // Where to put the player when there's no save to load. Only the configured x/z are
-    // used — y is measured, not configured.
-    //
-    // Spawn resting directly on the surface (feet one block above the highest solid).
-    // We used to spawn ~12 blocks up and free-fall, but that gave gravity a chance to
-    // build speed and tunnel the player through the ground during a spawn-time frame
-    // hitch (the mesh/upload storm). No fall = no tunnel. The generator is deterministic,
-    // so this measured height matches the async-generated chunk exactly.
-    private PlayerState defaultSpawn() {
-        PlayerConfig p = cfg.player();
-        Vector3f start = p.startPosition();
-        int surfaceY = surfaceHeight(
-                worldGen, worldConfig.seed(), registry, (int) Math.floor(start.x()), (int) Math.floor(start.z()));
-        return new PlayerState(start.x(), surfaceY + 1, start.z(), p.startPitch(), p.startYaw());
-    }
-
-    // Highest solid block in a world column. Generates that column's chunk and scans
-    // top-down — air, water, and leaves are skipped so we land on real ground. Bedrock at
-    // y=0 guarantees the loop always finds something.
-    private static int surfaceHeight(
-            WorldGenerator worldGen, long seed, BlockRegistry registry, int worldX, int worldZ) {
-        Chunk chunk = new Chunk();
-        ChunkPos pos = new ChunkPos(Math.floorDiv(worldX, Chunk.SIZE_XZ), Math.floorDiv(worldZ, Chunk.SIZE_XZ));
-        worldGen.generate(pos, seed, chunk);
-
-        int localX = Math.floorMod(worldX, Chunk.SIZE_XZ);
-        int localZ = Math.floorMod(worldZ, Chunk.SIZE_XZ);
-        for (int y = Chunk.SIZE_Y - 1; y >= 0; y--) {
-            Block id = chunk.getBlock(localX, y, localZ);
-            if (id != Block.AIR && registry.get(id).solid()) return y;
-        }
-        return 0;
+        serverLink.send(new IPacket.ToServer.PlayerPosition(p.x(), p.y(), p.z(), player.getPitch(), player.getYaw()));
+        serverLink.send(new IPacket.ToServer.Disconnect("quit"));
     }
 }

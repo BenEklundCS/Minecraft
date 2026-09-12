@@ -240,7 +240,7 @@ public class LightEngine {
     }
 
     private Chunk chunkAt(IWorldView world, int x, int z) {
-        return world.getChunk(new ChunkPos(Math.floorDiv(x, Chunk.SIZE_XZ), Math.floorDiv(z, Chunk.SIZE_XZ)));
+        return world.getChunk(ChunkPos.containing(x, z));
     }
 
     private static int local(int worldCoordinate) {

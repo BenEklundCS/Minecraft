@@ -9,14 +9,14 @@ import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.util.AABB;
 import java.util.List;
 
-public class LocalWorldAuthority implements IWorldAuthority {
+public class ServerWorldAuthority implements IWorldAuthority {
     private record ChunkCoordinates(int x, int z) {}
 
     private final World world;
     private final BlockRegistry registry;
     private final LightEngine lightEngine;
 
-    public LocalWorldAuthority(World world, BlockRegistry registry, LightEngine lightEngine) {
+    public ServerWorldAuthority(World world, BlockRegistry registry, LightEngine lightEngine) {
         this.world = world;
         this.registry = registry;
         this.lightEngine = lightEngine;
@@ -25,7 +25,7 @@ public class LocalWorldAuthority implements IWorldAuthority {
     @Override
     public BlockDef getBlock(int x, int y, int z) {
         if (!Chunk.inYRange(y)) return registry.get(Block.AIR);
-        Chunk chunk = getChunk(x, z);
+        Chunk chunk = world.getChunk(ChunkPos.containing(x, z));
         if (chunk == null) return registry.get(Block.AIR);
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
         return registry.get(chunk.getBlock(chunkCoordinates.x, y, chunkCoordinates.z));
@@ -34,8 +34,8 @@ public class LocalWorldAuthority implements IWorldAuthority {
     @Override
     public void setBlock(int x, int y, int z, Block block) {
         if (!Chunk.inYRange(y)) return;
-        Chunk chunk = getChunk(x, z);
-        ChunkPos pos = getChunkPos(x, z);
+        ChunkPos pos = ChunkPos.containing(x, z);
+        Chunk chunk = world.getChunk(pos);
         if (chunk == null) return;
         ChunkCoordinates chunkCoordinates = getChunkCoordinates(x, z);
         BlockDef previous = registry.get(chunk.getBlock(chunkCoordinates.x, y, chunkCoordinates.z));
@@ -85,18 +85,8 @@ public class LocalWorldAuthority implements IWorldAuthority {
         return List.of(); // stub — no entity tracking yet
     }
 
-    private Chunk getChunk(int x, int z) {
-        ChunkPos pos = getChunkPos(x, z);
-        return world.getChunk(pos);
-    }
-
-    private ChunkPos getChunkPos(int x, int z) {
-        // floorDiv, not /, so negative world coords map to the right chunk (e.g. x=-1 → chunk -1, not 0).
-        return new ChunkPos(Math.floorDiv(x, Chunk.SIZE_XZ), Math.floorDiv(z, Chunk.SIZE_XZ));
-    }
-
     private ChunkCoordinates getChunkCoordinates(int worldX, int worldZ) {
-        // floorMod gives a non-negative remainder, matching floorDiv above.
+        // floorMod gives a non-negative remainder, matching the floorDiv in ChunkPos.containing.
         int chunkX = Math.floorMod(worldX, Chunk.SIZE_XZ);
         int chunkZ = Math.floorMod(worldZ, Chunk.SIZE_XZ);
         return new ChunkCoordinates(chunkX, chunkZ);

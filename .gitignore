@@ -45,6 +45,7 @@ bin/
 ### Private ###
 private/
 docs/
+screenshots/
 client/src/main/resources/music/c418/
 scripts/copy_c418_music.py
 local.properties

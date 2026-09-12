@@ -2,8 +2,10 @@
  * Headless. Generates, stores, and owns the authoritative world; never meshes, never draws, never
  * opens a window.
  *
- * Holds: world/gen/ (the generator itself) · world/LocalWorldAuthority · infra/ChunkStore ·
- * infra/PlayerStore · infra/SaveFile.
+ * Holds: world/gen/ (the generator itself) · world/ServerWorldAuthority · infra/ChunkStore ·
+ * infra/PlayerStore · infra/SaveFile · infra/ServerChunkManager · net/GameServer ·
+ * net/PlayerSession · net/IChunkStreamer · container/ServerContainer. The net/ classes live here
+ * rather than beside the packets in core because they drive ServerChunkManager.
  *
  * The acceptance test for the whole module split is one line — `./gradlew :server:build` succeeds
  * with no LWJGL anywhere on this classpath. Nothing below adds it, and nothing below should. If a

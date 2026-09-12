@@ -33,7 +33,7 @@ class LightRemovalReproTest {
     @Test
     void removingGlowstone_clearsBlockLightInTheNeighbourItLit() {
         World world = new World(new ConcurrentHashMap<>());
-        LocalWorldAuthority authority = new LocalWorldAuthority(world, registry, engine);
+        ServerWorldAuthority authority = new ServerWorldAuthority(world, registry, engine);
         ChunkPos posA = new ChunkPos(0, 0);
         ChunkPos posB = new ChunkPos(1, 0);
         Chunk a = new Chunk();
@@ -60,7 +60,7 @@ class LightRemovalReproTest {
     @Test
     void removingOneGlowstone_leavesTheLightOfAnotherIntact() {
         World world = new World(new ConcurrentHashMap<>());
-        LocalWorldAuthority authority = new LocalWorldAuthority(world, registry, engine);
+        ServerWorldAuthority authority = new ServerWorldAuthority(world, registry, engine);
         ChunkPos pos = new ChunkPos(0, 0);
         world.addChunk(pos, new Chunk());
 

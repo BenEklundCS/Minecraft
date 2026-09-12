@@ -130,19 +130,21 @@ Logback re-scans its config every five seconds, so levels can also be changed mi
 ## Architecture
 
 ```
-core/      no GL, no GLFW, no threads, no window — none of it is even on the classpath
+core/      no GL, no GLFW, no window — none of it is even on the classpath
   block/           Block types, BlockDef, BlockRegistry
   world/           Chunk, World, IWorldAuthority, ChunkState, lighting
     gen/           Biome and TerrainProfile only — biome *data*, which the mesher needs
   player/          IPhysicsBody, Physics, PlayerState, Interaction, Hotbar
   entity/          Entity, IEntityStrategy — stubs, no mobs yet
   util/            Stateless utilities — Raycast (DDA), AABB, Direction, OpenSimplex2
-  net/             Packets, links, sessions — the client/server seam
+  net/             Packets and links — the client/server seam
 
 server/    headless: generates, stores, owns the authoritative world; never meshes
   world/gen/       World generation (pure factory: ChunkPos + seed → Chunk)
-  world/           LocalWorldAuthority
-  infra/           SaveFile + ChunkStore + PlayerStore (persistence)
+  world/           ServerWorldAuthority
+  infra/           ServerChunkManager (load radius, generation pool), SaveFile + ChunkStore + PlayerStore
+  net/             GameServer, PlayerSession, IChunkStreamer (which chunks each player may have)
+  container/       ServerContainer, ServerConfig — server composition root and tick thread
 
 client/    everything that touches a GPU, a window, a keyboard or a speaker
   renderer/        ChunkMesher, Camera, ShaderProgram, TextureAtlas
@@ -154,29 +156,27 @@ client/    everything that touches a GPU, a window, a keyboard or a speaker
     images/        STB image loading
     resources/     JSON resource packs
   input/           Game-vocabulary input actions, not GLFW keycodes
-  infra/           ChunkManager (thread pools, queues), RenderWorld
-  container/       GameContainer — DI composition root, all `new` calls live here;
+  infra/           ClientChunkManager (replica, meshing pool), ClientWorldAuthority, RenderWorld
+  container/       GameContainer — client composition root;
                    ContainerConfig carries every launch knob
 
-launcher/  Main — the only module allowed to see both client and server
+launcher/  Main, LaunchMode, Launcher — Host runs both halves in one process over an InJvmLink
 ```
 
 The arrows are `launcher → client → core` and `launcher → server → core`. Client cannot see
 server and server cannot see client, which is the entire reason these are Gradle modules rather
 than packages: the dependency rule below is a compile error instead of something you have to
-remember. One temporary edge from client to server survives while `ChunkManager`, `Player` and
-`GameContainer` are still single classes straddling the line; it is marked in
-`client/build.gradle` and is meant to be deleted.
+remember.
 
 Three rules shape the codebase:
 
 1. **Dependencies point one way.** The domain depends on nothing outside itself. Platform adapters own the hardware. `infra/` may depend on everything; `container/` wires it together.
 2. **Only the main thread calls OpenGL.** Generation and meshing run on worker pools and produce plain arrays; the main thread turns those into GPU buffers, capped per frame.
-3. **No singletons.** Every dependency arrives through a constructor, and `GameContainer` is the only place that calls `new` on platform, renderer, or infrastructure types.
+3. **No singletons.** Every dependency arrives through a constructor, and the two containers (`GameContainer`, `ServerContainer`) are the only places that call `new` on platform, renderer, world, or infrastructure types.
 
 The load-bearing details are documented where they're enforced: the composition-root ordering
 contract is a numbered comment block in `GameContainer`, and the chunk state machine and its
-thread-safety rules are commented in `Chunk` and `ChunkManager`.
+thread-safety rules are commented in `ChunkState`, `ServerChunkManager` and `ClientChunkManager`.
 
 ---
 

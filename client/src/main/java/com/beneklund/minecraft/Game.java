@@ -2,10 +2,12 @@ package com.beneklund.minecraft;
 
 import static com.beneklund.minecraft.util.Log.*;
 
-import com.beneklund.minecraft.infra.ChunkManager;
+import com.beneklund.minecraft.infra.ClientChunkManager;
 import com.beneklund.minecraft.infra.RenderWorld;
 import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.InputHandler;
+import com.beneklund.minecraft.net.IPacket;
+import com.beneklund.minecraft.net.IServerLink;
 import com.beneklund.minecraft.platform.debug.FrameStreamServer;
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
@@ -17,6 +19,7 @@ import com.beneklund.minecraft.player.Hotbar;
 import com.beneklund.minecraft.player.Interaction;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
+import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.renderer.*;
 import com.beneklund.minecraft.renderer.ChunkMeshData;
 import com.beneklund.minecraft.renderer.RenderPass;
@@ -49,14 +52,14 @@ public class Game {
     private final Renderer renderer;
     private final GlFramebuffer sceneBuffer;
     private final PostProcessor postProcessor;
-    private final ChunkManager chunkManager;
+    private final ClientChunkManager chunkManager;
     private final RenderWorld renderWorld;
     private final Camera camera;
     private final Player player;
     private final Physics physics;
     private final DayNightCycle cycle;
     private final InputHandler inputHandler;
-    private final World world;
+    private final IServerLink serverLink;
     private final IWorldAuthority authority;
     private final DeltaTracker delta;
     private final FixedTimestep timestep;
@@ -66,6 +69,9 @@ public class Game {
     private final ChunkRenderer chunkRenderer;
     private final FrameLog frameLog;
 
+    // Nothing is reported until the server has placed the player.
+    private boolean joined;
+    private ChunkPos lastReportedChunk;
     private int uploadsThisSecond;
     private int deletesThisSecond;
     private boolean screenshotRequested;
@@ -91,14 +97,14 @@ public class Game {
             Renderer renderer,
             GlFramebuffer sceneBuffer,
             PostProcessor postProcessor,
-            ChunkManager chunkManager,
+            ClientChunkManager chunkManager,
             RenderWorld renderWorld,
             Camera camera,
             Player player,
             Physics physics,
             DayNightCycle cycle,
             InputHandler inputHandler,
-            World world,
+            IServerLink serverLink,
             IWorldAuthority authority,
             DeltaTracker delta,
             FixedTimestep timestep,
@@ -120,7 +126,7 @@ public class Game {
         this.physics = physics;
         this.cycle = cycle;
         this.inputHandler = inputHandler;
-        this.world = world;
+        this.serverLink = serverLink;
         this.authority = authority;
         this.delta = delta;
         this.timestep = timestep;
@@ -269,7 +275,8 @@ public class Game {
 
             if (frameStream != null) frameStream.drainCommands();
 
-            // Chunk uploads and whatever ChunkManager does on this thread. Standing still this is
+            // Packets from the server, chunk uploads, and whatever ClientChunkManager does on this
+            // thread. Standing still this is
             // near zero and flying it is not, which is the difference the whole instrument exists
             // to size.
             EngineStats.beginPhase(CpuPhase.CHUNKS);
@@ -363,17 +370,9 @@ public class Game {
         }
     }
 
-    // ChunkManager inserts an empty chunk into the World before a worker thread fills it,
-    // so "present" isn't "collidable". Only run physics once the player's chunk has been
-    // generated — otherwise gravity drags the player down through air that's about to
-    // become solid ground, leaving them buried.
+    // Until the player's chunk arrives it reads as air, and gravity would drop them through it.
     private boolean physicsReady() {
-        Chunk chunk = world.getChunk(player.getChunkPos());
-        if (chunk == null) return false;
-        return switch (chunk.getState()) {
-            case UNLOADED, QUEUED_GEN, GENERATING -> false;
-            default -> true;
-        };
+        return chunkManager.hasBlocks(player.getChunkPos());
     }
 
     private void processTitle() {
@@ -437,7 +436,7 @@ public class Game {
         }
 
         inputHandler.handle(actions);
-        chunkManager.tick(player.getChunkPos());
+        chunkManager.tick();
 
         List<Interaction> interactions = player.tick(actions);
         for (Interaction interaction : interactions) {
@@ -462,6 +461,25 @@ public class Game {
             }
         }
         player.syncCamera();
+        reportPosition();
+    }
+
+    // The server loads chunks around this. Only sent when the chunk changes.
+    private void reportPosition() {
+        if (!joined) return;
+        ChunkPos chunk = player.getChunkPos();
+        if (chunk.equals(lastReportedChunk)) return;
+        lastReportedChunk = chunk;
+        Vector3f p = player.getPosition();
+        serverLink.send(new IPacket.ToServer.PlayerPosition(p.x, p.y, p.z, player.getPitch(), player.getYaw()));
+    }
+
+    private void onJoined(IPacket.Join.Accepted accepted) {
+        PlayerState spawn = accepted.spawn();
+        player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
+        player.setOrientation(spawn.pitch(), spawn.yaw());
+        joined = true;
+        LOGGER.info("joined as player {} at server tick {}", accepted.playerId(), accepted.serverTick());
     }
 
     /*
@@ -482,7 +500,23 @@ public class Game {
         return Math.clamp(budget, 1, MAX_UPLOADS_PER_FRAME);
     }
 
+    // Main thread: the on*() methods write the replica. Unhandled packets fall to default.
+    private void receivePackets() {
+        for (IPacket.ToClient packet : serverLink.drain()) {
+            switch (packet) {
+                case IPacket.ToClient.ChunkData data -> chunkManager.onChunkData(data);
+                case IPacket.ToClient.ChunkUnload unload -> chunkManager.onChunkUnload(unload);
+                case IPacket.ToClient.BlockChanged changed -> chunkManager.onBlockChanged(changed);
+                case IPacket.Join.Accepted accepted -> onJoined(accepted);
+                case IPacket.Join.Rejected rejected -> LOGGER.warn("server refused the join: {}", rejected.reason());
+                default -> {}
+            }
+        }
+    }
+
     private void processChunks() {
+        receivePackets();
+
         // Upload as many new meshes as this frame's budget allows — ChunkMesh asserts main thread.
         // Skip empty buffers so chunks with no opaque (or no transparent) geometry don't
         // allocate a zero-length VAO; null means "nothing to draw for this pass".
@@ -495,7 +529,7 @@ public class Game {
             RENDER.trace("uploaded {} (opaque={}, transparent={})", data.pos(), opaque != null, transparent != null);
         }
 
-        // Free GL buffers for chunks that left the load radius.
+        // Free GL buffers for chunks the server unloaded.
         for (var pos : chunkManager.drainUnloadQueue()) {
             RenderWorld.Entry entry = renderWorld.remove(pos);
             if (entry != null) {

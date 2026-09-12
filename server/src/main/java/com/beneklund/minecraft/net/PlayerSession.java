@@ -1,5 +1,6 @@
 package com.beneklund.minecraft.net;
 
+import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.ChunkPos;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -18,6 +19,8 @@ public class PlayerSession {
     // What this player is owed, held until flush so nothing leaves the server mid-tick.
     private final List<IPacket.ToClient> outbox = new ArrayList<>();
     private boolean joined;
+    // Where the player last reported being. The spawn until the client says otherwise.
+    private PlayerState state;
 
     public PlayerSession(int playerId, IClientLink link) {
         this.playerId = playerId;
@@ -57,6 +60,18 @@ public class PlayerSession {
         return joined;
     }
 
+    public void moved(PlayerState state) {
+        this.state = state;
+    }
+
+    public PlayerState state() {
+        return state;
+    }
+
+    public ChunkPos chunkPos() {
+        return state == null ? null : ChunkPos.containing(state.x(), state.z());
+    }
+
     public void consumedInput(long inputTick) {
         tick = inputTick;
     }
@@ -65,6 +80,24 @@ public class PlayerSession {
     // "was this new?", so the check and the record can't drift apart.
     public boolean markChunkSent(ChunkPos pos) {
         return loadedChunks.add(pos);
+    }
+
+    // True if this player had it. Set.remove answers that the same way add answers "was it new".
+    public boolean markChunkUnloaded(ChunkPos pos) {
+        return loadedChunks.remove(pos);
+    }
+
+    public boolean hasChunk(ChunkPos pos) {
+        return loadedChunks.contains(pos);
+    }
+
+    // A copy, so the caller can unload while iterating.
+    public List<ChunkPos> sentChunks() {
+        return List.copyOf(loadedChunks);
+    }
+
+    public boolean isOpen() {
+        return link.isOpen();
     }
 
     public void close() {

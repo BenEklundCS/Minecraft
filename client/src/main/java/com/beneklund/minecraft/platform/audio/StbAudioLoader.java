@@ -4,14 +4,18 @@ import static org.lwjgl.stb.STBVorbis.*;
 import static org.lwjgl.system.MemoryUtil.*;
 
 import java.io.IOException;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import org.lwjgl.stb.STBVorbisInfo;
 
@@ -84,24 +88,30 @@ public class StbAudioLoader implements IAudioLoader {
         URL url = getContextClassLoader().getResource(dir);
         if (url == null) return List.of();
 
-        // Only an exploded classpath directory can be walked as a filesystem. Inside a jar the
-        // protocol is "jar" and this comes back empty, so a packaged build finds no music here
-        // and needs a jar-aware listing before it ships.
-        if (!"file".equals(url.getProtocol())) return List.of();
-
         try {
-            Path root = Paths.get(url.toURI());
-            try (Stream<Path> tree = Files.walk(root)) {
-                return tree.filter(Files::isRegularFile)
-                        .filter(p -> p.getFileName().toString().endsWith(OGG_SUFFIX))
-                        // Always '/', never '\' — a classpath resource name is not a Windows path.
-                        .map(p -> "%s/%s"
-                                .formatted(dir, root.relativize(p).toString().replace('\\', '/')))
-                        .sorted()
-                        .toList();
+            URI uri = url.toURI();
+            // A jar when run through :launcher, which puts client on the classpath as a jar.
+            if ("jar".equals(uri.getScheme())) {
+                try (FileSystem jar = FileSystems.newFileSystem(uri, Map.of())) {
+                    return oggsUnder(jar.provider().getPath(uri), dir);
+                }
             }
+            if (!"file".equals(uri.getScheme())) return List.of();
+            return oggsUnder(Paths.get(uri), dir);
         } catch (IOException | URISyntaxException e) {
             throw new RuntimeException("Failed to list audio resources under %s".formatted(dir), e);
+        }
+    }
+
+    private static List<String> oggsUnder(Path root, String dir) throws IOException {
+        try (Stream<Path> tree = Files.walk(root)) {
+            return tree.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(OGG_SUFFIX))
+                    // Always '/', never '\' — a classpath resource name is not a Windows path.
+                    .map(p ->
+                            "%s/%s".formatted(dir, root.relativize(p).toString().replace('\\', '/')))
+                    .sorted()
+                    .toList();
         }
     }
 

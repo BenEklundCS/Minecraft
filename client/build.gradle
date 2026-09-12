@@ -21,22 +21,6 @@ def lwjglNatives = OperatingSystem.current().isWindows()
 dependencies {
     api project(':core')
 
-    /*
-     * ─── TEMPORARY — this line is the remaining work, and deleting it is how you start ───
-     *
-     * Three classes still straddle the client/server line and only compile because of it:
-     *
-     *   infra/ChunkManager   → world.gen.IWorldGenerator   (server)
-     *   container/GameContainer → world.gen.WorldGenerator, IGenerationSpec, LocalWorldAuthority
-     *   player/Player        → nothing server-side, but it is the client half of a class whose
-     *                          authoritative half belongs to the server
-     *
-     * Delete this line and `./gradlew build` prints exactly what has to move. The dependency is
-     * one-way and unused at runtime by anything except those three, so it costs nothing while it
-     * is here — but the module split is not actually done until it is gone.
-     */
-    implementation project(':server')
-
     implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
 
     implementation 'org.lwjgl:lwjgl'

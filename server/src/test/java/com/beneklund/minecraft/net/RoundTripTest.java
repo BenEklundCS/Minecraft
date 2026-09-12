@@ -5,12 +5,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
+import com.beneklund.minecraft.infra.ServerChunkManager;
+import com.beneklund.minecraft.player.IPlayerStore;
+import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.ChunkState;
+import com.beneklund.minecraft.world.IChunkStore;
 import com.beneklund.minecraft.world.LightEngine;
-import com.beneklund.minecraft.world.LocalWorldAuthority;
+import com.beneklund.minecraft.world.ServerWorldAuthority;
 import com.beneklund.minecraft.world.World;
+import com.beneklund.minecraft.world.WorldConfig;
+import com.beneklund.minecraft.world.gen.IWorldGenerator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.Test;
 
@@ -30,6 +38,28 @@ class RoundTripTest {
     private static final int EDIT_Y = 64;
     private static final int EDIT_Z = 0;
 
+    private static final PlayerState SPAWN = new PlayerState(8f, 65f, 8f, 0f, 0f);
+
+    private static final IWorldGenerator NO_GENERATION = (pos, seed, chunk) -> {};
+    private static final IChunkStore NO_DISK = new IChunkStore() {
+        @Override
+        public void save(ChunkPos pos, Chunk chunk) {}
+
+        @Override
+        public Optional<Chunk> load(ChunkPos pos) {
+            return Optional.empty();
+        }
+    };
+    private static final IPlayerStore NO_PLAYER_SAVES = new IPlayerStore() {
+        @Override
+        public void save(PlayerState state) {}
+
+        @Override
+        public Optional<PlayerState> load() {
+            return Optional.empty();
+        }
+    };
+
     // The world is kept alongside the server because BlockDef carries no back-reference to its
     // Block — see the note under this block — so the exact assertion has to read the Chunk.
     private record Fixture(GameServer server, World world) {}
@@ -39,27 +69,42 @@ class RoundTripTest {
         Chunk chunk = new Chunk();
         chunk.setBlock(EDIT_X, EDIT_Y, EDIT_Z, Block.STONE);
         world.addChunk(ONLY_CHUNK, chunk);
+        // What a disk load does. The server only streams or edits a LIVE chunk.
+        chunk.tryTransition(ChunkState.LIVE);
 
         BlockRegistry registry = BlockRegistry.createDefault();
-        LocalWorldAuthority authority = new LocalWorldAuthority(world, registry, new LightEngine(registry));
-        return new Fixture(new GameServer(world, authority, SEED), world);
+        ServerWorldAuthority authority = new ServerWorldAuthority(world, registry, new LightEngine(registry));
+        // Radius 0: only the player's own chunk is loaded or streamed.
+        ServerChunkManager chunks = new ServerChunkManager(new WorldConfig(SEED, 0), world, NO_GENERATION, NO_DISK);
+        GameServer server =
+                new GameServer(world, authority, chunks, new RadiusChunkStreamer(0), NO_PLAYER_SAVES, SPAWN, SEED);
+        return new Fixture(server, world);
     }
 
     private static Block blockInWorld(World world) {
         return world.getChunk(ONLY_CHUNK).getBlock(EDIT_X, EDIT_Y, EDIT_Z);
     }
 
+    private static InJvmLink.Pair joined(Fixture fixture) {
+        InJvmLink.Pair pair = InJvmLink.connect(PLAYER_ID);
+        fixture.server().accept(pair.client());
+        pair.server().send(new IPacket.ToServer.Join.Request("ben", PROTOCOL_VERSION));
+        fixture.server().tick();
+        return pair;
+    }
+
     @Test
     void joinIsAcceptedAndTheChunkIsStreamed() {
         Fixture fixture = serverWithOneChunk();
-        InJvmLink.Pair pair = InJvmLink.connect(PLAYER_ID);
-        fixture.server().accept(pair.client());
-
-        pair.server().send(new IPacket.ToServer.Join.Request("ben", PROTOCOL_VERSION));
-        fixture.server().tick();
+        InJvmLink.Pair pair = joined(fixture);
 
         List<IPacket.ToClient> received = pair.server().drain();
-        assertTrue(received.stream().anyMatch(p -> p instanceof IPacket.ToClient.Join.Accepted));
+        IPacket.Join.Accepted accepted = received.stream()
+                .filter(IPacket.Join.Accepted.class::isInstance)
+                .map(IPacket.Join.Accepted.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(SPAWN, accepted.spawn());
 
         IPacket.ToClient.ChunkData data = received.stream()
                 .filter(IPacket.ToClient.ChunkData.class::isInstance)
@@ -77,11 +122,7 @@ class RoundTripTest {
     @Test
     void aBlockEditChangesTheServerAndIsToldToTheClient() {
         Fixture fixture = serverWithOneChunk();
-        InJvmLink.Pair pair = InJvmLink.connect(PLAYER_ID);
-        fixture.server().accept(pair.client());
-
-        pair.server().send(new IPacket.ToServer.Join.Request("ben", PROTOCOL_VERSION));
-        fixture.server().tick();
+        InJvmLink.Pair pair = joined(fixture);
         pair.server().drain();
 
         assertEquals(Block.STONE, blockInWorld(fixture.world()));
@@ -103,5 +144,17 @@ class RoundTripTest {
                 .orElseThrow();
         assertEquals(Block.AIR, changed.block());
         assertEquals(EDIT_X, changed.x());
+    }
+
+    @Test
+    void movingAwayUnloadsTheChunk() {
+        Fixture fixture = serverWithOneChunk();
+        InJvmLink.Pair pair = joined(fixture);
+        pair.server().drain();
+
+        pair.server().send(new IPacket.ToServer.PlayerPosition(200f, 65f, 200f, 0f, 0f));
+        fixture.server().tick();
+
+        assertTrue(pair.server().drain().contains(new IPacket.ToClient.ChunkUnload(ONLY_CHUNK)));
     }
 }

@@ -3,10 +3,9 @@ plugins {
 }
 
 /*
- * The only module that is allowed to see both halves. Today that is one class — Main, which builds
- * a GameContainer — but it is where the local single-player wiring belongs once GameContainer stops
- * constructing a WorldGenerator itself: launcher stands up a server, stands up a client, and hands
- * them the two ends of an InJvmLink.
+ * The only module that is allowed to see both halves. Main picks a LaunchMode and Launcher runs it;
+ * Host stands up a ServerContainer and a GameContainer and gives them the two ends of an InJvmLink.
+ * Each half builds its own object graph; nothing here calls new on a world or renderer type.
  */
 dependencies {
     implementation project(':client')

@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.net;
 
 import com.beneklund.minecraft.block.Block;
+import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.ChunkPos;
 
 /*
@@ -14,6 +15,10 @@ public sealed interface IPacket {
         record BlockEdit(long tick, int x, int y, int z, Block block, boolean breaking) implements ToServer {}
 
         record Disconnect(String reason) implements ToServer {}
+
+        // Client-reported and trusted until the server simulates the player. The server loads
+        // chunks around it and saves it when the player leaves.
+        record PlayerPosition(float x, float y, float z, float pitch, float yaw) implements ToServer {}
     }
 
     sealed interface ToClient extends IPacket {
@@ -32,12 +37,13 @@ public sealed interface IPacket {
         record PlayerConnected(int playerId) implements ToClient {}
     }
 
+    // public: class members default to package-private, unlike interface members.
     final class Join {
-        record Request(String username, int protocolVersion) implements ToServer {}
+        public record Request(String username, int protocolVersion) implements ToServer {}
 
-        record Accepted(int playerId, long seed, long serverTick) implements ToClient {}
+        public record Accepted(int playerId, long seed, long serverTick, PlayerState spawn) implements ToClient {}
 
-        record Rejected(String reason) implements ToClient {}
+        public record Rejected(String reason) implements ToClient {}
 
         private Join() {}
     }

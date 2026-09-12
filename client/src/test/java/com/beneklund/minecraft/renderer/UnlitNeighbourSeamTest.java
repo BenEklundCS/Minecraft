@@ -12,8 +12,8 @@ import org.junit.jupiter.api.Test;
 
 // The black tree face, reduced. A log stands on the chunk's east edge with open sky above it and
 // open air to the east, so its east face should be fully lit. The east neighbour has blocks but has
-// not been through the light engine yet — the state ChunkManager.meshable() admits between
-// QUEUED_MESH and the end of that chunk's own mesh job — and a fresh Chunk carries an all-zero
+// not been through the light engine yet — the state ClientChunkManager.meshable() admits between
+// that chunk's ChunkData arriving and the end of its own mesh job — and a fresh Chunk carries an all-zero
 // LightMap. The mesher samples the neighbour's LightMap directly for any face on the seam, so it
 // reads that "not computed yet" as "pitch dark".
 class UnlitNeighbourSeamTest {

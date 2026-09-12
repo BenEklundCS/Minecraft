@@ -58,29 +58,33 @@ The essentials that cross many files:
 
 **Dependency rule.** `world/`, `player/`, `block/`, `entity/` depend on nothing outside
 themselves — no GL, no GLFW, no threads. `renderer/` may use `platform/graphics/` and the
-domain. `infra/` may use everything. `container/GameContainer` is the only place that calls
-`new` on platform/renderer types.
+domain. `infra/` may use everything. `container/GameContainer` (client) and
+`container/ServerContainer` (server) are the only places that call `new` on concrete types;
+`launcher/Launcher` runs a `LaunchMode`; `Host` joins them with an `InJvmLink`.
 
 **Composition root ordering is load-bearing.** `GameContainer.run()` has numbered phases;
-nothing above `window.init()` may touch GL. Shutdown runs in reverse and stops chunk workers
-*before* flushing dirty chunks, so no async `setBlock` can dirty an already-persisted chunk.
+nothing above `window.init()` may touch GL. `ServerContainer.stop()` stops the tick thread, then
+generation, *then* flushes dirty chunks, so no in-flight generation dirties a saved chunk.
 
-**Thread model.** The main thread is the *only* thread allowed to call OpenGL. Two fixed pools
-(`availableProcessors/2`, min 2) do generation and meshing; they produce plain data
-(`ChunkMeshData`: `float[]`/`int[]`) that the main thread uploads, capped at
-`MAX_UPLOADS_PER_FRAME = 4` in `Game.processChunks()`. `RenderWorld` is render-thread-only.
-Adding a GL call to a worker is the failure mode this design exists to prevent.
+**Thread model.** The main thread is the *only* thread allowed to call OpenGL. The server ticks
+on its own `server-tick` thread at 20 Hz. Two fixed pools (`availableProcessors/2`, min 2) —
+generation on the server, meshing on the client — produce plain data (`ChunkMeshData`:
+`float[]`/`int[]`) that the main thread uploads under `Game.uploadBudget()`. `RenderWorld` is
+render-thread-only. Adding a GL call to a worker is the failure mode this design exists to prevent.
 
-**Chunk pipeline** (`infra/ChunkManager`): each tick computes the load radius in spiral order,
-enqueues generation (or loads from `ChunkStore` and skips straight to meshing), remeshes
-`DIRTY` chunks, and evicts chunks outside the radius (saving them first). `Chunk` owns its
-state machine via `tryTransition` on an `AtomicReference<ChunkState>` — every job re-checks the
-transition and bails if it lost the race. `ChunkManager` inserts an empty `Chunk` into `World`
-*before* the worker fills it, so "present in the map" ≠ "has blocks": `meshable()` and
-`Game.physicsReady()` both gate on state for exactly this reason.
+**Chunk pipeline** is split across the link. `ServerChunkManager` evicts chunks outside the load
+radius (saving them first) and loads missing ones in spiral order — from `ChunkStore` straight to
+`LIVE`, or through the generation pool. `GameServer` streams the `LIVE` chunks its
+`IChunkStreamer` allows as `ChunkData`, unloads the rest, and sends edits as `BlockChanged`. `ClientChunkManager` holds a replica filled only by those packets and
+lights, meshes and remeshes it. `Chunk` owns its state machine via `tryTransition` on an
+`AtomicReference<ChunkState>` — every job re-checks the transition and bails if it lost the race.
+The server puts an empty `Chunk` into `World` *before* the worker fills it, so
+`ServerChunkManager.replicable()` gates on state; the client only inserts chunks with their blocks,
+so `hasBlocks()` gates on presence.
 
-**`IWorldAuthority`** is the seam all domain reads/writes go through (`LocalWorldAuthority`
-today, a remote impl later). `IPhysicsBody` is the same idea for physics: `Physics` is a
+**`IWorldAuthority`** is the seam all domain reads/writes go through (`ServerWorldAuthority` on
+the server; `ClientWorldAuthority` on the client, which reads the replica and sends edits as
+`BlockEdit`). `IPhysicsBody` is the same idea for physics: `Physics` is a
 system acting on the interface, not a method on `Player`.
 
 **Rendering is passive.** Subsystems implement `IRenderable` and hand back `List<DrawCall>`;
@@ -108,7 +112,7 @@ than throwing; writes go temp-file-then-atomic-move.
 - Comments read like a developer leaving notes for the next person: why this shape, what
   breaks otherwise, what was tried. Not doc templates, not ALL-CAPS section banners. Several
   non-obvious decisions are recorded as long comments in place (`Game.processPhysics`,
-  `GameContainer.defaultSpawn`, `ChunkManager.shutdown`) — extend that habit.
+  `ServerContainer.spawn`, `ServerChunkManager.shutdown`) — extend that habit.
 - Prefer the category loggers (`CHUNK.debug`, `RENDER.trace`) over the bare `LOGGER`; `LOGGER`
   is for startup/shutdown and anything that isn't one subsystem.
 - **Docs describe reality.** If a doc and the code disagree, the doc is the bug — fix it in the
