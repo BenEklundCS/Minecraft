@@ -6,15 +6,26 @@ import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.platform.input.Binding.Trigger;
 import java.util.*;
 
-// Maps raw GLFW events to domain InputActions. Every code's behavior (tap vs hold, and
-// how fast a hold repeats) lives in its Binding, so there's no separate "holdable keys" set.
+/**
+ * Turns one frame of {@link IRawInputEvent}s into domain {@link IInputAction}s. The only class that
+ * knows GLFW key codes, so rebinding a key touches the binding table here and nothing else.
+ *
+ * <p>Keys and mouse buttons share one code space and one path through their {@link Binding}. Tap
+ * bindings fire on release. Hold bindings keep a per-code timer from press to release; {@code
+ * GLFW_REPEAT} is ignored, so the repeat rate is the binding's, independent of the OS key-repeat
+ * setting. Cursor positions become {@link IInputAction.LookAction} deltas, and the first position
+ * after startup only seeds the previous position.
+ *
+ * @see <a href="https://www.glfw.org/docs/latest/input_guide.html#input_key">GLFW: Key input</a>
+ */
 public class InputMapper {
 
-    // Default repeat cadence for mining/placing while the mouse is held down.
     private static final float CLICK_REPEAT_SECONDS = 0.25f;
-    // Movement and jump repeat every frame while held.
     private static final float EVERY_FRAME = 0f;
 
+    /**
+     * WASD, space and shift hold every frame; mouse buttons hold at 0.25 s; everything else taps.
+     */
     public static final Map<Integer, Binding> DEFAULT_BINDINGS = Map.ofEntries(
             // Movement: each key emits its own ±1 component every frame; Player sums them
             // (W+D -> forward + right -> normalized diagonal) so the input layer stays dumb.
@@ -24,12 +35,8 @@ public class InputMapper {
             Map.entry(GLFW_KEY_D, Binding.hold(new IInputAction.MoveAction(1, 0), EVERY_FRAME)),
             Map.entry(GLFW_KEY_SPACE, Binding.hold(IInputAction.Simple.JUMP, EVERY_FRAME)),
             Map.entry(GLFW_KEY_LEFT_SHIFT, Binding.hold(IInputAction.Simple.SNEAK, EVERY_FRAME)),
-
-            // Mouse: held with a cadence so holding the button mines/places on a timer.
             Map.entry(GLFW_MOUSE_BUTTON_1, Binding.hold(IInputAction.Simple.BREAK_BLOCK, CLICK_REPEAT_SECONDS)),
             Map.entry(GLFW_MOUSE_BUTTON_2, Binding.hold(IInputAction.Simple.PLACE_BLOCK, CLICK_REPEAT_SECONDS)),
-
-            // Taps: fire once on release.
             Map.entry(GLFW_KEY_ESCAPE, Binding.tap(IInputAction.Simple.EXIT)),
             Map.entry(GLFW_KEY_X, Binding.tap(IInputAction.Simple.EXIT)),
             Map.entry(GLFW_KEY_1, Binding.tap(new IInputAction.HotbarAction.Select(0))),
@@ -66,7 +73,12 @@ public class InputMapper {
         this.bindings = bindings;
     }
 
-    // dt is the frame time in seconds; it advances the repeat timers for held bindings.
+    /**
+     * Drains the event queue and returns this frame's actions: event-driven ones in arrival order,
+     * then any held bindings whose repeat timer came due.
+     *
+     * @param dt frame time in seconds, advancing the hold timers
+     */
     public List<IInputAction> drain(float dt) {
         List<IInputAction> actions = new ArrayList<>();
         for (IRawInputEvent event : queue.drain()) {
@@ -81,7 +93,6 @@ public class InputMapper {
         return actions;
     }
 
-    // Keys and mouse buttons share this path — both are just integer codes with a Binding.
     private void handleButton(int code, int glfwAction, List<IInputAction> actions) {
         Binding binding = bindings.get(code);
         if (binding == null) return;
@@ -107,7 +118,7 @@ public class InputMapper {
             Binding binding = bindings.get(entry.getKey());
             float repeatSeconds = ((Trigger.Hold) binding.trigger()).repeatSeconds();
             float elapsed = entry.getValue() + dt;
-            if (elapsed >= repeatSeconds) { // repeat 0 -> true every frame
+            if (elapsed >= repeatSeconds) {
                 actions.add(binding.action());
                 elapsed = 0f;
             }

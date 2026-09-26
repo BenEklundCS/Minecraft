@@ -8,6 +8,15 @@ import java.util.List;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
+/**
+ * Turns every meshed chunk in the {@link RenderWorld} into draw calls: opaque and transparent calls
+ * for chunks inside the view frustum, and shadow caster calls for chunks within reach of a
+ * cascade.
+ *
+ * <p>Casters are chosen before the frustum test because a chunk behind the camera still casts
+ * shadows into view. Each caster carries a bitmask of the cascades it can reach, from {@link
+ * #cascadeMaskFor}, so distant chunks skip the small near cascades.
+ */
 public class ChunkRenderer implements IRenderable {
     private static final String VERT_PATH = "/shaders/chunk.vert";
     private static final String FRAG_PATH = "/shaders/chunk.frag";
@@ -26,19 +35,16 @@ public class ChunkRenderer implements IRenderable {
     private final ShaderProgram chunkShader;
     private final ShaderProgram shadowShader;
 
-    /*
-     * Pushed once per frame from Game, beside renderer.setSunDirection.
-     *
-     * Pushed rather than pulled from the DayNightCycle because the caster test and the light
-     * matrix have to agree on where the sun is within a frame. cycle.advance() runs early in the
-     * tick and getDrawCalls runs late inside drawScene; a second read could legally differ, and a
-     * chunk rejected against a sun the shadow map was not rendered from is a shadow that pops.
-     *
-     * Starts on the horizon, the most conservative reach, so the first frame cannot under-draw
-     * before Game has pushed anything.
-     */
+    // Starts on the horizon, the most conservative reach, so the first frame cannot under-draw
+    // before Game has pushed anything.
     private final Vector3f sunDirection = new Vector3f(0.0f, 0.0f, 1.0f);
 
+    /**
+     * Sets the sun used for caster selection. Game pushes it once per frame beside {@code
+     * Renderer.setSunDirection}, so the caster test and the light matrix see the same sun. Reading
+     * the day cycle here could return a later sun than the shadow map was rendered from, and a
+     * chunk rejected against that sun is a shadow that pops.
+     */
     public void setSunDirection(Vector3fc sunDirection) {
         this.sunDirection.set(sunDirection);
     }
@@ -94,25 +100,18 @@ public class ChunkRenderer implements IRenderable {
         return result;
     }
 
-    /*
-     * Which cascades this chunk can cast into, one bit each.
+    /**
+     * Which shadow cascades a box can cast into, one bit per cascade.
      *
-     * Horizontal distance from the eye to the nearest point of the chunk's box. Vertical extent is
-     * ignored: the sun's box spans the full world height, so a chunk is either within horizontal
-     * reach of a cascade or it is not.
+     * <p>Compares the horizontal distance from the eye to the nearest point of the box against
+     * {@link ShadowCamera#casterRadius(int, org.joml.Vector3fc, float)}. Height is ignored because
+     * the sun's box spans the full world height. The radius grows with how far the shadow reaches
+     * at this sun elevation and with how far up-sun the box sits, so a low sun widens the margin
+     * on the side the light comes from. The near cascade covers a small area, so most chunks fail
+     * its test and are never drawn into it.
      *
-     * The near cascade covers a much smaller area, so most loaded chunks fail its test and are
-     * never submitted to it — which is the saving that pays for rendering the scene twice.
-     */
-    /*
-     * Which shadow cascades this box can cast into, as a bitmask. Package-private rather than
-     * private so ChunkRendererTest can pin it: it takes plain vectors, touches no GL and no
-     * renderer state, and the draw-call counts predicted for a still camera rest on it ignoring
-     * the frustum entirely.
-     *
-     * The sun is a parameter rather than the field so the test can sweep it. Which cascades a
-     * chunk can cast into depends on where the light comes from and how low it is, not on
-     * distance alone - see upSunFraction below and ShadowCamera.shadowReach.
+     * <p>Package-private and static with the sun as a parameter, so {@code ChunkRendererTest} can
+     * sweep it without GL or renderer state. It ignores the frustum entirely.
      */
     static int cascadeMaskFor(AABB bounds, Vector3f eye, Vector3f sunDirection) {
         float dx = Math.max(0.0f, Math.max(bounds.minX() - eye.x, eye.x - bounds.maxX()));
@@ -129,13 +128,13 @@ public class ChunkRenderer implements IRenderable {
         return mask;
     }
 
-    /*
-     * How much this chunk sits on the side the light comes from, 0 to 1.
+    /**
+     * How far a box sits on the side the light comes from, 0 to 1: the cosine between the
+     * horizontal eye-to-centre offset and the sun's horizontal direction, clamped at 0.
      *
-     * Bearing comes from the chunk's centre, not from the nearest corner the distance above is
-     * measured to: a 16-block box straddling the eye has no meaningful bearing from a corner. A
-     * chunk sitting on the eye returns 1, which costs nothing because it is inside every box
-     * already.
+     * <p>Bearing comes from the box centre because a 16-block box straddling the eye has no
+     * meaningful bearing from its nearest corner. A box centred on the eye returns 1, which costs
+     * nothing because it is inside every cascade already.
      */
     private static float upSunFraction(AABB bounds, Vector3f eye, Vector3f sunDirection) {
         float sx = sunDirection.x();

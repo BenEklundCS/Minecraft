@@ -7,19 +7,23 @@ import com.beneklund.minecraft.platform.images.ImageData;
 import com.beneklund.minecraft.platform.images.StbImageLoader;
 import java.nio.ByteBuffer;
 
-/*
- * Wraps an OpenGL 2D texture. Load and upload are intentionally separate steps -
- * load() is pure CPU work (read file, decode PNG), upload() is where GL gets involved.
- * load() is safe to call off the main thread; upload() is not.
+/**
+ * An RGBA8 2D texture, sampled with nearest-neighbour filtering.
  *
- * STB gives back a ByteBuffer of raw RGBA pixel data. Once that's uploaded to the GPU
- * via glTexImage2D, the CPU copy is dead weight - stbi_image_free() releases it.
- * After upload(), pixels is null and the texture lives entirely on the GPU.
+ * <p>Loading and uploading are separate steps. {@link #load} decodes a PNG on the CPU and is safe
+ * off the main thread; {@link #upload()} copies the pixels to the GPU and frees the decoded buffer,
+ * after which the texture exists only in video memory.
  *
- * GL_NEAREST filter is critical for pixel art. Without it OpenGL defaults to GL_LINEAR,
- * which blurs between adjacent pixels when scaling, so blocks would look smeared.
+ * <p>Both filters are {@code GL_NEAREST} because block textures are pixel art: linear
+ * filtering blends neighbouring texels and smears the edges. There are no mipmaps, and {@code
+ * GL_NEAREST} as the min filter is what keeps the texture complete without them.
  *
- * Lifecycle: new -> load() -> upload() -> bind() each frame -> delete() on shutdown.
+ * <p>Lifecycle: {@link #load}, {@link #upload()}, {@link #bind()} per draw, {@link #delete()}.
+ *
+ * @see <a href="https://wikis.khronos.org/opengl/Sampler_Object#Filtering">OpenGL Wiki: Texture
+ *     filtering</a>
+ * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml">
+ *     glTexImage2D</a>
  */
 public final class GlTexture {
     private static final IImageLoader LOADER = new StbImageLoader();
@@ -27,18 +31,22 @@ public final class GlTexture {
     private int id;
     private ImageData data;
 
+    /** Decodes a PNG from the classpath into CPU memory. Touches no GL state. */
     public void load(String classpathPng) {
         data = LOADER.load(classpathPng);
     }
 
+    /** Uploads the image from {@link #load} and frees its CPU copy. Main thread only. */
     public void upload() {
         upload(data.pixels(), data.width(), data.height());
         data.close();
         data = null;
     }
 
-    // For callers that build their own pixel buffer (e.g. TextureAtlas stitching).
-    // Caller is responsible for freeing the buffer after this returns.
+    /**
+     * Uploads caller-built RGBA8 pixels, as {@code TextureAtlas} does after stitching. The caller
+     * keeps ownership of {@code pixels} and frees it after this returns.
+     */
     public void upload(ByteBuffer pixels, int width, int height) {
         id = glGenTextures();
         glBindTexture(GL_TEXTURE_2D, id);
@@ -47,6 +55,7 @@ public final class GlTexture {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
 
+    /** Binds to {@code GL_TEXTURE_2D} on the active texture unit. */
     public void bind() {
         glBindTexture(GL_TEXTURE_2D, id);
     }

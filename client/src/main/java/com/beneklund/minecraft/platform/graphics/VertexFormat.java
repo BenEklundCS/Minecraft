@@ -4,7 +4,20 @@ import static org.lwjgl.opengl.GL11C.GL_FLOAT;
 
 import java.util.List;
 
+/**
+ * An interleaved vertex layout: an ordered list of attributes, where list position is the
+ * attribute slot.
+ *
+ * <p>Attribute {@code i} feeds {@code layout(location = i)} in the vertex shader. Stride and
+ * offsets derive from the component counts, so a new attribute needs one entry here and one input
+ * in the shader. The mesher's vertex writes and these lists must agree float for float; {@link
+ * #checkVertexCount} catches a length mismatch at upload.
+ *
+ * @see <a href="https://wikis.khronos.org/opengl/Vertex_Specification#Vertex_format">OpenGL
+ *     Wiki: Vertex format</a>
+ */
 public final class VertexFormat {
+    /** Terrain: position, atlas UV, ambient occlusion, face id, biome tint, (sky, block) light. */
     public static final VertexFormat CHUNK = new VertexFormat(List.of(
             new VertexAttribute(AttributeType.VEC3), // position xyz
             new VertexAttribute(AttributeType.VEC2), // uv
@@ -30,6 +43,7 @@ public final class VertexFormat {
 
     public record VertexAttribute(AttributeType type) {}
 
+    /** Records every attribute's layout into {@code va}, which must be bound with its VBO. */
     public void describe(GlVertexArray va) {
         List<VertexFormat.VertexAttribute> attributes = attributes();
         for (int i = 0; i < attributes.size(); i++) {
@@ -38,6 +52,7 @@ public final class VertexFormat {
         }
     }
 
+    /** @throws IllegalArgumentException if {@code floats} isn't a whole number of vertices */
     public void checkVertexCount(int floats) {
         if (floats % floatsPerVertex() != 0)
             throw new IllegalArgumentException("float count: %d expect: %d".formatted(floats, floatsPerVertex()));

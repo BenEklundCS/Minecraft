@@ -35,7 +35,19 @@ import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-// Per-frame update/render loop. Drives player input, chunk streaming, GPU uploads, and rendering.
+/**
+ * The client's frame loop, on the main thread: input, physics, server packets and chunk uploads,
+ * then the scene, post-processing, HUD and swap.
+ *
+ * <p>Physics steps at a fixed rate through {@link FixedTimestep} and only once the player's chunk
+ * has arrived, since an absent chunk reads as air. Everything else runs once per rendered frame.
+ * Each stage is bracketed by an {@link EngineStats} CPU phase, and optionally by a {@link
+ * GpuTimer} pass, so the debug server's {@code /stats} can break a frame down.
+ *
+ * <p>The client joins before the loop starts and learns its spawn from {@code Join.Accepted}.
+ * From then on it reports its position whenever it crosses into a new chunk, which is what the
+ * server streams chunks around.
+ */
 public class Game {
 
     /*
@@ -82,7 +94,7 @@ public class Game {
     // cascades "is the map right" is really "is each map right", and they fail differently.
     private int shadowOverlayCascade = -1;
 
-    // Null unless local.properties set framestream.port. Serves the last frame over localhost
+    // Null unless local.properties set debugserver.enabled. Serves the last frame over localhost
     // and accepts camera/time commands back, so a change can be evaluated against the same view
     // twice instead of from memory.
     private final FrameStreamServer frameStream;
@@ -92,6 +104,10 @@ public class Game {
     private final GpuTimer gpuTimer;
     private long frame;
 
+    /**
+     * @param frameStream the debug server, or {@code null} when it is off
+     * @param gpuTimer per-pass GPU timers, or {@code null} when {@code gputimer.enabled} is unset
+     */
     public Game(
             Window window,
             Renderer renderer,
@@ -147,21 +163,21 @@ public class Game {
         }
     }
 
-    /*
-     * The /stats body
+    /**
+     * The {@code /stats} response body as JSON, rebuilt once a second in {@code processTitle} and
+     * read from an HTTP thread.
      *
-     * The viewer parses `key=value` lines or a JSON object, looking for p50, p99, max and count,
-     * so either shape already has a client.
-     */
-    /*
-     * Built once a second in processTitle and read from an HTTP thread by /stats, which is why
-     * it is volatile and why formatStats is never called from the handler itself. frameLog,
-     * renderWorld and EngineStats are all main-thread-only; reading them from the pool thread
-     * would be a data race, and percentile() sorting on that thread would put the sort back on
-     * a path we deliberately keep it off.
+     * <p>Volatile, and built on the main thread, because {@code frameLog}, {@code renderWorld} and
+     * {@link EngineStats} are main-thread-only; reading them from the pool thread would be a data
+     * race, and it would put {@code percentile()}'s sort back on a thread kept free of it. The
+     * debug page parses {@code key=value} lines or JSON, so either shape works.
      */
     private volatile String statsSnapshot = null;
 
+    /**
+     * Frame-time percentiles, per-pass draw and vertex counts, GPU pass times and CPU phase times
+     * for the last finished frame. GPU fields are {@code -1} when there is no measurement.
+     */
     private String formatStats() {
         int renderWorldEntries = renderWorld.getEntries().size();
         JsonObject stats = new JsonObject();
@@ -217,12 +233,13 @@ public class Game {
         return stats.toString();
     }
 
-    // INPUT -> Input, so the JSON key reads cpuInputMs rather than cpuINPUTMs.
+    /** {@code INPUT} to {@code Input}, so the JSON key reads {@code cpuInputMs}. */
     private static String name(CpuPhase phase) {
         String n = phase.name();
         return n.charAt(0) + n.substring(1).toLowerCase(java.util.Locale.ROOT);
     }
 
+    /** Sum of the non-negative values, or {@code -1} when none ran. */
     private static float sumOfPassesThatRan(float... millis) {
         float total = -1.0f;
         for (float ms : millis) {
@@ -232,17 +249,18 @@ public class Game {
         return total;
     }
 
-    // Nanoseconds to milliseconds, with -1 preserved rather than divided.
+    /** A pass's GPU time in milliseconds, or {@code -1} with timers off or no result yet. */
     private float gpuPassMillis(int pass) {
         if (gpuTimer == null) return -1.0f;
         long nanos = gpuTimer.lastResultNanos(pass, frame);
         return nanos < 0 ? -1.0f : nanos / 1_000_000.0f;
     }
 
-    /*
-     * pose is {x, y, z, yaw, pitch}; NaN means "leave alone", so a caller can nudge one axis.
-     * Runs on the main thread via drainCommands — Player and Camera are not thread-safe and the
-     * HTTP threads must never touch them.
+    /**
+     * Moves the player for the debug server's teleport command. Runs on the main thread from
+     * {@code drainCommands}, because {@link Player} and {@link Camera} are not thread-safe.
+     *
+     * @param pose {@code {x, y, z, yaw, pitch}}; {@code NaN} leaves that component unchanged
      */
     private void applyTeleport(float[] pose) {
         Vector3f p = new Vector3f(player.getPosition());
@@ -258,6 +276,7 @@ public class Game {
         LOGGER.info("teleport to {} yaw/pitch {}/{}", p, pose[3], pose[4]);
     }
 
+    /** Runs frames until the window is asked to close. */
     public void run() {
         while (!window.shouldClose()) {
             // Closes the previous frame's counters before anything can add to the next one, so
@@ -347,6 +366,7 @@ public class Game {
         }
     }
 
+    /** Hands this frame's time, frame number and sun state to the renderers before drawing. */
     private void pushRenderVariables() {
         renderer.setTime((float) window.getTime());
         renderer.setFrame(frame);
@@ -370,11 +390,18 @@ public class Game {
         }
     }
 
-    // Until the player's chunk arrives it reads as air, and gravity would drop them through it.
+    /**
+     * Whether the player's chunk has arrived. Until it does it reads as air, and gravity would drop
+     * the player through it.
+     */
     private boolean physicsReady() {
         return chunkManager.hasBlocks(player.getChunkPos());
     }
 
+    /**
+     * Ticks the frame clock and records the frame time. Once a second, updates the window title,
+     * logs the {@code perf} summary and rebuilds the {@code /stats} snapshot.
+     */
     private void processTitle() {
         delta.tick();
         // Every frame, not once a second: the line below is a summary of what this collects,
@@ -412,6 +439,10 @@ public class Game {
         }
     }
 
+    /**
+     * Polls GLFW, maps events to actions, handles the loop-level ones (exit, screenshot, shadow
+     * overlay, shader reload), then hands the rest to the player.
+     */
     private void processInput() {
         window.pollEvents();
         List<IInputAction> actions = mapper.drain(delta.getDelta());
@@ -452,6 +483,10 @@ public class Game {
         debugRenderer.updateTargetedBlock(player.getTargetedBlock());
     }
 
+    /**
+     * Runs however many fixed physics steps this frame's time covers, then syncs the camera and
+     * reports the position.
+     */
     private void processPhysics() {
         float dt = delta.getDelta();
         int steps = timestep.stepsFor(dt);
@@ -464,7 +499,10 @@ public class Game {
         reportPosition();
     }
 
-    // The server loads chunks around this. Only sent when the chunk changes.
+    /**
+     * Sends the position when the player enters a new chunk, which is what the server loads and
+     * streams around. Silent until joined.
+     */
     private void reportPosition() {
         if (!joined) return;
         ChunkPos chunk = player.getChunkPos();
@@ -474,6 +512,7 @@ public class Game {
         serverLink.send(new IPacket.ToServer.PlayerPosition(p.x, p.y, p.z, player.getPitch(), player.getYaw()));
     }
 
+    /** Moves the player to the spawn the server chose and starts position reports. */
     private void onJoined(IPacket.Join.Accepted accepted) {
         PlayerState spawn = accepted.spawn();
         player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
@@ -482,25 +521,25 @@ public class Game {
         LOGGER.info("joined as player {} at server tick {}", accepted.playerId(), accepted.serverTick());
     }
 
-    /*
-     * How many meshes to upload this frame, from how long the last one took.
+    /**
+     * How many meshes to upload this frame: {@code TARGET_UPLOADS_PER_SECOND} times the last
+     * frame's duration, clamped to [1, {@code MAX_UPLOADS_PER_FRAME}].
      *
-     * A fixed count per frame makes chunk streaming a function of frame rate, which is a coupling
-     * nobody asked for: adding the 512-block shadow cascade cost 18 ms a frame, and that alone cut
-     * uploads from 300/s to 128/s. Chunks visibly lagged behind the player and a placed block took
-     * noticeably longer to appear — a rendering change quietly throttling the world pipeline.
-     *
-     * Denominating the budget in seconds instead keeps streaming steady while frame time moves.
-     * Still bounded at both ends: at least one so it never stalls completely, and capped so a
-     * single long frame cannot spend the recovery uploading a hundred meshes and cause the next
-     * long frame.
+     * <p>A budget in seconds keeps chunk streaming steady as frame time moves. A fixed count per
+     * frame tied streaming to frame rate: adding the 512-block shadow cascade cost 18 ms a frame and
+     * cut uploads from 300/s to 128/s, so chunks lagged behind the player and placed blocks appeared
+     * late. The floor of one keeps streaming alive in a slow frame; the cap stops one long frame from
+     * spending its recovery on a hundred uploads and causing the next long frame.
      */
     private int uploadBudget() {
         int budget = Math.round(TARGET_UPLOADS_PER_SECOND * delta.getDelta());
         return Math.clamp(budget, 1, MAX_UPLOADS_PER_FRAME);
     }
 
-    // Main thread: the on*() methods write the replica. Unhandled packets fall to default.
+    /**
+     * Drains the server link and routes each packet: chunk packets to the replica, join replies to
+     * {@link #onJoined}. Other packet types are ignored.
+     */
     private void receivePackets() {
         for (IPacket.ToClient packet : serverLink.drain()) {
             switch (packet) {
@@ -529,7 +568,6 @@ public class Game {
             RENDER.trace("uploaded {} (opaque={}, transparent={})", data.pos(), opaque != null, transparent != null);
         }
 
-        // Free GL buffers for chunks the server unloaded.
         for (var pos : chunkManager.drainUnloadQueue()) {
             RenderWorld.Entry entry = renderWorld.remove(pos);
             if (entry != null) {
@@ -540,12 +578,16 @@ public class Game {
         }
     }
 
-    /*
-     * Where the sun sits on screen, in [0,1] UV, or empty when it is behind the camera.
+    /**
+     * Where the sun sits on screen in [0, 1] UV, for the light shafts, or empty when it is behind
+     * the camera.
      *
-     * w = 0 marks a direction rather than a position: the sun has no location, only a bearing, and
-     * a projection handles the two differently. After the transform, w carries the view-space
-     * depth of that bearing, so its sign is the front/behind test.
+     * <p>The sun is a bearing with no location, so it is transformed as a direction, {@code w = 0},
+     * which drops the view translation. After projection {@code w} holds the view-space depth of
+     * that bearing, so its sign is the front/behind test.
+     *
+     * @see <a href="https://www.songho.ca/opengl/gl_projectionmatrix.html">Song Ho Ahn: OpenGL
+     *     Projection Matrix</a>
      */
     private Optional<Vector2f> sunScreenUV() {
         Vector3f sun = cycle.sunDirection();

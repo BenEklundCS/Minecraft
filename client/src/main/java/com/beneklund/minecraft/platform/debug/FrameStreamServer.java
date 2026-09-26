@@ -20,21 +20,36 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/*
- * Serves the last rendered frame over localhost, and accepts a few commands back.
+/**
+ * The debug HTTP server: streams the last rendered frame to a browser on localhost and accepts
+ * commands that make a run reproducible.
  *
- * This exists because the only way to debug something like shadow flicker is to watch it while
- * changing one thing at a time, and screenshots pasted back and forth are too slow a loop to do
- * that. A browser pointed at this can watch the game live; the command endpoints make a run
- * reproducible, which is what turns "does that constant help" from a judgement call into a
- * comparison of two images taken from the same place at the same time of day.
+ * <p>Watching a problem like shadow flicker live, while changing one thing at a time, needs a
+ * faster loop than screenshots. The commands turn "does that constant help" into a comparison of
+ * two frames taken from the same pose at the same time of day.
  *
- * Off unless local.properties sets framestream.port. It binds the loopback address only.
+ * <table>
+ *   <caption>Endpoints</caption>
+ *   <tr><th>Path</th><th>Does</th></tr>
+ *   <tr><td>{@code /}</td><td>The debug page, {@code /debug/index.html} from the classpath.</td></tr>
+ *   <tr><td>{@code /frame.png}</td><td>The latest frame; 503 until one exists.</td></tr>
+ *   <tr><td>{@code /tp?x&y&z&yaw&pitch}</td><td>Teleports; omitted fields are unchanged.</td></tr>
+ *   <tr><td>{@code /time?t}</td><td>Sets time of day, 0 midnight, 0.5 noon.</td></tr>
+ *   <tr><td>{@code /bench}</td><td>Fixed pose, midday, frame log cleared.</td></tr>
+ *   <tr><td>{@code /stats}</td><td>The stats supplier's text; 501 when unwired.</td></tr>
+ * </table>
  *
- * Threading: submit() is called from the render thread and does nothing but copy bytes — the
- * PNG encode happens on a single worker so a 1200x800 encode never lands in the frame budget.
- * Commands arrive on HTTP threads and are queued; drainCommands() runs them on the main thread,
- * because they touch the player and the day cycle and nothing else may.
+ * <p>Started only when {@code debugserver.enabled} is set, and bound to 127.0.0.1.
+ *
+ * <p>Threading: {@link #submit} runs on the main thread and only copies bytes; one daemon worker
+ * encodes the PNG, so the encode stays out of the frame. HTTP handlers run on a two-thread pool
+ * and queue commands; {@link #drainCommands()} runs them on the main thread, since they touch the
+ * player and the day cycle. Capture runs only while a viewer has polled {@code /frame.png} in the
+ * last two seconds, at most every 100 ms, and never while an encode is in flight.
+ *
+ * @see <a
+ *     href="https://docs.oracle.com/en/java/javase/21/docs/api/jdk.httpserver/com/sun/net/httpserver/HttpServer.html">
+ *     JDK HttpServer</a>
  */
 public class FrameStreamServer {
 
@@ -124,6 +139,7 @@ public class FrameStreamServer {
         timeHandler = handler;
     }
 
+    /** Supplies the {@code /stats} body; called on an HTTP thread, so it must be thread-safe. */
     public void setStatsHandler(Supplier<String> handler) {
         statsHandler = handler;
     }
@@ -132,6 +148,7 @@ public class FrameStreamServer {
         resetHandler = handler;
     }
 
+    /** Binds 127.0.0.1 on the configured port and starts serving. */
     public void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         server.createContext("/", this::serveViewer);
@@ -154,10 +171,12 @@ public class FrameStreamServer {
         encoder.shutdownNow();
     }
 
-    // True if enough time has passed that another frame is worth capturing, and the last one has
-    // finished encoding. Checked before readPixels so a declined frame costs nothing at all —
-    // which matters twice over, because readPixels allocates a fresh direct ByteBuffer per call
-    // and those are freed only when the GC gets round to them.
+    /**
+     * Whether to capture this frame: a viewer is watching, the frame interval has passed, and the
+     * previous encode has finished. Call before {@code readPixels}, so a declined frame costs
+     * nothing; each {@code readPixels} stalls the pipeline and allocates a direct buffer that only
+     * the GC frees.
+     */
     public boolean wantsFrame(long nowMillis) {
         // Nobody is watching, so there is nothing to produce. Checked first because it is the
         // common case: the server is usually up for /stats and /tp while no browser is open.
@@ -168,13 +187,12 @@ public class FrameStreamServer {
         return true;
     }
 
-    /*
-     * Takes raw RGB bytes straight from glReadPixels. Copies them immediately — the caller may
-     * reuse or discard its buffer — and encodes off-thread.
+    /**
+     * Copies RGB bytes from {@code glReadPixels} and encodes them off-thread. The caller may reuse
+     * {@code rgb} as soon as this returns; its position is rewound.
      *
-     * Never queues behind an encode already running: wantsFrame() declines while `encoding` is
-     * set, so at most one frame is ever outstanding. Dropping frames is the right trade for an
-     * instrument — a viewer wants the newest frame, never a backlog of old ones.
+     * <p>At most one frame is outstanding: a submit during an encode is dropped. A viewer wants the
+     * newest frame, and a backlog of old ones only costs memory.
      */
     public void submit(ByteBuffer rgb, int width, int height) {
         if (!encoding.compareAndSet(false, true)) return;
@@ -198,14 +216,16 @@ public class FrameStreamServer {
         });
     }
 
-    // Runs queued commands on the calling thread. Call from the main loop.
+    /** Runs every queued command on the calling thread, which must be the main thread. */
     public void drainCommands() {
         Runnable next;
         while ((next = commands.poll()) != null) next.run();
     }
 
-    // GL's origin is bottom-left and every image format's is top-left, so rows are read back
-    // to front. Same flip ScreenCapture asks STB to do.
+    /**
+     * Encodes bottom-row-first RGB as PNG, reading rows back to front because GL's origin is
+     * bottom-left and PNG's is top-left. {@code ScreenCapture} has stb do the same flip.
+     */
     private static byte[] encodePng(byte[] rgb, int width, int height) throws IOException {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < height; y++) {
@@ -242,8 +262,10 @@ public class FrameStreamServer {
         }
     }
 
-    // "/" is the catch-all context, so this also catches /favicon.ico and every mistyped path.
-    // Reading the page back off the classpath for those is pure waste, so only the root gets it.
+    /**
+     * Serves the debug page for exactly {@code /} and 404s the rest. {@code /} is the catch-all
+     * context, so it also receives {@code /favicon.ico} and every mistyped path.
+     */
     private void serveViewer(HttpExchange exchange) throws IOException {
         if (!"/".equals(exchange.getRequestURI().getPath())) {
             exchange.sendResponseHeaders(404, -1);
@@ -271,8 +293,10 @@ public class FrameStreamServer {
         }
     }
 
-    // /tp?x=..&y=..&z=..&yaw=..&pitch=..  — any subset; omitted fields keep their current value,
-    // signalled as NaN so the handler can tell "not supplied" from "zero".
+    /**
+     * {@code /tp?x=&y=&z=&yaw=&pitch=}, any subset. An omitted or unparseable field travels as
+     * {@code NaN}, which the handler reads as "keep the current value", distinct from zero.
+     */
     private void acceptTeleport(HttpExchange exchange) throws IOException {
         Map<String, String> q = parseQuery(exchange);
         float[] pose = {
@@ -282,7 +306,7 @@ public class FrameStreamServer {
         respondOk(exchange);
     }
 
-    // /time?t=0.5 — 0 is midnight, 0.5 noon, matching DayNightCycle.
+    /** {@code /time?t=0.5}: 0 is midnight and 0.5 noon, matching {@code DayNightCycle}. */
     private void acceptTime(HttpExchange exchange) throws IOException {
         Map<String, String> q = parseQuery(exchange);
         float t = parse(q.get("t"));
@@ -290,11 +314,14 @@ public class FrameStreamServer {
         respondOk(exchange);
     }
 
-    // /bench - teleport to the fixed pose, set midday, clear the frame log.
-    //
-    // It takes no parameters on purpose. The entire value of the endpoint is that two runs are
-    // the same run, and a pose that can be overridden per call is a pose that will be, quietly,
-    // three weeks from now when the numbers stop matching. Ad-hoc posing is what /tp is for.
+    /**
+     * {@code /bench}: teleports to the fixed benchmark pose, sets midday and clears the frame log,
+     * then replies with the pose and the warm-up to wait before reading {@code /stats}.
+     *
+     * <p>It takes no parameters, because its value is that two runs are the same run. A pose that
+     * can be overridden per call will be, and the numbers stop matching. Ad-hoc posing is {@code
+     * /tp}'s job.
+     */
     private void acceptBench(HttpExchange exchange) throws IOException {
         // The reset rides in the queued command rather than running here because whatever it
         // clears is written on the main thread. Draining it there is what keeps that object
@@ -321,9 +348,10 @@ public class FrameStreamServer {
         }
     }
 
-    // /stats - whatever the supplier hands back, verbatim. Null or blank means nothing is
-    // wired yet and becomes a 501, which the viewer renders as "not wired" rather than as the
-    // game being down.
+    /**
+     * {@code /stats}: the stats supplier's text, verbatim. Null or blank becomes a 501, which the
+     * debug page shows as an unwired panel, distinct from the game being down.
+     */
     private void serveStats(HttpExchange exchange) throws IOException {
         String stats = statsHandler.get();
         boolean wired = stats != null && !stats.isBlank();

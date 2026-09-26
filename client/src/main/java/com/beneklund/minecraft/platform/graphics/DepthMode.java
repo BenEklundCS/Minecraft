@@ -1,24 +1,29 @@
 package com.beneklund.minecraft.platform.graphics;
 
-/*
- * What kind of depth attachment a GlFramebuffer gets, which decides what can be done with the
- * depth afterwards. The question is not quality, it is "does a later pass read this back".
+/**
+ * The depth attachment a {@link GlFramebuffer} gets, chosen by whether a later pass samples the
+ * depth.
  *
- * A renderbuffer is opaque to shaders, and that is exactly why the driver is free to keep it in
- * whatever tiled or compressed layout the depth hardware likes. Asking for a texture gives that
- * freedom up in exchange for being able to sample it.
+ * <p>A renderbuffer is invisible to shaders, which leaves the driver free to store it in whatever
+ * tiled or compressed layout the depth hardware prefers. A depth texture gives that up so it can
+ * be bound to a sampler.
+ *
+ * @see <a href="https://wikis.khronos.org/opengl/Framebuffer_Object#Attaching_images">OpenGL
+ *     Wiki: Framebuffer Object, attaching images</a>
  */
 public enum DepthMode {
-    // No depth attachment at all. Fullscreen-quad passes — a blur, a tonemap — draw two triangles
-    // covering the screen with nothing to sort against, so depth storage would be allocated,
-    // reallocated on every window resize, and never written to.
+    /**
+     * No depth attachment. For fullscreen passes such as blurs and the tonemap, which cover the
+     * screen with nothing to depth-sort and would never write depth storage.
+     */
     NONE,
 
-    // Depth that can be tested and written but never read from a shader. The default for anything
-    // that draws real geometry and is then only looked at as colour.
+    /** Depth for testing and writing only. The default for passes that draw real geometry. */
     RENDERBUFFER,
 
-    // Depth backed by a texture, so a later pass can bind it to a texture unit and sample it.
-    // What screen-space effects need when they have to know how far away each pixel is.
+    /**
+     * Depth in a {@code GL_DEPTH_COMPONENT24} texture, for screen-space effects that need each
+     * pixel's distance. Read it with {@link GlFramebuffer#depthTexture()}.
+     */
     TEXTURE
 }

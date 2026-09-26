@@ -3,7 +3,10 @@ package com.beneklund.minecraft.net;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.ChunkPos;
 
-// A square around the player's chunk, the same shape ServerChunkManager loads.
+/**
+ * Allows every chunk within a square of half-width {@code radius} around the player's chunk, the
+ * same shape {@code ServerChunkManager} loads.
+ */
 public class RadiusChunkStreamer implements IChunkStreamer {
     private final int radius;
 

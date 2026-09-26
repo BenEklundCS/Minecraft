@@ -25,8 +25,32 @@ import java.util.function.IntSupplier;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
-// Collects DrawCalls from all Renderables each frame and submits them to the GPU,
-// opaque pass first then transparent pass (see draw()).
+/**
+ * Sequences the frame's passes and owns every GL state change between them. Renderables only
+ * describe what to draw, as {@link DrawCall}s; this class decides when and how.
+ *
+ * <p>{@link #drawScene} runs, in order: the shadow cascades into {@link ShadowFramebuffer}, the
+ * cloud march into its own buffer, then the opaque and transparent passes into the HDR scene
+ * target. Every call from every renderable is collected before any pass draws, so transparent
+ * geometry blends against the complete opaque scene. Post-processing follows outside this class,
+ * then {@link #drawHud} draws the HUD untonemapped into the window.
+ *
+ * <p>Transparent geometry draws with the depth test on and depth writes off, unsorted. Surfaces
+ * behind other transparent surfaces still draw; overlapping transparent surfaces blend in
+ * submission order, which is exact only for one layer.
+ *
+ * <p>Frame-wide uniforms (matrices, sun, sky coefficients, cascade data) are built once per frame
+ * in {@code setUniforms} and uploaded once per program per frame by {@link ShaderProgram#apply}.
+ * {@code submit} skips a program or atlas bind when the previous call in the pass used the same
+ * one.
+ *
+ * <p>{@link CloudRenderer} sits outside the {@link IRenderable} list because its pass must finish
+ * before the sky samples it, so {@link #delete()} and {@link #reloadAll()} name it separately.
+ *
+ * @see <a href="https://learnopengl.com/Advanced-OpenGL/Blending">LearnOpenGL: Blending</a>
+ * @see <a href="https://wikis.khronos.org/opengl/Transparency_Sorting">OpenGL Wiki: Transparency
+ *     Sorting</a>
+ */
 public class Renderer {
     private final List<IRenderable> registered;
     private Color fogColor;
@@ -47,13 +71,15 @@ public class Renderer {
     public static final int TIMER_POST = 6;
     public static final int TIMER_PASS_COUNT = 7;
 
-    /*
-     * The timer slot for one cascade. The three constants above are contiguous so this is plain
-     * index arithmetic.
+    /**
+     * The GPU timer slot for one cascade. The cascade constants are contiguous, so this is index
+     * arithmetic.
      *
-     * A fourth cascade needs a fourth constant here before ShadowCamera grows one, and the check
-     * is worth its three lines because the failure is silent: cascade 3 would land on
-     * TIMER_CLOUDS and the clouds would appear to have taken 10 ms.
+     * <p>A fourth cascade needs a fourth constant here before {@link ShadowCamera} grows one. The
+     * range check exists because the failure is silent: cascade 3 would land on {@code
+     * TIMER_CLOUDS} and the clouds would appear to have taken 10 ms.
+     *
+     * @throws IllegalArgumentException if no slot is reserved for {@code cascade}
      */
     public static int timerForCascade(int cascade) {
         if (cascade < 0 || TIMER_SHADOW_C0 + cascade > TIMER_SHADOW_C2) {
@@ -177,8 +203,11 @@ public class Renderer {
         cloudRenderer.delete();
     }
 
-    // cloudRenderer named separately because it is not in registered — see the note on the class.
-    // Missing it here is the failure where F5 reloads every shader except the clouds.
+    /**
+     * Rebuilds every shader from source; bound to the in-game reload action. Names {@code
+     * cloudRenderer} separately because it isn't in the renderable list, and missing it reloads
+     * every shader except the clouds.
+     */
     public void reloadAll() {
         RENDER.info("reloading {} renderable(s)", registered.size());
         for (IRenderable r : registered) r.reload();
@@ -203,10 +232,9 @@ public class Renderer {
         skyZenithF = daylight.zenithF();
     }
 
-    /*
-     * Where the sun looks from. The maths lives in ShadowCamera, which takes a POSITION and a sun
-     * direction and has no way to see where the player is looking — shadows moving with the mouse
-     * is the bug that separation exists to make unexpressible.
+    /**
+     * Updates the cascade matrices. {@link ShadowCamera} takes the eye position and sun direction
+     * and never the look direction, so shadows can't move with the mouse.
      */
     private void updateLightMatrix(Camera camera) {
         shadowCamera.update(camera.getPosition(), sunDirection);
@@ -216,14 +244,7 @@ public class Renderer {
         return shadowBuffer.depthTexture();
     }
 
-    /*
-     * The slice of the shadow map's [0,1] depth range that terrain actually occupies, for the
-     * debug overlay to stretch across its contrast range.
-     *
-     * The light's eye sits SUN_DISTANCE in front of the box centre, so the centre lands at that
-     * depth; terrain reaches roughly a world-height either side of it. Everything outside this
-     * window is either empty sky or below bedrock.
-     */
+    /** See {@link ShadowCamera#depthWindowMin()}. */
     public float shadowDepthWindowMin() {
         return shadowCamera.depthWindowMin();
     }
@@ -236,12 +257,15 @@ public class Renderer {
         return fogColor;
     }
 
-    /*
-     * Split from drawHud because the two land in different framebuffers. The scene renders into
-     * the HDR buffer and gets tonemapped on the way out; the HUD is authored in display values
-     * and must not be, or the crosshair dims whenever the player looks at the sun.
+    /**
+     * Collects the frame's draw calls and runs the shadow, cloud, opaque and transparent passes,
+     * leaving the scene in {@code target}. Binds {@code target} itself, after the shadow and cloud
+     * passes have bound their own framebuffers.
      *
-     * drawScene has to run first in a frame - drawHud filters the call list this collected.
+     * <p>Separate from {@link #drawHud} because the two land in different framebuffers. The scene
+     * renders into the HDR buffer and is tonemapped afterwards; the HUD is authored in display
+     * values and would dim whenever the player looked at the sun. Runs first in a frame, because
+     * {@link #drawHud} draws from the call list collected here.
      */
     public void drawScene(Camera camera, GlFramebuffer target) {
         viewRotation.set(camera.getViewMatrix()).setTranslation(0, 0, 0);
@@ -319,23 +343,16 @@ public class Renderer {
         endPass(TIMER_TRANSPARENT);
     }
 
-    /*
-     * The scene from the sun's point of view, depth only. Runs before the opaque pass because it
-     * produces an input to it — chunk.frag samples this map to decide what is shadowed.
+    /**
+     * Fills the cloud buffer with "no clouds" on a frame that skips the cloud pass.
      *
-     * No colour state to set: ShadowFramebuffer has no colour attachment, so there is nothing to
-     * clear or blend and glClear takes the depth bit alone.
-     */
-    /*
-     * What the cloud buffer has to hold on a frame that ran no cloud pass.
+     * <p>{@code sky.frag} composites it as {@code rgb * cloud.a + cloud.rgb}, so black at alpha 1
+     * leaves the Preetham sky exactly as computed. {@link CloudRenderer} writes every pixel and
+     * never clears, so skipping it leaves a fresh buffer at alpha 0, which multiplies the sky to
+     * black.
      *
-     * sky.frag composites it as rgb * cloud.a + cloud.rgb, so alpha 1 with no colour is
-     * "nothing in front of the sky" and leaves the Preetham result exactly as computed.
-     * CloudRenderer deliberately never clears — it writes every pixel — so skipping it leaves a
-     * freshly allocated buffer at alpha 0, and that multiplies the whole sky to black.
-     *
-     * The clear colour is global state and the scene clear below reads it, so it goes back to the
-     * fog colour on the way out rather than relying on Game setting it again before the next frame.
+     * <p>The clear colour is global state and the scene clear reads it, so it is restored to the fog
+     * colour before returning.
      */
     private void clearCloudBuffer() {
         cloudBuffer.bind();
@@ -344,6 +361,15 @@ public class Renderer {
         glClearColor(fogColor.red(), fogColor.green(), fogColor.blue(), fogColor.alpha());
     }
 
+    /**
+     * Renders the scene from the sun, depth only, into each cascade's layer. Runs before the opaque
+     * pass because {@code chunk.frag} samples the result to decide what is shadowed. The shadow
+     * framebuffer has no colour attachment, so the only state is depth and the only clear is the
+     * depth bit.
+     *
+     * <p>A cascade whose matrix and world version both match the last render is skipped, keeping
+     * its layer. See the note inside the loop.
+     */
     private void drawShadowPass(Camera camera) {
         // Nothing downstream needs the map: setUniforms uploads every cascade split as 0 when
         // shadows are off, so cascadeFor() puts every fragment past the last split and chunk.frag
@@ -429,7 +455,7 @@ public class Renderer {
         glCullFace(GL_BACK);
     }
 
-    // Seconds since GLFW init
+    /** Enables per-pass GPU timing. Left unset, which is the normal case, nothing is timed. */
     public void setGpuTimer(GpuTimer gpuTimer) {
         this.gpuTimer = gpuTimer;
     }
@@ -438,9 +464,11 @@ public class Renderer {
         this.frame = frame;
     }
 
-    // Only one GL_TIME_ELAPSED query may be open at a time for the whole context, so every
-    // beginPass must be closed by its endPass before the next one opens. The five regions are
-    // deliberately flat and sequential for that reason.
+    /**
+     * Opens a GPU timer query for {@code pass}. Only one {@code GL_TIME_ELAPSED} query may be open
+     * in the context, so every {@code beginPass} closes with its {@link #endPass} before the next
+     * opens, and the timed regions are flat and sequential.
+     */
     private void beginPass(int pass) {
         if (gpuTimer != null) gpuTimer.begin(pass, frame);
     }
@@ -449,11 +477,16 @@ public class Renderer {
         if (gpuTimer != null) gpuTimer.end(pass);
     }
 
+    /** Seconds since GLFW init, uploaded as {@code uTime}. */
     public void setTime(float time) {
         this.time = time;
     }
 
-    // Runs after the post pass, against the default framebuffer, so nothing here is tonemapped.
+    /**
+     * Draws the {@link RenderPass#HUD} calls collected by {@link #drawScene} over the window's
+     * framebuffer: after post-processing, so untonemapped, with no depth test and alpha blending.
+     * Restores depth test on and blending off afterwards.
+     */
     public void drawHud(Camera camera) {
         // Drawn over everything, no depth test, blending on for alpha.
         glDisable(GL_DEPTH_TEST);
@@ -518,8 +551,10 @@ public class Renderer {
         }
     }
 
-    // Only ever called from behind the isTraceEnabled guard, so the four passes over the call
-    // list cost nothing unless someone is actually reading the trace.
+    /**
+     * Counts calls in one pass. Called only behind the {@code isTraceEnabled} guard, so the four
+     * walks of the call list cost nothing unless the trace is on.
+     */
     private static long countPass(List<DrawCall> calls, RenderPass pass) {
         return calls.stream().filter(c -> c.pass() == pass).count();
     }
@@ -547,14 +582,13 @@ public class Renderer {
         call.mesh().render();
     }
 
-    /*
-     * Binds a program and does everything that is per-program-per-frame rather than per-draw: its
-     * frame uniforms, and the two sampler units.
+    /**
+     * Binds a program and does the per-program-per-frame work: its frame uniforms and its two
+     * sampler units. A no-op when the program is already bound in this pass.
      *
-     * The samplers are set on a program change rather than once at link time because a program is
-     * replaced wholesale by reload() — an F5 that rebuilt chunk.frag and left its samplers pointing
-     * at unit 0 would sample the atlas as a shadow map. Two glUniform1i per program change is not
-     * worth being clever about. setUniformInt is a no-op for a program that declares neither.
+     * <p>The samplers are set on every program change because a reload replaces the program, and
+     * a rebuilt {@code chunk.frag} with its samplers left on unit 0 would sample the atlas as a
+     * shadow map. {@code setUniformInt} is a no-op for a program that declares neither sampler.
      */
     private void bindProgram(ShaderProgram shader) {
         if (shader == boundShader) return;
@@ -567,13 +601,13 @@ public class Renderer {
         boundShader = shader;
     }
 
-    /*
-     * The two textures every scene program reads, on their own units for the whole pass. They are
-     * the same two objects all frame, so binding them per draw was 4,281 GL calls to arrive at the
-     * state that was already set.
+    /**
+     * Binds the shadow map to unit 1 and the cloud buffer to unit 2 for the whole pass. They are
+     * the same two objects all frame; binding them per draw cost 4,281 GL calls to reach state that
+     * was already set.
      *
-     * Leaves the active unit on 0, which is load-bearing: glActiveTexture is global state and the
-     * atlas bind in submit() goes to whatever unit was left selected.
+     * <p>Leaves unit 0 active, which {@code submit} relies on: {@code glActiveTexture} is global
+     * state and the atlas bind goes to whichever unit is selected.
      */
     private void bindSharedTextures() {
         glActiveTexture(GL_TEXTURE1);
@@ -583,7 +617,7 @@ public class Renderer {
         glActiveTexture(GL_TEXTURE0);
     }
 
-    // Every pass starts with no assumption about what is bound — see the fields.
+    /** Forgets the tracked program and atlas, so the pass's first call binds both. */
     private void beginBindTracking() {
         boundShader = null;
         boundAtlas = null;

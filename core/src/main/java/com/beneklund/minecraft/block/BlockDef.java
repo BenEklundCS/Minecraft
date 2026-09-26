@@ -2,7 +2,19 @@ package com.beneklund.minecraft.block;
 
 import com.beneklund.minecraft.util.Direction;
 
-// tileNames is indexed by Direction.ordinal() — the ordering must stay in sync with the Direction enum.
+/**
+ * A block type's properties: collision, rendering, breakability, emitted light and a texture per
+ * face.
+ *
+ * @param solid collides with bodies and stops raycasts
+ * @param transparent lets neighbours show through, so the mesher keeps the faces of blocks next to
+ *     it; leaves are solid and transparent
+ * @param blended drawn in the alpha-blended pass after all opaque geometry, as water is
+ * @param breakable the player can break it; false only for bedrock
+ * @param lightLevel block light emitted, 0 to 15
+ * @param tileNames atlas tile per face, indexed by {@link Direction#ordinal()}; build it with
+ *     {@link #build} so the order can't drift from {@code Direction}
+ */
 public record BlockDef(
         boolean solid, boolean transparent, boolean blended, boolean breakable, int lightLevel, String[] tileNames) {
 
@@ -10,15 +22,21 @@ public record BlockDef(
         this(solid, transparent, false, breakable, 0, tileNames);
     }
 
+    /** A copy drawn in the blended pass. */
     public BlockDef withBlending() {
         return new BlockDef(solid, transparent, true, breakable, lightLevel, tileNames);
     }
 
+    /** A copy that emits block light at {@code level}. */
     public BlockDef withLight(int level) {
         return new BlockDef(solid, transparent, blended, breakable, level, tileNames);
     }
 
-    // Explicit ordinal mapping so Direction reordering can't silently corrupt tile lookups.
+    /**
+     * A non-blended, non-emitting block with a named tile per face. Each face is written to its
+     * {@link Direction#ordinal()} slot by name, so reordering {@code Direction} can't swap
+     * textures.
+     */
     public static BlockDef build(
             boolean solid,
             boolean transparent,
@@ -43,6 +61,7 @@ public record BlockDef(
         return tileNames[direction.ordinal()];
     }
 
+    /** Solid and not transparent. {@code LightEngine} stops light at opaque blocks. */
     public boolean opaque() {
         return solid() && !transparent();
     }

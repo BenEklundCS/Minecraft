@@ -10,20 +10,22 @@ import com.beneklund.minecraft.platform.graphics.SkyMesh;
 import com.beneklund.minecraft.platform.graphics.UniformValue;
 import java.util.Map;
 
-/*
- * The cloud volume, raymarched into a buffer of its own before the scene is drawn. sky.frag then
- * samples that buffer and composites the result, so the sky pass is now two passes.
+/**
+ * Raymarches the cloud volume into its own reduced-resolution buffer before the scene is drawn.
+ * {@code sky.frag} samples that buffer through {@code uCloudBuffer} and composites it into the sky.
  *
- * Not an IRenderable, and the difference is the point: a DrawCall cannot choose a render target,
- * and this one has to, because the march is far too expensive at full resolution. Same shape as
- * the shadow pass — render into a buffer first, hand it to a later shader as a texture — rather
- * than the shape of a PostProcessor step, because the clouds are part of the image the tonemap
- * later operates on and not something applied to a finished one.
+ * <p>Owns its render target because the march is too expensive at full resolution, and a {@link
+ * DrawCall} can't pick a target. {@code GameContainer} sizes the buffer at a third of the window
+ * per axis. Follows the shadow pass pattern: render to a buffer, then bind it as a texture in a
+ * later shader. The clouds are scene input to the tonemap.
  *
- * Shares sky.vert with SkyRenderer: both want a world-space view ray per pixel off the same
- * fullscreen triangle, and that is the whole of the vertex stage's job here.
+ * <p>Shares {@code sky.vert} with {@link SkyRenderer}: one fullscreen triangle, one world-space
+ * view ray per pixel.
+ *
+ * @see <a href="https://www.guerrilla-games.com/read/the-real-time-volumetric-cloudscapes-of-horizon-zero-dawn">
+ *     Schneider: The Real-time Volumetric Cloudscapes of Horizon Zero Dawn</a>
  */
-public class CloudRenderer {
+public class CloudRenderer implements IGpuResource {
     private static final String VERT_PATH = "/shaders/sky.vert";
     private static final String FRAG_PATH = "/shaders/cloud.frag";
 
@@ -35,18 +37,17 @@ public class CloudRenderer {
         mesh = new SkyMesh();
     }
 
-    /*
-     * No glClear. The triangle covers the target and cloud.frag writes every pixel it reaches,
-     * including the ones with no cloud in them — clearing first would be a second full-target write
-     * per frame for a result that is overwritten immediately.
+    /**
+     * Marches the clouds into {@code target}, overwriting every pixel.
      *
-     * Depth off for the same reason it is off in PostProcessor: one screen-covering triangle has
-     * nothing to sort against. The clouds end up behind terrain anyway, because the sky pass that
-     * reads this buffer draws before any of it.
+     * <p>Skips {@code glClear} because {@code cloud.frag} writes every pixel the triangle covers,
+     * cloudless ones included. Depth testing is off since one screen-covering triangle has nothing
+     * to sort; the clouds land behind terrain because the sky pass that reads this buffer draws
+     * first.
+     *
+     * @param frame the render loop's frame counter, for {@code GlShader.apply}'s once-per-frame
+     *     guard. This pass draws once per frame, so the guard never trips here.
      */
-    // frame is the render-loop ordinal, threaded in only so apply() can tell one frame from the
-    // next. This pass draws once per frame, so the guard inside GlShader never actually fires here —
-    // it is passed for the same reason every other program gets it, not because this one needs it.
     public void draw(GlFramebuffer target, long frame, Map<String, UniformValue<?>> frameUniforms) {
         target.bind();
         glDisable(GL_DEPTH_TEST);

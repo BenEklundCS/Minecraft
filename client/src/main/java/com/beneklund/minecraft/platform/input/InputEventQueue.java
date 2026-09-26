@@ -4,8 +4,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-// Bridge between the GLFW callback thread (offers) and the game-update thread (drains).
-// ConcurrentLinkedQueue is lock-free, so the callback never blocks the main thread.
+/**
+ * The buffer between GLFW's input callbacks and {@link InputMapper}, the first stage of the input
+ * pipeline: GLFW callback, this queue, {@link InputMapper}, {@code List<IInputAction>}.
+ *
+ * <p>GLFW invokes callbacks inside {@code glfwPollEvents}, and {@code Game} drains straight after
+ * polling, so both ends currently run on the main thread. The queue is lock-free, so it stays
+ * correct if polling ever moves to its own thread.
+ *
+ * @see <a href="https://www.glfw.org/docs/latest/input_guide.html#events">GLFW: Event
+ *     processing</a>
+ */
 public class InputEventQueue {
     private final ConcurrentLinkedQueue<IRawInputEvent> queue = new ConcurrentLinkedQueue<>();
 
@@ -13,6 +22,7 @@ public class InputEventQueue {
         queue.offer(event);
     }
 
+    /** Removes and returns every queued event, oldest first. */
     public List<IRawInputEvent> drain() {
         List<IRawInputEvent> batch = new ArrayList<>();
         IRawInputEvent e;

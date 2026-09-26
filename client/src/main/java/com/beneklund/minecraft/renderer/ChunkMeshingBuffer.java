@@ -2,6 +2,14 @@ package com.beneklund.minecraft.renderer;
 
 import java.util.Arrays;
 
+/**
+ * A growable vertex and index buffer that {@link ChunkMesher} fills one quad at a time.
+ *
+ * <p>Per quad: {@link #ensureQuadCapacity()}, {@link #writeVert} for every float of every vertex,
+ * {@link #writeIdx} with indices offset by {@link #base()}, then {@link #advance()}. The arrays
+ * double when a quad won't fit, and {@link #copyVertices()} and {@link #copyIndices()} trim to what
+ * was written.
+ */
 public final class ChunkMeshingBuffer {
     private final int initialFaceCapacity;
     private final int verticesPerQuad;
@@ -25,17 +33,24 @@ public final class ChunkMeshingBuffer {
         indices = emptyIndices();
     }
 
-    // Grow before writing one more quad's worth of vertices/indices.
+    /** Doubles either array that can't hold one more quad. Call before writing each quad. */
     public void ensureQuadCapacity() {
         if (vertPos + verticesPerQuad * floatsPerVertex > vertices.length)
             vertices = Arrays.copyOf(vertices, vertices.length * 2);
         if (idxPos + indicesPerQuad > indices.length) indices = Arrays.copyOf(indices, indices.length * 2);
     }
 
+    /** Index of the current quad's first vertex. After meshing, the total vertex count. */
     public int base() {
         return vertexBase;
     }
 
+    /**
+     * Closes the current quad.
+     *
+     * @throws IllegalStateException if the quad wrote a different number of floats than one quad
+     *     of the vertex format holds, which means the mesher and {@code VertexFormat.CHUNK} disagree
+     */
     public void advance() {
         int actual = vertPos - quadStart;
         int expect = getQuadVertexFloats();

@@ -3,20 +3,19 @@ package com.beneklund.minecraft.util;
 import com.beneklund.minecraft.renderer.RenderPass;
 import java.util.Arrays;
 
-/*
- * Per-frame render counters. Static on purpose, and the only globals in the tree that are:
- * the write sites are scattered across layers that cannot reach an instance - GlShader lives in
- * platform/graphics/ and the dependency rule forbids it importing renderer/ - so threading a
- * collector through every constructor would cost four files per new counter.
+/**
+ * Per-frame render counters and CPU phase timings, double-buffered: {@code count*} and {@code
+ * *Phase} write the frame being built, the getters read the last finished one.
  *
- * What makes that acceptable is that nothing ever branches on these. They are written and
- * printed, never read back by the code being measured, so a counter that stayed zero forever
- * would not change a single pixel or a single frame.
+ * <p>Static, and the only global state in the tree. The write sites span layers that can't reach a
+ * shared instance ({@code GlShader} in {@code platform/graphics} may not import {@code renderer}),
+ * so a collector threaded through constructors would cost four files per new counter. It stays
+ * safe because nothing branches on these values: they are written and displayed, and a counter
+ * stuck at zero changes no pixel and no frame time.
  *
- * The increments are plain int++, not atomics, and that is load-bearing rather than lazy.
- * Uniform uploads run in the tens of thousands per frame; paying atomic contention that many
- * times a frame would add cost to the exact hot path these numbers exist to measure. The price
- * is that only the main thread may touch them - see beginFrame.
+ * <p>Increments are plain {@code ++}. Uniform uploads number in the tens of thousands per frame,
+ * and atomics would add cost to the hot path these numbers measure. The price is that only the
+ * main thread may call anything here.
  */
 public final class EngineStats {
 
@@ -61,10 +60,9 @@ public final class EngineStats {
     private static int lastChunksConsidered;
     private static int lastChunksDrawn;
 
-    /*
-     * Closes the frame just finished and opens the next one. Call once at the top of the game
-     * loop, from the main thread.
-     *
+    /**
+     * Publishes the frame just finished to the getters and zeroes the accumulators. Call once at
+     * the top of the game loop.
      */
     public static void beginFrame() {
         System.arraycopy(phaseNanos, 0, lastPhaseNanos, 0, CpuPhase.COUNT);
@@ -91,10 +89,10 @@ public final class EngineStats {
         vertices[pass.ordinal()] += count;
     }
 
-    /*
-     * Opens a region. Regions are flat and sequential, so an unbalanced begin is a region that
-     * silently reads as zero rather than one that throws - which is the right trade for an
-     * instrument, but it does mean the parts not summing to the frame is the signal to check.
+    /**
+     * Opens a timed region; {@link #endPhase} adds its duration. Regions are flat and sequential.
+     * A begin without an end records nothing and throws nothing, so phases that don't sum to the
+     * frame time are the sign of an unbalanced pair.
      */
     public static void beginPhase(CpuPhase phase) {
         phaseStart[phase.ordinal()] = System.nanoTime();
@@ -104,7 +102,7 @@ public final class EngineStats {
         phaseNanos[phase.ordinal()] += System.nanoTime() - phaseStart[phase.ordinal()];
     }
 
-    // Last completed frame, in milliseconds.
+    /** Time spent in {@code phase} during the last finished frame, in milliseconds. */
     public static float phaseMillis(CpuPhase phase) {
         return lastPhaseNanos[phase.ordinal()] / 1_000_000.0f;
     }
@@ -141,8 +139,10 @@ public final class EngineStats {
         return lastChunksDrawn;
     }
 
-    // Statics survive between test classes in a single JVM, so anything asserting on these has
-    // to start from a known state.
+    /**
+     * Zeroes both buffers. For tests: statics survive between test classes in one JVM, so anything
+     * asserting on these starts from here.
+     */
     public static void reset() {
         Arrays.fill(phaseNanos, 0L);
         Arrays.fill(lastPhaseNanos, 0L);

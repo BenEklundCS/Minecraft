@@ -9,31 +9,42 @@ import com.beneklund.minecraft.platform.graphics.SkyMesh;
 import java.util.Optional;
 import org.joml.Vector2f;
 
-/*
- * The last passes of the frame. The scene arrives as a texture carrying linear radiance; this
- * extracts the bright parts, blurs them, adds them back, and tonemaps the result down to
- * something the display can show.
+/**
+ * Runs the frame's last passes: light shafts, bloom, and the tonemap from linear HDR radiance to
+ * display values.
  *
- * Six passes, in order: occlusion -> radial blur -> bright -> horizontal blur -> vertical blur ->
- * combine. Everything before the combine runs at half resolution, because every one of those
- * outputs is a wide blur whose high frequencies are being destroyed on purpose.
+ * <p>{@link #draw} runs up to six fullscreen passes, each one named call:
  *
- * The first two are the light shafts and are skipped on any frame where the sun is behind the
- * camera; the middle three are bloom. Either group can also be switched off for the whole run by
- * RenderFeatures, in which case only the combine survives — that is the floor, because the scene
- * arrives in linear radiance and something has to tonemap it. draw() is the map — each step is one
- * named call, and the ordering constraints between them live on the methods themselves.
+ * <ol>
+ *   <li>occlusion: sky pixels only, scene colour and depth into {@code godrayA}
+ *   <li>radial blur toward the sun: {@code godrayA} into {@code godrayB}
+ *   <li>bright pass: radiance above {@link #BLOOM_THRESHOLD} into {@code bloomA}
+ *   <li>horizontal Gaussian: {@code bloomA} into {@code bloomB}
+ *   <li>vertical Gaussian: {@code bloomB} into {@code bloomA}
+ *   <li>composite and ACES tonemap: scene, {@code bloomA} and {@code godrayB} into the window
+ * </ol>
+ *
+ * <p>Passes 1 to 5 run at half resolution because each output is a wide blur. The light shafts
+ * skip any frame where the sun is behind the camera. {@link RenderFeatures} can turn off either
+ * group for the whole run. The composite always runs, because it is the only tonemap.
+ *
+ * @see <a href="https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-13-volumetric-light-scattering-post-process">
+ *     GPU Gems 3, ch. 13: Volumetric Light Scattering as a Post-Process</a>
+ * @see <a href="https://learnopengl.com/Advanced-Lighting/Bloom">LearnOpenGL: Bloom</a>
+ * @see <a href="https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/">
+ *     Narkowicz: ACES Filmic Tone Mapping Curve</a>
  */
-public class PostProcessor {
+public class PostProcessor implements IGpuResource {
     private static final String VERT_PATH = "/shaders/post.vert";
     private static final String FRAG_PATH = "/shaders/post.frag";
     private static final String BRIGHT_FRAG = "/shaders/bloom_bright.frag";
     private static final String BLUR_FRAG = "/shaders/bloom_blur.frag";
     private static final String DEBUG_DEPTH_FRAG = "/shaders/debug_depth.frag";
 
-    // Fraction of the window width the shadow-map inset occupies. A quarter is large enough to
-    // read texel structure and small enough to leave the world visible beside it, which is the
-    // point — the map has to be watched while moving, not in isolation.
+    /**
+     * Fraction of the window width the shadow-map inset occupies. A quarter shows texel structure
+     * and leaves the world visible beside it, so the map can be watched while moving.
+     */
     private static final float DEBUG_INSET_FRACTION = 0.25f;
 
     private static final float GODRAY_DECAY = 0.95f;
@@ -53,9 +64,11 @@ public class PostProcessor {
     private static final String GODRAY_OCCLUSION_FRAG = "/shaders/godray_occlusion.frag";
     private static final String GODRAY_BLUR_FRAG = "/shaders/godray_blur.frag";
 
-    // Display-only. The occlusion buffer holds linear radiance, and the sun disc reaches
-    // SUN_INTENSITY = 270 (sky.frag:17); dividing by it puts the disc at 1.0 so the tonemap has
-    // something in range to work on. Not used by the effect — only by the 2a checkpoint.
+    /**
+     * Scales the occlusion buffer for viewing it directly: the sun disc reaches {@code
+     * SUN_INTENSITY = 270} in {@code sky.frag}, and dividing by it puts the disc at 1.0. Nothing
+     * reads this constant.
+     */
     private static final float GODRAY_DISPLAY_SCALE = 1.0f / 270.0f;
 
     private final ShaderProgram occlusionShader;
@@ -72,8 +85,7 @@ public class PostProcessor {
     private final GlFramebuffer godrayB;
     private final float exposure;
 
-    // Which of the passes below actually run. Only bloom and the light shafts are optional here;
-    // the tonemap is not, because everything upstream writes linear radiance.
+    /** Switches bloom and the light shafts on or off for the run. The tonemap always runs. */
     private final RenderFeatures features;
 
     public PostProcessor(
@@ -99,13 +111,14 @@ public class PostProcessor {
         mesh = new SkyMesh();
     }
 
-    /*
-     * Draws the shadow map into a square inset in the bottom-right corner, over the finished
-     * frame. Runs against the default framebuffer, after draw(), so it is never tonemapped —
-     * this is an instrument, not part of the image.
+    /**
+     * Draws one shadow-map layer into a square inset in the bottom-right corner of the window.
+     * Call it after {@link #draw}; it writes to the default framebuffer and skips the tonemap,
+     * so it shows raw depth.
      *
-     * depthMin/depthMax select which slice of the depth range is stretched across the contrast
-     * range; the caller knows the light's near/far and where the terrain sits within them.
+     * @param depthMin start of the depth slice stretched across the inset's contrast range
+     * @param depthMax end of that slice; the caller picks both from where the terrain sits between
+     *     the light's near and far planes
      */
     public void drawDepthOverlay(
             int depthTexture, int layer, float depthMin, float depthMax, int windowWidth, int windowHeight) {
@@ -130,6 +143,14 @@ public class PostProcessor {
         glViewport(0, 0, windowWidth, windowHeight);
     }
 
+    /**
+     * Runs every enabled pass and leaves the tonemapped frame in the window. Restores depth
+     * testing and face culling on the way out.
+     *
+     * @param sceneTexture the scene's linear HDR colour
+     * @param sceneDepthTexture the scene's depth, read by the occlusion pass
+     * @param sunUV the sun's screen position in [0, 1] UV, empty when it is behind the camera
+     */
     public void draw(
             int sceneTexture, int sceneDepthTexture, Optional<Vector2f> sunUV, int windowWidth, int windowHeight) {
         glDisable(GL_DEPTH_TEST);
@@ -163,8 +184,10 @@ public class PostProcessor {
         glEnable(GL_CULL_FACE);
     }
 
-    // Everything over BLOOM_THRESHOLD, scene -> bloomA. bind() sets the viewport to the target's
-    // own size, so the half-resolution passes get a half-resolution viewport without asking.
+    /**
+     * Keeps radiance above {@link #BLOOM_THRESHOLD}, scene into {@code bloomA}. {@link
+     * GlFramebuffer#bind()} sets the half-resolution viewport.
+     */
     private void brightPass(int sceneTexture) {
         bloomA.bind();
         brightShader.bind();
@@ -175,14 +198,14 @@ public class PostProcessor {
         mesh.render();
     }
 
-    /*
-     * The only pass that writes to the window rather than to a framebuffer, and the only one that
-     * tonemaps. Everything upstream is linear radiance; what leaves here is display values.
+    /**
+     * Adds bloom and light shafts to the scene, applies exposure and the ACES tonemap, and writes
+     * display values to the window. The only pass that targets the window during {@link #draw}.
      *
-     * Three inputs on three units: the scene, the blurred bright parts, and the light shafts. Both
-     * the godray and the bloom binds are unconditional even on a frame that produced neither — a
-     * sampler pointing at a unit with nothing bound is undefined, so the stale buffers stay bound
-     * and their strength uniforms multiply them out instead.
+     * <p>Binds the scene, {@code bloomA} and {@code godrayB} to units 0, 1 and 2 on every frame,
+     * including frames that skipped bloom or the light shafts. A sampler on a unit with nothing
+     * bound is undefined, so a skipped group keeps its stale buffer bound and a strength of zero
+     * multiplies it out.
      */
     private void compositePass(int sceneTexture, boolean godrays, boolean bloom, int windowWidth, int windowHeight) {
         GlFramebuffer.bindDefault(windowWidth, windowHeight);
@@ -205,13 +228,13 @@ public class PostProcessor {
         mesh.render();
     }
 
-    /*
-     * Two texture units, because this is the first pass that needs to read the scene twice over:
-     * the colour it might keep, and the depth that decides whether to keep it.
+    /**
+     * Writes sky pixels' radiance into {@code godrayA} and blacks out everything else, so the
+     * radial blur smears only the sky and gaps behind silhouettes become shafts. Sky is where depth
+     * equals the clear value 1.0; colour is on unit 0, depth on unit 1.
      *
-     * Leaves the active unit back on GL_TEXTURE0. That is global state, and the bright pass runs
-     * next against unit 0 — a stale unit 1 here would land the scene bind on the wrong unit and
-     * bloom would come out of the depth texture.
+     * <p>Leaves {@code GL_TEXTURE0} active. The active unit is global state, and the bright pass
+     * binds the scene next assuming unit 0; left on unit 1, bloom would read the depth texture.
      */
     private void occlusionPass(int sceneTexture, int sceneDepthTexture) {
         godrayA.bind();
@@ -226,6 +249,11 @@ public class PostProcessor {
         mesh.render();
     }
 
+    /**
+     * One direction of the separable Gaussian, {@code sourceTexture} into {@code target}. A
+     * framebuffer can't sample its own colour texture, so the two directions ping-pong between
+     * {@code bloomA} and {@code bloomB}.
+     */
     private void blurPass(GlFramebuffer target, int sourceTexture, float dx, float dy) {
         target.bind();
         blurShader.bind();
@@ -237,6 +265,10 @@ public class PostProcessor {
         mesh.render();
     }
 
+    /**
+     * Blurs {@code godrayA} radially toward {@code sunUV} into {@code godrayB}, summing decaying
+     * samples along each pixel's line to the sun.
+     */
     private void godrayPass(Vector2f sunUV) {
         godrayB.bind();
         godrayShader.bind();

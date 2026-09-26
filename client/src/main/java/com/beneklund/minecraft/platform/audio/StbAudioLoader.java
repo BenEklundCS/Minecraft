@@ -19,26 +19,30 @@ import java.util.Map;
 import java.util.stream.Stream;
 import org.lwjgl.stb.STBVorbisInfo;
 
-/*
- * Decodes an OGG/Vorbis file from the classpath into raw PCM samples using STBVorbis.
- * Returns an AudioData holding a native ShortBuffer (interleaved 16-bit samples), channel
- * count, and sample rate. The caller is responsible for freeing via AudioData.close().
+/**
+ * Decodes Ogg Vorbis files from the classpath into interleaved 16-bit PCM with stb_vorbis, the
+ * whole file at once.
  *
- * stb_vorbis_stream_length_in_samples seeks to the end of the stream, so stb_vorbis_seek_start
- * is called before decoding to reset the read position.
+ * <p>The PCM buffer lives in native memory and is freed when the returned {@link AudioData}
+ * closes. {@code stb_vorbis_stream_length_in_samples} seeks to the end of the stream to count, so
+ * the decoder seeks back to the start before decoding. Native writes leave the Java buffer's
+ * position at 0 and its limit at capacity, which is exactly the range OpenAL should read, so the
+ * buffer goes to {@code alBufferData} without a {@code flip()}.
  *
- * Native writes via STBVorbis do not advance the Java buffer position, so the ShortBuffer
- * is returned as-is (position=0, limit=capacity) - do not flip before passing to OpenAL.
+ * @see <a href="https://github.com/nothings/stb/blob/master/stb_vorbis.c">stb_vorbis.c</a>
  */
 public class StbAudioLoader implements IAudioLoader {
     private static final String RESOURCE_ROOT = "/";
     private static final String OGG_SUFFIX = ".ogg";
 
+    /**
+     * Decodes {@code classpathOgg}, resolved from the classpath root with or without a leading
+     * slash. {@code Class.getResourceAsStream} reads a slash-less name relative to this class's
+     * package, so the path is normalised first and {@code music/album/track.ogg} from a config
+     * file works as written.
+     */
     @Override
     public AudioData load(String classpathOgg) {
-        // Resolve from the classpath root. getResourceAsStream treats a slash-less path as
-        // relative to this class's package, so normalize to a leading slash - that way a
-        // config value like "music/<album>/<track>.ogg" works the same as "/music/...".
         String path = getPath(classpathOgg);
         try (var is = getClass().getResourceAsStream(path)) {
             if (is == null) throw new RuntimeException("Resource not found: %s".formatted(path));
@@ -73,17 +77,17 @@ public class StbAudioLoader implements IAudioLoader {
         return classpathOgg.startsWith(RESOURCE_ROOT) ? classpathOgg : RESOURCE_ROOT + classpathOgg;
     }
 
-    // Every .ogg at or below a classpath directory, as paths load() accepts. `dir` is
-    // classloader-relative with no leading slash, e.g. "music". Recursive, so subfolders are
-    // whatever is on disk — no track or album is named in code, and dropping a folder in is
-    // the whole install step.
-    //
-    // Sorted, so the ordering doesn't depend on the filesystem and a seeded pick would be
-    // reproducible.
-    //
-    // Empty rather than throwing when the directory isn't on the classpath: a gitignored music
-    // folder is absent on a fresh clone and that is not an error. Whether finding nothing
-    // *anywhere* matters is the caller's decision.
+    /**
+     * Every {@code .ogg} at or below a classpath directory, as paths {@link #load} accepts, sorted
+     * so a seeded pick is reproducible across filesystems.
+     *
+     * <p>Recursive, so installing an album is dropping its folder in; no track is named in code.
+     * Works from a directory or from inside a jar, which is how {@code :launcher} puts the client
+     * on the classpath. Returns an empty list when {@code dir} is absent, because the music folder
+     * is gitignored and missing on a fresh clone.
+     *
+     * @param dir classloader-relative, no leading slash, e.g. {@code music}
+     */
     public List<String> listOggs(String dir) {
         URL url = getContextClassLoader().getResource(dir);
         if (url == null) return List.of();

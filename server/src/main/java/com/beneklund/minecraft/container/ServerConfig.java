@@ -1,6 +1,11 @@
 package com.beneklund.minecraft.container;
 
-// The spawn column is used only when there's no saved player; its height is measured.
+/**
+ * Server launch settings.
+ *
+ * <p>The spawn column ({@code spawnX}, {@code spawnZ}) applies only when there is no saved player;
+ * the spawn height is measured from the generated terrain.
+ */
 public record ServerConfig(
         long seed,
         int loadRadius,

@@ -2,21 +2,26 @@ package com.beneklund.minecraft.world;
 
 import org.joml.Vector3f;
 
-/*
- * Preetham is a daylight model - thetaS is clamped at the horizon, so below it the sky would
- * sit at sunset brightness forever. Measured at turbidity 2.5, zenith luminance stops falling
- * at 1.88 kcd/m^2 the moment the sun touches the horizon and stays there until dawn, while the
- * Perez sun lobe keeps tracking a sun that is now underground - a warm band parked on the
- * horizon, swinging around all night. Real night sky is four orders of magnitude dimmer.
+/**
+ * The sky across a whole day: {@link PreethamSky} while the sun is up, faded into a fixed night
+ * gradient over civil twilight.
  *
- * So this fades the model out over civil twilight and hands off to a plain night gradient.
- * Nothing here is Preetham; PreethamSky stays a faithful transcription of the paper, and the
- * "what happens after the sun sets" decision lives out here where it can be tuned.
+ * <p>Preetham models daylight only. {@link PreethamSky#thetaS()} holds the sun at the horizon
+ * once it sets, so on its own the sky would stay at sunset brightness all night: measured at
+ * turbidity 2.5, zenith luminance stops at 1.88 kcd/m^2, and the Perez sun lobe keeps tracking a
+ * sun that is below the ground, leaving a warm band swinging along the horizon. A real night sky is
+ * about four orders of magnitude dimmer. {@link #dayFactor()} blends from the model to the night
+ * gradient as the sun drops from 0 to about -6 degrees. This class owns that decision, so
+ * {@code PreethamSky} stays a faithful transcription of the paper.
  *
- * sky.frag does the same blend per pixel. It gets uDayFactor and both night colours as
- * uniforms from this class rather than declaring its own consts, because the fog colour is
- * sampled from colorFor() on the CPU and the two have to agree exactly - the horizon is where
- * fog meets sky, and any disagreement shows up as a seam.
+ * <p>The blend itself runs in GLSL: {@code sky.frag} and the distance haze in {@code chunk.frag}
+ * both mix night and day with {@code uDayFactor}, {@code uNightHorizon} and {@code uNightZenith}
+ * from this class. Sharing one source keeps the haze and the sky identical where they meet at the
+ * horizon.
+ *
+ * @see <a href="https://en.wikipedia.org/wiki/Twilight#Civil_twilight">Civil twilight</a>
+ * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/smoothstep.xhtml">GLSL
+ *     smoothstep</a>
  */
 public class SkyModel {
     // Sun altitude (sin of it, which is just sunDirection.y) where the handoff happens.
@@ -48,33 +53,34 @@ public class SkyModel {
         sky = new PreethamSky(turbidity, sunDirection);
     }
 
-    // The daylight half, for the coefficient uniforms sky.frag evaluates per pixel.
+    /** The daylight model for the current sun, source of the Perez coefficient uniforms. */
     public PreethamSky preetham() {
         return sky;
     }
 
-    // 1 while the sun is up, 0 once it is well down, smooth across twilight.
+    /** 1 with the sun above the horizon, 0 once its altitude sine is below -0.1, smoothstep between. */
     public float dayFactor() {
         return smoothstep(NIGHT_BELOW, DAY_ABOVE, sunDirection.y);
     }
 
-    // Copies. Renderer hands these straight to the uniform map, which lives next to a
-    // fogColorVec it mutates in place every frame - one set() on the wrong vector would
-    // corrupt the constant for the rest of the process.
+    /**
+     * A copy of the night colour at the horizon. Copies because the caller puts them straight into
+     * a mutable uniform map, and a write through a shared constant would corrupt it for the rest of
+     * the process.
+     */
     public Vector3f nightHorizon() {
         return new Vector3f(NIGHT_HORIZON);
     }
 
+    /** A copy of the night colour straight up; see {@link #nightHorizon()}. */
     public Vector3f nightZenith() {
         return new Vector3f(NIGHT_ZENITH);
     }
 
-    /*
-     * The final on-screen sky colour for one direction: Preetham, exposed, then blended into
-     * night. This is what sky.frag computes per pixel, minus the sun disc - fog should take the
-     * colour of the sky around the sun, not of the sun itself.
-     *
-     * One call per frame (Renderer.updateFogFromSky), not a per-pixel path.
+    /**
+     * The sky colour in one direction, evaluated on the CPU: Preetham, exposed with {@code 1 -
+     * exp(-exposure * L)}, then blended into the night gradient. Excludes the sun disc. {@code
+     * SkyModelTest} pins it; it has no caller in the renderer.
      */
     public Vector3f colorFor(Vector3f viewDir) {
         Vector3f linear = sky.skyColor(viewDir);
@@ -86,7 +92,6 @@ public class SkyModel {
                 mix(mix(NIGHT_HORIZON.z, NIGHT_ZENITH.z, up), exposed(linear.z), day));
     }
 
-    // Same exponential curve as sky.frag: radiance is unbounded, the framebuffer is not.
     private float exposed(float linear) {
         return (float) (1.0 - Math.exp(-exposure * Math.max(linear, 0.0f)));
     }

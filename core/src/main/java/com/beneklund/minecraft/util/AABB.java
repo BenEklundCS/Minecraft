@@ -5,8 +5,17 @@ import java.util.List;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
-// Axis-aligned bounding box: two world-space corners with min <= max on every axis.
-// Used for frustum culling (chunk bounds) now, and entity/block collision later.
+/**
+ * An axis-aligned bounding box: two world-space corners with {@code min <= max} on every axis.
+ *
+ * <p>Chunk bounds for frustum culling and the player's body for collision both use it. Because
+ * blocks are unit cubes on the integer grid, a box maps directly to the cells it occupies with
+ * {@link #getBlocksOverlapping()}, which is how {@code Physics} finds the solids to resolve
+ * against.
+ *
+ * @see <a href="https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection">
+ *     MDN: 3D collision detection</a>
+ */
 public class AABB {
     private final Vector3f min;
     private final Vector3f max;
@@ -16,8 +25,10 @@ public class AABB {
         max = new Vector3f(maxX, maxY, maxZ);
     }
 
-    // Box of the given footprint/height whose bottom face is centered on bottomCenter.
-    // Matches how an entity stands: position sits at the feet, the body extends upward.
+    /**
+     * A box whose bottom face is centred on {@code bottomCenter}. Entity positions sit at the feet,
+     * so this is the body of an entity standing at that position.
+     */
     public static AABB ofSize(Vector3f bottomCenter, float width, float height, float depth) {
         float halfWidth = width / 2f;
         float halfDepth = depth / 2f;
@@ -30,13 +41,16 @@ public class AABB {
                 bottomCenter.z + halfDepth);
     }
 
-    // Every integer block cell this box actually penetrates. A block at (x,y,z) is the
-    // unit cube [x,x+1]. The low bound is floor(min); the high bound is ceil(max)-1, which
-    // is a half-open upper edge: a face resting exactly on an integer (max == 1.0) touches
-    // the next cell but shares no volume with it, so we exclude it — otherwise a body
-    // snapped flush against a wall would report a phantom collision on the other axes.
-    // Math.floor (not an int cast) so negative coords map down, not toward zero.
-    // Pure geometry — whether a cell is solid is the caller's problem.
+    /**
+     * Every block cell this box shares volume with. Whether a cell is solid is the caller's
+     * question.
+     *
+     * <p>Block {@code (x, y, z)} is the unit cube {@code [x, x+1]}. The range per axis is {@code
+     * floor(min)} to {@code ceil(max) - 1}, a half-open upper edge: a face resting exactly on an
+     * integer touches the next cell without entering it, so a body snapped flush against a wall
+     * reports no collision with that wall on the other axes. {@code Math.floor} rounds negative
+     * coordinates down, where an {@code int} cast would round them toward zero.
+     */
     public List<Vector3i> getBlocksOverlapping() {
         int minBx = (int) Math.floor(min.x);
         int maxBx = (int) Math.ceil(max.x) - 1;
@@ -80,11 +94,13 @@ public class AABB {
         return max.z;
     }
 
-    // True if the two boxes share volume. They overlap only if their extents overlap on
-    // all three axes at once — a gap on any single axis means a flat plane fits between
-    // them (separating-axis theorem, trivial for axis-aligned boxes). On one axis, the
-    // intervals [min,max] overlap when each box's min sits below the other's max. Strict
-    // <, so boxes that only touch on a face don't count as intersecting.
+    /**
+     * Whether the two boxes share volume.
+     *
+     * <p>Boxes overlap when their intervals overlap on all three axes; a gap on any one axis is a
+     * separating plane, which is the separating axis theorem reduced to the three box axes. The
+     * comparisons are strict, so boxes touching on a face don't intersect.
+     */
     public boolean intersects(AABB other) {
         return min.x < other.max.x
                 && max.x > other.min.x

@@ -1,7 +1,11 @@
 package com.beneklund.minecraft.util;
 
 /**
- * K.jpg's OpenSimplex 2, faster variant
+ * K.jpg's OpenSimplex 2 gradient noise, the fast variant ({@code OpenSimplex2}; the repository's
+ * {@code OpenSimplex2S} is the smoother, slower one). Third-party code, released by its author
+ * under CC0 1.0.
+ *
+ * @see <a href="https://github.com/KdotJPG/OpenSimplex2">KdotJPG/OpenSimplex2</a>
  */
 public class OpenSimplex2 {
 

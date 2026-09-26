@@ -14,10 +14,21 @@ import java.nio.IntBuffer;
 import java.util.function.Consumer;
 import org.lwjgl.system.MemoryStack;
 
-// Loads PNGs from the classpath via STB. Flips vertically on load so that V=0 is the
-// bottom of the image and V=1 is the top — standard OpenGL UV convention throughout.
+/**
+ * Decodes classpath images with stb_image into RGBA8, four bytes per pixel whatever the source
+ * format, bottom row first.
+ *
+ * <p>GL puts texture coordinate V=0 at the first row uploaded, and image files store the top row
+ * first. Flipping on load makes V=0 the bottom of the image, so every UV in the codebase uses GL's
+ * convention.
+ *
+ * <p>stb reads from memory, so the file's bytes are copied into a native staging buffer, decoded,
+ * and the staging buffer freed. The decoded pixels are freed by {@code stbi_image_free} when the
+ * {@link ImageData} closes.
+ *
+ * @see <a href="https://github.com/nothings/stb/blob/master/stb_image.h">stb_image.h</a>
+ */
 public class StbImageLoader implements IImageLoader {
-    // Shared close handler — all ImageData instances point to this rather than allocating a lambda each time.
     private static final Consumer<ImageData> ON_CLOSE = data -> stbi_image_free(data.pixels());
 
     @Override
@@ -27,8 +38,6 @@ public class StbImageLoader implements IImageLoader {
             IntBuffer h = stack.mallocInt(1);
             IntBuffer c = stack.mallocInt(1);
 
-            // Flip so OpenGL's V=0 (bottom of texture) matches the bottom of the image file.
-            // Without this, V=0 would map to the top row of the PNG, inverting all textures.
             stbi_set_flip_vertically_on_load(true);
             InputStream stream = getClass().getResourceAsStream(classpathPng);
             if (stream == null) {
@@ -36,9 +45,6 @@ public class StbImageLoader implements IImageLoader {
             }
             byte[] bytes = stream.readAllBytes();
 
-            // memAlloc allocates off-heap so STB can read it directly.
-            // flip() resets the cursor to 0 after put() so STB reads from the start.
-            // memFree releases the staging buffer once STB has finished decoding.
             ByteBuffer fileBytes = memAlloc(bytes.length);
             fileBytes.put(bytes).flip();
 

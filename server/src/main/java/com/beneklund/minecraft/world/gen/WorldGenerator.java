@@ -9,17 +9,39 @@ import com.beneklund.minecraft.world.Chunk;
 import com.beneklund.minecraft.world.ChunkPos;
 import java.util.*;
 
-// Pure factory: same (ChunkPos, seed) always produces the same Chunk.
-// No mutable state — safe to call from multiple worker threads in parallel.
-//
-// Pipeline per chunk:
-//   1. terrain   — fills every column with the correct block stack
-//   2. ores      — scatters coal/iron inside the stone layer
-//   3. trees     — places oak trees on eligible grass columns
-//   4. caves     — punches air into the terrain with 3D noise
-//
-// Passes run in this order so later passes can read what earlier passes wrote
-// (e.g. placeTrees checks that the surface block is GRASS, not raw stone).
+/**
+ * Deterministic terrain generator: the same {@code (ChunkPos, seed)} always produces the same
+ * blocks.
+ *
+ * <p>It holds no mutable state after construction, so the generation pool calls it from several
+ * threads at once. All randomness is seeded noise or a {@link Random} seeded from the world seed
+ * and the column's world coordinates.
+ *
+ * <p>Per chunk, in order, so each pass can read what the earlier ones wrote:
+ *
+ * <ol>
+ *   <li>biome and height per column, then the column's block stack, water up to sea level, and
+ *       ores inside the stone
+ *   <li>trees on grass columns above sea level
+ *   <li>caves carved by 3D noise
+ * </ol>
+ *
+ * <p><b>Height.</b> Three weighted fBm layers (continental, erosion, detail; see {@link
+ * IGenerationSpec.NoiseLayersSpec}) sum to a raw value in roughly [-1, 1], which the column's
+ * blended {@link TerrainProfile} maps to {@code baseHeight + raw * amplitude}. The layers are
+ * sampled at domain-warped coordinates: each axis is displaced by a further low-frequency noise
+ * field, which bends straight noise contours into the meandering shapes real terrain has.
+ *
+ * <p><b>Biomes.</b> Two climate fields, temperature and humidity, place each column at a point in
+ * [0, 1]^2. Every {@link Biome} is an anchor in that square; the nearest anchor is the column's
+ * biome, and height and colours blend toward the second nearest. The climate fields are warped
+ * much harder than the terrain, and a small per-biome noise jitter on each distance roughens the
+ * borders.
+ *
+ * @see <a href="https://iquilezles.org/articles/warp/">Inigo Quilez: Domain Warping</a>
+ * @see <a href="https://www.redblobgames.com/maps/terrain-from-noise/">Red Blob Games: Making maps
+ *     with noise functions</a>
+ */
 public class WorldGenerator implements IWorldGenerator {
 
     private static final int SEA_LEVEL = 62;
@@ -66,11 +88,16 @@ public class WorldGenerator implements IWorldGenerator {
     private final IGenerationSpec.BiomeSpec tempSpec;
     private final IGenerationSpec.BiomeSpec humidSpec;
 
-    // Convenience constructor for tests, uses vanilla-defaults.
+    /** Generator with {@link IGenerationSpec#DEFAULT_WORLD_GENERATION}, for tests. */
     public WorldGenerator(BlockRegistry registry) {
         this(registry, IGenerationSpec.DEFAULT_WORLD_GENERATION);
     }
 
+    /**
+     * Sorts {@code specs} by type. The first {@link IGenerationSpec.BiomeSpec} is temperature and
+     * the second humidity; any spec type missing from the list disables that feature, except the
+     * noise layers and both biome specs, which generation requires.
+     */
     public WorldGenerator(BlockRegistry registry, List<IGenerationSpec> specs) {
         this.registry = registry;
         noiseHelper = new NoiseHelper();
@@ -117,7 +144,7 @@ public class WorldGenerator implements IWorldGenerator {
         carveCaves(chunk, seed, pos);
     }
 
-    // test surface
+    /** The biome of the column at ({@code worldX}, {@code worldZ}), for tests. */
     public Biome biomeAt(long seed, int worldX, int worldZ) {
         return resolveBiome(seed, worldX, worldZ).type();
     }
@@ -128,6 +155,10 @@ public class WorldGenerator implements IWorldGenerator {
         return selectBiome(sampleSpec(seed, wx, wz, tempSpec), sampleSpec(seed, wx, wz, humidSpec), wx, wz, seed);
     }
 
+    /**
+     * Domain warp on X: {@code x + strength * fBm(x, z)}. Package-private with {@link #warpZ} so
+     * {@code BiomeMapTest} can recompute the displacement.
+     */
     double warpX(long seed, long seedOffset, double x, double z, double strength, double warpScale) {
         return x + strength * noiseHelper.noise2(seed + seedOffset, x, z, 2, 0.5, warpScale);
     }
@@ -146,20 +177,30 @@ public class WorldGenerator implements IWorldGenerator {
         return Math.clamp((int) (biome.baseHeight() + raw * biome.amplitude()), MIN_SURFACE_Y, MAX_SURFACE_Y);
     }
 
+    /**
+     * Triangle-wave fold of [-1, 1] onto itself, {@code FOLD_PERIODS} times across the range. Run
+     * on the humidity noise, it turns one wet-to-dry gradient into repeated bands, so neighbouring
+     * regions alternate between wet and dry biomes.
+     */
     private static double fold(double f) {
         double u = (f + 1.0) / 2.0 * FOLD_PERIODS;
         double frac = u - Math.floor(u);
         return 4.0 * Math.abs(frac - 0.5) - 1.0;
     }
 
+    /** Stretches [0, 1] away from 0.5 by {@code CLIMATE_CONTRAST} and clamps, pushing more columns toward the extremes of each axis. */
     private static double contrast(double c) {
         return Math.clamp(0.5 + (c - 0.5) * CLIMATE_CONTRAST, 0.0, 1.0);
     }
 
-    // Adjacent Biome ordinals are geographically adjacent in-world because biomeNoise
-    // changes slowly — so the linear mapping produces wide, gradual transitions.
-    // dominant is whichever neighbour the noise sample falls closer to, so callers can
-    // make block-identity decisions (surface block type, tree species, etc.) on a clean enum.
+    /**
+     * Picks the nearest and second-nearest biome anchors to the column's (temperature, humidity)
+     * point, by squared distance plus a per-biome noise jitter.
+     *
+     * <p>The nearest is the column's {@link Biome}, used for clean block-identity decisions. Height,
+     * amplitude and colours lerp toward the second by {@code t = d1 / (d1 + d2)}, which is 0 at a
+     * biome's anchor and 0.5 on the border, so the terrain is continuous across it.
+     */
     private ResolvedBiome selectBiome(double tempNoise, double humidNoise, double worldX, double worldZ, long seed) {
         Biome[] biomes = Biome.values();
         double temp = contrast(noiseHelper.normalize(tempNoise));
@@ -232,8 +273,11 @@ public class WorldGenerator implements IWorldGenerator {
         for (int y = waterStart; y <= SEA_LEVEL; y++) chunk.setBlock(localX, y, localZ, Block.WATER);
     }
 
-    // Mountains: always stone, snow above SNOW_LINE - height determines surface, not sea level.
-    // Everything else: use biome surface above sea level; sand below (flooded terrain floor).
+    /**
+     * The top block of a column. Mountains are stone, or snow at and above {@code SNOW_LINE},
+     * whatever the sea level. Every other biome uses its own surface above sea level and sand
+     * underwater.
+     */
     private static Block chooseSurface(int surfaceY, Biome biome, BiomeColumnBlocks blocks) {
         if (biome == Biome.MOUNTAINS) {
             return surfaceY >= SNOW_LINE ? Block.SNOW : blocks.surface();
@@ -241,10 +285,15 @@ public class WorldGenerator implements IWorldGenerator {
         return surfaceY > SEA_LEVEL ? blocks.surface() : Block.SAND;
     }
 
-    // Per-column seed derived by XOR-mixing world seed with world coords using large primes.
-    // Changing X or Z by even 1 block produces a completely different colSeed, so ore
-    // placement is uncorrelated between columns. Same formula is used in placeTrees so
-    // the two passes share the same per-column identity without sharing a Random instance.
+    /**
+     * Replaces stone with ore per {@link IGenerationSpec.OreSpec}, rolling a {@link Random} seeded
+     * per column.
+     *
+     * <p>The column seed XORs the world seed with each coordinate times a large constant, so
+     * adjacent columns get unrelated sequences and a column's ores never depend on generation
+     * order. {@link #placeTrees} derives the same column seed, so both passes see the same column
+     * identity without sharing a {@code Random}.
+     */
     private void placeOres(Chunk chunk, long seed, int worldX, int worldZ, int localX, int localZ) {
         long colSeed = seed ^ ((long) worldX * COL_SEED_PRIME_X) ^ ((long) worldZ * COL_SEED_PRIME_Z);
         Random colRng = new Random(colSeed);
@@ -258,9 +307,11 @@ public class WorldGenerator implements IWorldGenerator {
         }
     }
 
-    // surfaceHeights is passed in rather than recomputed here because computeSurfaceY
-    // is moderately expensive (multiple octave loops) and terrain already computed it
-    // for every column during fillColumn. Reusing the array avoids 256 redundant calls.
+    /**
+     * Places trees on grass columns above sea level per {@link IGenerationSpec.TreeSpec}.
+     * {@code surfaceHeights} comes from the terrain pass, which already computed every column's
+     * height; recomputing it here would repeat 256 multi-octave samples.
+     */
     private void placeTrees(Chunk chunk, long seed, ChunkPos pos, int[] surfaceHeights) {
         for (int localX = 0; localX < Chunk.SIZE_XZ; localX++) {
             for (int localZ = 0; localZ < Chunk.SIZE_XZ; localZ++) {
@@ -280,7 +331,10 @@ public class WorldGenerator implements IWorldGenerator {
         }
     }
 
-    // Lower caveSpec.threshold() to get denser cave systems; raise it for sparse/rare caves.
+    /**
+     * Sets every block above {@code caveSpec.minY()} to air where 3D fBm exceeds {@code
+     * caveSpec.threshold()}; bedrock survives. A lower threshold carves denser cave systems.
+     */
     private void carveCaves(Chunk chunk, long seed, ChunkPos pos) {
         if (caveSpec == null) return;
         for (int localX = 0; localX < Chunk.SIZE_XZ; localX++) {

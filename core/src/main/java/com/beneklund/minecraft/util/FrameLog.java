@@ -2,6 +2,12 @@ package com.beneklund.minecraft.util;
 
 import java.util.Arrays;
 
+/**
+ * A ring buffer of recent frame times with percentile queries, for the p50/p99 readouts.
+ *
+ * <p>Holds the last {@code capacity} samples. {@link #percentile} sorts a copy on every call, which
+ * is fine at a few hundred samples read about once a second.
+ */
 public class FrameLog {
     public static final float P0 = 0.0f;
     public static final float P50 = 0.50f;
@@ -37,6 +43,12 @@ public class FrameLog {
         writeIndex = 0;
     }
 
+    /**
+     * The sample at {@code quantile} (0 to 1) of the recorded frame times, nearest-rank without
+     * interpolation.
+     *
+     * @return milliseconds, or 0 when nothing has been recorded
+     */
     public float percentile(float quantile) {
         if (count == 0) return 0.0f;
         double[] percentiles = Arrays.stream(samples)

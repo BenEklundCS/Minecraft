@@ -8,6 +8,13 @@ import java.util.List;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
+/**
+ * Draws debug lines in the opaque pass: a laser along the player's look ray, ending at the hit or
+ * at {@value #REACH} blocks, and a wireframe box around the targeted block.
+ *
+ * <p>The laser mesh is rebuilt only after it changes. The box mesh is built once as a unit cube,
+ * inflated slightly to avoid z-fighting with the block's faces, and moved by its model matrix.
+ */
 public class DebugRenderer implements IRenderable {
     private static final String VERT_PATH = "/shaders/debug.vert";
     private static final String FRAG_PATH = "/shaders/debug.frag";
@@ -59,14 +66,6 @@ public class DebugRenderer implements IRenderable {
         }
     }
 
-    /*
-      7--------6
-     /|       /|     top face (y=1):    4,5,6,7
-    4--------5 |     bottom face (y=0):  0,1,2,3
-    | 3------|-2
-    |/       |/
-    0--------1
-      */
     private void rebuildTargetMesh() {
         if (targetMesh != null) {
             targetMesh.delete();
@@ -75,6 +74,18 @@ public class DebugRenderer implements IRenderable {
         targetMesh = new LineMesh(getTargetGeometry());
     }
 
+    /**
+     * The unit cube's twelve edges as line segments, corners numbered:
+     *
+     * <pre>
+     *   7--------6
+     *  /|       /|     top face (y=1):    4,5,6,7
+     * 4--------5 |     bottom face (y=0): 0,1,2,3
+     * | 3------|-2
+     * |/       |/
+     * 0--------1
+     * </pre>
+     */
     private Geometry getTargetGeometry() {
         float lo = -0.002f, hi = 1.002f;
         float[] vertices = {

@@ -4,16 +4,36 @@ import com.beneklund.minecraft.world.IWorldView;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
-// https://web.archive.org/web/20121024081332/www.xnawiki.com/index.php?title=Voxel_traversal
-
+/**
+ * Walks a ray through the block grid, cell by cell, to the first solid block.
+ *
+ * <p>This is Amanatides and Woo's voxel traversal. Per axis it tracks {@code tMax}, the ray
+ * parameter at which the ray next crosses a cell boundary on that axis, and {@code tDelta}, the
+ * parameter needed to cross one whole cell. Each iteration steps into the neighbour across the
+ * nearest boundary, so the walk visits exactly the cells the ray passes through, in order, with
+ * one comparison and one add per step and no fixed step size to tune.
+ *
+ * @see <a href="http://www.cse.yorku.ca/~amana/research/grid.pdf">Amanatides and Woo, "A Fast Voxel
+ *     Traversal Algorithm for Ray Tracing" (1987)</a>
+ * @see <a href="https://web.archive.org/web/20121024081332/www.xnawiki.com/index.php?title=Voxel_traversal">
+ *     XNA Wiki: Voxel traversal (archived)</a>
+ */
 public class Raycast {
+    /**
+     * Casts from {@code origin} along {@code direction} until a solid block or {@code
+     * maxDistance}.
+     *
+     * <p>The origin's own cell is tested first; a hit there reports distance 0 and face {@link
+     * Direction#NORTH}, since the ray entered through no face. Distances are the ray parameter
+     * {@code t}, which is in blocks when {@code direction} has unit length. The hit face is the one
+     * the ray entered through, opposite the step direction, which is the face a placed block
+     * attaches to.
+     */
     public static RaycastResult cast(Vector3f origin, Vector3f direction, IWorldView world, float maxDistance) {
-        // Start in the voxel that contains the ray origin
         int x = (int) Math.floor(origin.x);
         int y = (int) Math.floor(origin.y);
         int z = (int) Math.floor(origin.z);
 
-        // +1, -1, or 0 — which direction we step along each axis
         int stepX = (direction.x == 0.0f) ? 0 : (direction.x > 0 ? 1 : -1);
         int stepY = (direction.y == 0.0f) ? 0 : (direction.y > 0 ? 1 : -1);
         int stepZ = (direction.z == 0.0f) ? 0 : (direction.z > 0 ? 1 : -1);
@@ -46,7 +66,6 @@ public class Raycast {
         Direction hitFace = Direction.NORTH;
 
         while (true) {
-            // Check the current voxel before advancing
             var block = world.getBlock(x, y, z);
             if (block != null && block.solid()) {
                 return new RaycastResult(true, new Vector3i(x, y, z), block, hitFace, distance);
@@ -54,22 +73,19 @@ public class Raycast {
 
             // Advance to the next voxel by crossing whichever axis boundary is nearest (smallest t).
             if (tMax.x < tMax.y && tMax.x < tMax.z) {
-                // X boundary is closest — step along X
                 distance = tMax.x;
                 if (distance > maxDistance) break;
                 x += stepX;
                 // The face we entered from is opposite the step direction
                 hitFace = stepX > 0 ? Direction.WEST : Direction.EAST;
-                tMax.x += tDelta.x; // advance to the next X boundary
+                tMax.x += tDelta.x;
             } else if (tMax.y < tMax.z) {
-                // Y boundary is closest — step along Y
                 distance = tMax.y;
                 if (distance > maxDistance) break;
                 y += stepY;
                 hitFace = stepY > 0 ? Direction.DOWN : Direction.UP;
                 tMax.y += tDelta.y;
             } else {
-                // Z boundary is closest — step along Z
                 distance = tMax.z;
                 if (distance > maxDistance) break;
                 z += stepZ;

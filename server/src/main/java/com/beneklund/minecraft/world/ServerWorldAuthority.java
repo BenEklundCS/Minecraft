@@ -9,6 +9,16 @@ import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.util.AABB;
 import java.util.List;
 
+/**
+ * The server's {@link IWorldAuthority}: reads and writes blocks directly in the authoritative
+ * {@link World}.
+ *
+ * <p>Reads outside the world's height or in an unloaded chunk return air. Writes there are
+ * ignored, so callers that need to know whether an edit landed must check first, as {@code
+ * GameServer.applyEdit} does. A successful write marks the chunk {@link ChunkState#DIRTY} and, for
+ * a border block or a removed light source, dirties the neighbours whose meshes or light it
+ * affects.
+ */
 public class ServerWorldAuthority implements IWorldAuthority {
     private record ChunkCoordinates(int x, int z) {}
 
@@ -52,20 +62,24 @@ public class ServerWorldAuthority implements IWorldAuthority {
         // This is the player-edit path only — world generation writes straight into the Chunk — so
         // one line per edit is the right granularity, not thousands per generated chunk.
         WORLD.debug("setBlock {} at world ({}, {}, {}) in chunk {}", block, x, y, z, pos);
-        // edit occured on border, mark neighbors dirty if they're uploaded
         if (atChunkBorder(chunkCoordinates)) {
             WORLD.trace("edit on chunk border, marking neighbours of {} dirty", pos);
             markNeighborsDirty(pos);
         }
     }
 
-    // All 8 surrounding chunks, not just the 4 cardinals: a block in a chunk corner is one of the
-    // AO samples for the vertex the diagonal neighbor shares with it, so that neighbor's mesh is
-    // stale too.
-    //
-    // The early return is what lets this reuse ChunkWithNeighbors, which refuses a null center.
-    // A generation job can outlive its chunk — tick() may have unloaded it by the time this runs
-    // — and there are no neighbors to mark for a chunk that's gone anyway.
+    /**
+     * Moves every {@link ChunkState#UPLOADED} chunk among the 8 around {@code pos} to {@link
+     * ChunkState#DIRTY}.
+     *
+     * <p>All 8, including diagonals, because a block in a chunk corner is one of the ambient
+     * occlusion samples for the vertex the diagonal neighbour shares with it, so that neighbour's
+     * mesh is stale too.
+     *
+     * <p>Returns immediately if the chunk at {@code pos} is gone, which lets this reuse {@link
+     * ChunkWithNeighbors}, which refuses a null centre. A generation job can outlive its chunk, and
+     * a chunk that's gone has no neighbours to mark.
+     */
     public void markNeighborsDirty(ChunkPos pos) {
         if (getChunk(pos) == null) return;
         for (Chunk neighbor : ChunkWithNeighbors.around(pos, this::getChunk).neighbors()) {

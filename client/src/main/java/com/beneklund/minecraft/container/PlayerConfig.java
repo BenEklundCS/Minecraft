@@ -2,8 +2,16 @@ package com.beneklund.minecraft.container;
 
 import org.joml.Vector3f;
 
-// Player spawn state and movement tuning. Injected into Player so spawn position,
-// initial pitch, and speed live in data without touching the player's own logic.
+/**
+ * The local player's starting pose and movement tuning, injected into {@code Player}.
+ *
+ * <p>The start angles go through {@code Player.look} as if they were a mouse delta, which
+ * subtracts them: a positive {@code startPitch} looks down, and {@code startYaw} turns the
+ * opposite way to a positive yaw.
+ *
+ * @param startPitch degrees
+ * @param reach how far in blocks the player can break or place
+ */
 public record PlayerConfig(
         Vector3f startPosition,
         float startPitch,

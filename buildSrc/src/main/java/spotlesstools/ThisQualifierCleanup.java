@@ -16,15 +16,30 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
-// Strips redundant `this.` field qualifiers so the codebase matches the Checkstyle convention
-// (this. only when a field is actually shadowed). Runs as a Spotless custom step, so it's applied
-// by spotlessApply and enforced by spotlessCheck like any other formatter rule.
-//
-// AST-based on purpose: `this.x = x` in a constructor MUST keep its `this.`, and only scope
-// analysis can tell a redundant qualifier from a required one. A text/regex pass cannot.
+/**
+ * Strips {@code this.} from field accesses that no local name shadows, the other half of
+ * Checkstyle's {@code RequireThis} with {@code validateOnlyOverlapping}.
+ *
+ * <p>Checkstyle demands {@code this.} where a field is shadowed; this removes it everywhere else,
+ * so the qualifier appears exactly where it disambiguates. It runs as the {@code
+ * removeRedundantThis} Spotless custom step before palantir, so {@code spotlessApply} applies it
+ * and {@code spotlessCheck} enforces it.
+ *
+ * <p>The pass works on the JavaParser AST because {@code this.x = x} in a constructor must keep its
+ * qualifier, and only scope analysis tells the two cases apart. {@link LexicalPreservingPrinter}
+ * reprints only the nodes that changed, leaving formatting to palantir.
+ *
+ * @see <a href="https://checkstyle.sourceforge.io/checks/coding/requirethis.html">Checkstyle:
+ *     RequireThis</a>
+ * @see <a href="https://javaparser.org/">JavaParser</a>
+ */
 public final class ThisQualifierCleanup {
     private ThisQualifierCleanup() {}
 
+    /**
+     * Returns {@code source} with every unshadowed {@code this.field} reduced to {@code field}.
+     * {@code Outer.this.field} is left alone.
+     */
     public static String clean(String source) {
         StaticJavaParser.getParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE);
         CompilationUnit cu = StaticJavaParser.parse(source);
@@ -40,9 +55,14 @@ public final class ThisQualifierCleanup {
         return LexicalPreservingPrinter.print(cu);
     }
 
-    // Conservative: if the enclosing method/constructor declares this name anywhere — as a
-    // parameter, local, lambda/catch param, or pattern binding — keep `this.`. Over-keeping a
-    // qualifier is harmless; wrongly removing a required one is not, so we err toward keeping.
+    /**
+     * Whether the enclosing method or constructor declares {@code name} anywhere: as a parameter,
+     * local, lambda or catch parameter, or pattern binding.
+     *
+     * <p>Deliberately coarse. It ignores block scope, so a name declared in any branch keeps every
+     * {@code this.} in the method. A kept redundant qualifier costs nothing; a removed required one
+     * changes which variable the code writes.
+     */
     private static boolean shadowed(Node node, String name) {
         Optional<CallableDeclaration> callable = node.findAncestor(CallableDeclaration.class);
         if (callable.isEmpty()) return false; // field initializer / no local scope — safe to strip

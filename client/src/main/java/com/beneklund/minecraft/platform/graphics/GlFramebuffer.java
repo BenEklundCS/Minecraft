@@ -4,6 +4,26 @@ import static org.lwjgl.opengl.GL30.*;
 
 import java.nio.ByteBuffer;
 
+/**
+ * An offscreen render target sized from the window: one sampleable colour texture plus an
+ * optional depth attachment chosen by {@link DepthMode}.
+ *
+ * <p>The colour texture's internal format is the caller's, so HDR passes can ask for {@code
+ * GL_RGBA16F} and store values above 1.0 for the tonemap. It filters linearly and clamps to the
+ * edge, which suits a later pass that samples it at a different resolution, as the bloom chain
+ * does.
+ *
+ * <p>{@link #bind()} also sets the viewport to this target's size, because the viewport is global
+ * state and a pass that renders into a half-size buffer with a full-size viewport draws off the
+ * edge. {@link #bindDefault} does the same for the window.
+ *
+ * <p>Construction and {@link #resize} both check {@code glCheckFramebufferStatus}; an incomplete
+ * framebuffer releases its GL objects and throws.
+ *
+ * @see <a href="https://wikis.khronos.org/opengl/Framebuffer_Object">OpenGL Wiki: Framebuffer
+ *     Object</a>
+ * @see <a href="https://learnopengl.com/Advanced-OpenGL/Framebuffers">LearnOpenGL: Framebuffers</a>
+ */
 public class GlFramebuffer {
     private final int fbo;
     private final int colorTexture;
@@ -81,11 +101,13 @@ public class GlFramebuffer {
         return tex;
     }
 
+    /** Binds this framebuffer for drawing and sets the viewport to its size. */
     public void bind() {
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glViewport(0, 0, width, height);
     }
 
+    /** Binds the window's framebuffer and sets the viewport to {@code w} by {@code h}. */
     public static void bindDefault(int w, int h) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, w, h);
@@ -101,16 +123,20 @@ public class GlFramebuffer {
         }
     }
 
+    /** The colour texture name, for sampling this target's output in a later pass. */
     public int colorTexture() {
         return colorTexture;
     }
 
-    /*
-     * Bind this to a texture unit and hand the unit number to the shader's sampler.
+    /**
+     * The depth texture name, for binding to a texture unit whose index goes to the shader's
+     * sampler.
      *
-     * Throws under the other modes rather than returning 0, because 0 is a legal argument to
-     * glBindTexture meaning "no texture" — a caller that asked the wrong framebuffer for its depth
-     * would sample black and see a plausible-looking but wrong image instead of a crash.
+     * <p>Throws for any mode other than {@link DepthMode#TEXTURE}. Texture 0 is a legal argument to
+     * {@code glBindTexture} meaning "no texture", so returning it would make a wrong caller sample
+     * black and render a plausible, wrong image.
+     *
+     * @throws IllegalStateException if this framebuffer has no depth texture
      */
     public int depthTexture() {
         if (depthMode != DepthMode.TEXTURE) {
@@ -127,6 +153,11 @@ public class GlFramebuffer {
         return height;
     }
 
+    /**
+     * Reallocates every attachment at the new size, keeping the same GL names so the framebuffer
+     * stays attached to them. Ignores a zero or negative size, which GLFW reports while the window
+     * is minimised.
+     */
     public void resize(int width, int height) {
         if (width <= 0 || height <= 0) return;
         this.width = width;

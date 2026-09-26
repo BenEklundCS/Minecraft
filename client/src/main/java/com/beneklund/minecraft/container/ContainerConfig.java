@@ -3,6 +3,17 @@ package com.beneklund.minecraft.container;
 import com.beneklund.minecraft.util.Color;
 import org.joml.Vector3f;
 
+/**
+ * Launch settings for the client: window, camera, resource pack and player tuning. {@link
+ * #defaults()} is the one place to change what a plain launch looks like.
+ *
+ * <p>{@code seed} and {@code renderDistance} are only logged here. The world is the server's, so
+ * {@code ServerConfig} owns the seed and the load radius that decide what gets streamed.
+ *
+ * @param fov vertical field of view in degrees
+ * @param resourcePack classpath path to the pack's {@code pack.json}
+ * @param shutdownTimeoutSeconds how long shutdown waits for the meshing pool to drain
+ */
 public record ContainerConfig(
         String windowTitle,
         int windowWidth,

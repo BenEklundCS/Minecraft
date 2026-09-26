@@ -11,6 +11,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 
+/**
+ * Persists the player's position and look direction to {@code saves/<seed>/level.dat}.
+ *
+ * <p>The payload is five big-endian floats: x, y, z, pitch, yaw. A payload of any other length, or
+ * any read failure, loads as empty and the player spawns fresh. A failed save is logged and
+ * swallowed, so shutdown continues.
+ */
 public class PlayerStore implements IPlayerStore {
     private static final int MAGIC = 0x4D435F50; // MC_P
     private static final int VERSION = 1;

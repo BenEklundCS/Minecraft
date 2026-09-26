@@ -2,9 +2,13 @@ package com.beneklund.minecraft.player;
 
 import com.beneklund.minecraft.block.Block;
 
-// The nine hotbar slots and which one is selected. Zero-indexed the whole way through:
-// slot 0 is the key '1', matching HotbarAction.Select, so no caller ever adds 1 to anything.
-// A null slot is an empty one — the HUD already draws those as bare frames.
+/**
+ * The nine hotbar slots and the selected one.
+ *
+ * <p>Slots are zero-indexed everywhere: slot 0 is the key {@code 1}, matching {@code
+ * HotbarAction.Select}, so no caller adds or subtracts 1. A {@code null} slot is empty, which the
+ * HUD draws as a bare frame.
+ */
 public class Hotbar {
     public static final int SLOT_COUNT = 9;
 
@@ -36,8 +40,10 @@ public class Hotbar {
         return slots[slot];
     }
 
-    // Fresh array each call — the HUD holds onto what it gets and compares against it next
-    // frame, so handing out the live one would make every frame look unchanged.
+    /**
+     * A copy of the slots. The HUD keeps the array it gets and compares against it next frame, so
+     * handing out the live array would make every frame look unchanged.
+     */
     public Block[] snapshot() {
         return slots.clone();
     }
@@ -47,8 +53,10 @@ public class Hotbar {
         selected = slot;
     }
 
-    // Wraps in both directions: scrolling off either end lands on the other. floorMod rather
-    // than % so a negative step wraps instead of going negative.
+    /**
+     * Moves the selection by {@code step}, wrapping at both ends. {@code Math.floorMod} keeps a
+     * negative step in range where {@code %} would go negative.
+     */
     public void scroll(int step) {
         selected = Math.floorMod(selected + step, SLOT_COUNT);
     }

@@ -2,17 +2,20 @@ package com.beneklund.minecraft.platform.graphics;
 
 import static org.lwjgl.opengl.GL15.*;
 
-/*
- * A VBO (Vertex Buffer Object) - a named chunk of GPU memory that holds vertex data.
+/**
+ * A vertex buffer object (VBO): GPU memory holding interleaved vertex data.
  *
- * OpenGL is a state machine. glBufferData doesn't take a buffer ID - it operates on
- * whatever is currently bound to GL_ARRAY_BUFFER. So upload() binds first, then sends
- * the data.
+ * <p>{@code glBufferData} takes a binding target, not a buffer name, and writes to whatever is
+ * bound there, so {@link #upload} binds to {@code GL_ARRAY_BUFFER} first. {@code GL_STATIC_DRAW}
+ * tells the driver the data is written once and drawn many times, which lets it place the buffer
+ * in video memory.
  *
- * GL_STATIC_DRAW is a hint to the GPU about how this memory will be used - written
- * once, read many times. The driver uses this to decide where to put the memory.
+ * <p>Lifecycle: construct, {@link #upload} once, draw through a {@link GlVertexArray}, {@link
+ * #delete()}.
  *
- * Lifecycle: new -> upload() once -> bind() at draw time -> delete() on shutdown.
+ * @see <a href="https://wikis.khronos.org/opengl/Buffer_Object">OpenGL Wiki: Buffer Object</a>
+ * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBufferData.xhtml">
+ *     glBufferData</a>
  */
 public final class GlVertexArrayBuffer implements IGlBuffer {
     private final int buffer;
@@ -21,6 +24,7 @@ public final class GlVertexArrayBuffer implements IGlBuffer {
         buffer = glGenBuffers();
     }
 
+    /** Replaces the buffer's contents, reallocating its storage to fit. */
     public void upload(float[] vertices) {
         glBindBuffer(GL_ARRAY_BUFFER, buffer);
         glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);

@@ -1,5 +1,4 @@
 package com.beneklund.minecraft.container;
 
-// Camera tuning. Just field-of-view for now — view/projection params live in data
-// rather than inline constructor arguments.
+/** Camera tuning. {@code fov} is the vertical field of view in degrees. */
 public record CameraConfig(float fov) {}

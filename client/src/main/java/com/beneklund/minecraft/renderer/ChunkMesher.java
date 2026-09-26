@@ -11,18 +11,32 @@ import com.beneklund.minecraft.world.*;
 import com.beneklund.minecraft.world.gen.Biome;
 import java.util.List;
 
-// Converts a Chunk's block data into a ChunkMeshData — one Geometry for the opaque pass and
-// one for the transparent pass. No GL calls, so this is safe on any worker thread; the caller
-// uploads the result via ChunkMesh on the main thread.
-//
-// The layout itself lives in VertexFormat.CHUNK. Don't restate the stride here — it drifts.
-// What the slots mean:
-//   [0-2]  x, y, z       world position
-//   [3-4]  u, v          atlas UV
-//   [5]    ao            ambient occlusion, ramped through AO_RAMP
-//   [6]    faceId        Direction.ordinal() — 0=UP, 1=DOWN, 2=N, 3=S, 4=E, 5=W.
-//                        chunk.frag reads both the brightness band and the surface normal off it.
-//   [7-9]  r, g, b       biome tint (1,1,1 = no tint)
+/**
+ * Turns a chunk's blocks into {@link ChunkMeshData}: one {@link Geometry} for the opaque pass and
+ * one for the transparent pass, one quad per visible block face.
+ *
+ * <p>Makes no GL calls and shares no mutable state, so meshing workers call it concurrently; the
+ * main thread uploads the result.
+ *
+ * <p><b>Face culling.</b> A face is emitted only when the neighbour across it is non-opaque and a
+ * different block, so the solid interior of the terrain and the inside of a lake produce nothing.
+ * Neighbours across chunk edges come from {@link ChunkWithNeighbors}.
+ *
+ * <p><b>Vertex ambient occlusion.</b> Each corner of a face looks at the three blocks touching it
+ * in the layer in front of the face: two sides and the diagonal. Two opaque sides give the darkest
+ * level regardless of the diagonal; otherwise the level is 3 minus the opaque count. The level is
+ * ramped through {@code AO_RAMP}, and the quad's triangle split follows the AO so the gradient
+ * stays smooth. Sky and block light are averaged per corner over the same four samples plus the
+ * block directly in front, with opaque samples counting as dark.
+ *
+ * <p>Vertex layout is {@link VertexFormat#CHUNK}, and the float order in {@code fillBufferVerts}
+ * must match it: position (3), atlas UV (2), AO (1), face id (1), biome tint (3), sky and block
+ * light (2, each 0 to 1).
+ *
+ * @see <a href="https://0fps.net/2013/07/03/ambient-occlusion-for-minecraft-like-worlds/">0fps:
+ *     Ambient occlusion for Minecraft-like worlds</a>
+ * @see <a href="https://learnopengl.com/Advanced-OpenGL/Face-culling">LearnOpenGL: Face culling</a>
+ */
 public class ChunkMesher {
     // 4 corner offsets per face, CCW winding when viewed from outside the block.
     // Indexed by Direction.ordinal(): UP=0, DOWN=1, NORTH=2, SOUTH=3, EAST=4, WEST=5.
@@ -36,15 +50,17 @@ public class ChunkMesher {
         {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}, // WEST  — x=0 surface
     };
 
-    // indexed by AO level, 0 == deepest inside corner, 3 == fully exposed
+    /** Vertex brightness by AO level: 0 is the deepest inside corner, 3 is fully exposed. */
     private static final float[] AO_RAMP = {0.45f, 0.68f, 0.82f, 1.0f};
 
-    // Which of the quad's 4 vertices each of the 6 indices refers to. The GPU interpolates per
-    // triangle, so a lone dark corner that isn't on the split diagonal only shades one of the two
-    // triangles and you get a hard line across the face. Picking the diagonal that runs through
-    // the darker pair puts that corner in both triangles and the gradient covers the whole quad.
-    // Both orderings walk the same ring, so winding stays CCW from outside either way.
+    /**
+     * The quad's six indices under each of its two diagonal splits. The GPU interpolates per
+     * triangle, so a lone dark corner off the split diagonal shades only one triangle and draws a
+     * hard line across the face. Splitting along the darker pair puts that corner in both
+     * triangles. Both orderings walk the same ring, so winding stays CCW from outside.
+     */
     private static final int[] QUAD_DIAGONAL_02 = {0, 1, 2, 2, 3, 0};
+
     private static final int[] QUAD_DIAGONAL_13 = {1, 2, 3, 3, 0, 1};
 
     private static final int VERTICES_PER_QUAD = 4;
@@ -55,13 +71,15 @@ public class ChunkMesher {
 
     private static final float[] DEFAULT_UV = {0f, 0f, 1f, 1f};
 
-    // Per-face UV fractions: [u0,v0, u1,v1, u2,v2, u3,v3] where 0=uMin/vMin, 1=uMax/vMax.
-    // Index order matches FACE_VERTICES — vertex 0 uses fracs[0,1], vertex 1 uses [2,3], etc.
-    //
-    // STB flips images on load so V=0 = bottom of image, V=1 = top — standard OpenGL convention.
-    // Side faces simply map bottom vertices to vMin and top vertices to vMax.
-    // Without per-face fracs (uniform UV) the U axis would track the vertical Y instead of
-    // the horizontal face axis, rotating side textures 90°.
+    /**
+     * Which tile edge each face corner takes, as {@code [u0,v0, u1,v1, u2,v2, u3,v3]} where 0
+     * selects {@code uMin}/{@code vMin} and 1 selects {@code uMax}/{@code vMax}, in {@code
+     * FACE_VERTICES} corner order.
+     *
+     * <p>STB flips images on load, so V runs bottom to top as OpenGL expects, and side faces map
+     * bottom corners to {@code vMin}. Per-face tables keep U on each side face's horizontal axis;
+     * one shared table would rotate side textures 90 degrees.
+     */
     private static final float[][] FACE_UV_FRACS = {
         {0, 0, 0, 1, 1, 1, 1, 0}, // UP:    U→+X, V→+Z
         {0, 0, 0, 1, 1, 1, 1, 0}, // DOWN:  symmetric
@@ -84,18 +102,18 @@ public class ChunkMesher {
         this.atlas = atlas;
     }
 
-    // Transforms a chunk's block data into renderable geometry.
-    // Safe to call from any worker thread — no GL calls, no shared mutable state.
-    //
-    // Faces are routed into one of two buffers by the block's transparent flag so the
-    // renderer can do an opaque pass then a transparent pass (see ChunkRenderer / Renderer).
+    /**
+     * Meshes the centre chunk of {@code cn}. Faces go to the transparent geometry when the block's
+     * definition is {@code blended()}, otherwise to the opaque geometry. Sections that are entirely
+     * air are skipped whole.
+     */
     public ChunkMeshData mesh(ChunkPos pos, ChunkWithNeighbors cn) {
         ChunkMeshingBuffer opaque = getBuffer();
         ChunkMeshingBuffer transparent = getBuffer();
 
         for (int y = 0; y < Chunk.SIZE_Y; y++) {
             if (cn.center().sectionEmptyAt(y)) {
-                y += ChunkSection.SIZE - 1; // skip to next y-level
+                y += ChunkSection.SIZE - 1;
                 continue;
             }
             for (int z = 0; z < Chunk.SIZE_XZ; z++) {
@@ -180,24 +198,26 @@ public class ChunkMesher {
         buf.advance();
     }
 
-    // Compare on the levels rather than the ramped floats — same answer since the ramp is
-    // monotonic, but integers make it exact.
+    /**
+     * Picks the diagonal through the brighter pair of corners, so the darker pair shares both
+     * triangles. Compares AO levels rather than ramped floats: the ramp is monotonic, so the answer
+     * is the same, and integers make it exact.
+     */
     protected static int[] quadOrder(int[] ao) {
         return (ao[0] + ao[2] > ao[1] + ao[3]) ? QUAD_DIAGONAL_13 : QUAD_DIAGONAL_02;
     }
 
-    // A face is culled if its neighbor is solid and opaque, or if the neighbor is the same block
-    // (so we don't emit internal surfaces inside a body of water or a pane of glass).
-    // This applies across chunk boundaries too — resolve() hands back the adjacent chunk and we
-    // cull against it just like an in-chunk neighbor.
-    //
-    // When resolve() comes back empty we don't know what's over there, and the right guess differs
-    // by block type. Opaque terrain gets the face — otherwise you see straight through the world at
-    // the render edge. Transparent blocks don't: a lake spans many chunks, so the neighbor is
-    // nearly always more water, and emitting leaves a water pane standing at the seam that only a
-    // later remesh could clear. Culling is right the moment the neighbor turns out to match, so the
-    // seam looks correct no matter when the neighbor shows up. When it doesn't match we lose a face
-    // on the outermost loaded chunk, which is far cheaper than a wall through the middle of a lake.
+    /**
+     * Whether the face of the block at {@code (x, y, z)} facing {@code dir} is hidden: the neighbour
+     * is opaque, or is the same block, which drops internal surfaces inside water or glass. Faces
+     * at the top and bottom of the world are always kept.
+     *
+     * <p>When the neighbouring chunk isn't loaded, opaque blocks keep the face, or the world is
+     * see-through at the render edge. Transparent blocks cull it: a lake spans many chunks, so the
+     * neighbour is nearly always more water, and an emitted face would stand as a water wall at the
+     * seam until a remesh. Culling is correct the moment a matching neighbour arrives; a mismatch
+     * costs one missing face on the outermost loaded chunk.
+     */
     private boolean isCulled(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, Block blockId) {
         int nx = x + dir.dx(), ny = y + dir.dy(), nz = z + dir.dz();
 
@@ -225,6 +245,10 @@ public class ChunkMesher {
         return aoLevelFormula(opaqueAtSide1, opaqueAtSide2, opaqueAtDiagonal);
     }
 
+    /**
+     * Sky light at one face corner, in light levels: the mean over the block in front of the face and the
+     * corner's three AO neighbours, with opaque samples counting as 0.
+     */
     private float vertexSkyLightLevel(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, int corner) {
         List<int[]> offsets = getOffsets(dir, corner).asList();
         float accumulator = 0.0f;
@@ -232,9 +256,10 @@ public class ChunkMesher {
             if (opaqueAt(cn, x, y, z, off)) accumulator += 0;
             else accumulator += cn.skyLightAt(x, y, z, off);
         }
-        return accumulator / offsets.size(); // average
+        return accumulator / offsets.size();
     }
 
+    /** Block light at one face corner, averaged like {@link #vertexSkyLightLevel}. */
     private float vertexBlockLightLevel(ChunkWithNeighbors cn, int x, int y, int z, Direction dir, int corner) {
         List<int[]> offsets = getOffsets(dir, corner).asList();
         float accumulator = 0.0f;
@@ -242,9 +267,13 @@ public class ChunkMesher {
             if (opaqueAt(cn, x, y, z, off)) accumulator += 0;
             else accumulator += cn.blockLightAt(x, y, z, off);
         }
-        return accumulator / offsets.size(); // average
+        return accumulator / offsets.size();
     }
 
+    /**
+     * Neighbour offsets for one face corner, relative to the block: {@code off} is the block in
+     * front of the face; the other three lie in that same layer, touching the corner.
+     */
     private record Offsets(int[] off, int[] side1, int[] side2, int[] diagonal) {
         public List<int[]> asList() {
             return List.of(off, side1, side2, diagonal);
@@ -263,30 +292,42 @@ public class ChunkMesher {
         return new Offsets(off, side1, side2, diagonal);
     }
 
+    /**
+     * The 0fps corner AO level from which of the three neighbours are opaque. Two opaque sides
+     * block the diagonal from view, so they give 0 whatever the diagonal holds.
+     */
     protected static int aoLevelFormula(boolean side1, boolean side2, boolean diag) {
         if (side1 && side2) return 0;
-        return 3 - ((side1 ? 1 : 0) + (side2 ? 1 : 0) + (diag ? 1 : 0)); // 3 - (side1 + side2 + corner);
+        return 3 - ((side1 ? 1 : 0) + (side2 ? 1 : 0) + (diag ? 1 : 0));
     }
 
+    /**
+     * Frames a face corner: {@code n} is the face normal's axis, {@code a} and {@code b} the two
+     * axes in the face's plane, and {@code sa}, {@code sb} the direction (-1 or +1) from the block
+     * centre toward the corner along each.
+     */
     private Sample getSample(int[] off, float[] c) {
-        int n = (off[0] != 0) ? 0 : (off[1] != 0) ? 1 : 2; // normal axis
-        int a = (n == 0) ? 1 : 0; // first corner axis
-        int b = (n == 2) ? 1 : 2; // second corner axis
+        int n = (off[0] != 0) ? 0 : (off[1] != 0) ? 1 : 2;
+        int a = (n == 0) ? 1 : 0;
+        int b = (n == 2) ? 1 : 2;
 
-        int sa = 2 * (int) c[a] - 1; // 0 → -1, 1 → +1
+        int sa = 2 * (int) c[a] - 1;
         int sb = 2 * (int) c[b] - 1;
         return new Sample(n, a, b, sa, sb, off);
     }
 
-    // `n`, `a` and `b` are axis indices. `sa` and `sb` are components of an offset.
-    // | **offset**     | `{+1, 1, 0}`  | how far to *move*. Added to a coordinate.                         |
-    // | -------------- | ------------- | ----------------------------------------------------------------- |
-    // | **axis index** | `0`, `1`, `2` | which *slot* of a 3-element array. |
+    /**
+     * A face corner's frame. {@code n}, {@code a} and {@code b} are axis indices (which slot of an
+     * xyz array); {@code sa}, {@code sb} and {@code off} are offsets (how far to move along an
+     * axis).
+     */
     private record Sample(int n, int a, int b, int sa, int sb, int[] off) {}
 
-    // offset for side1 - pass 0 to sb
-    // offset for side2 - pass 0 to sa
-    // offset for diag  - pass sa and sb
+    /**
+     * The neighbour in the layer in front of the face, stepped {@code stepA} along axis {@code a}
+     * and {@code stepB} along {@code b}. {@code (sa, 0)} and {@code (0, sb)} give the two sides,
+     * {@code (sa, sb)} the diagonal.
+     */
     private int[] getOffset(Sample f, int stepA, int stepB) {
         int[] arr = new int[3];
         arr[f.n()] = f.off()[f.n()];
@@ -295,25 +336,26 @@ public class ChunkMesher {
         return arr;
     }
 
-    /*
-     * The Direction itself, not a brightness band. chunk.frag turns this back into the surface
-     * normal, so all six have to stay distinguishable — collapsing the four sides into one id
-     * would leave the shader unable to tell north from east.
+    /**
+     * The face's {@link Direction} ordinal. {@code chunk.frag} derives both the brightness band and
+     * the surface normal from it, so all six faces keep distinct ids.
      *
-     * That normal used to be recovered in the shader from screen-space derivatives, which made it
-     * depend on where the camera was looking: at grazing angles the derivatives run nearly
-     * parallel, their cross product collapses, and the normal lands on the wrong axis. It feeds
-     * the slope-scaled shadow bias, so whole faces flipped between lit and shadowed as the mouse
-     * moved. The mesher already knows the answer exactly; there was never a reason to guess it.
+     * <p>The normal was once recovered in the shader from screen-space derivatives, which depend on
+     * the view: at grazing angles the derivatives run nearly parallel, their cross product
+     * collapses, and the normal lands on the wrong axis. The normal feeds the slope-scaled shadow
+     * bias, so whole faces flipped between lit and shadowed as the mouse moved. The mesher knows
+     * the normal exactly.
      *
-     * Ordinal, because FACE_VERTICES is already indexed by it — one order, defined in one place.
+     * <p>Ordinal because {@code FACE_VERTICES} is indexed by it, keeping one order in one place.
      */
     private static float faceIdFor(Direction dir) {
         return dir.ordinal();
     }
 
-    // Grass top and all leaf blocks store greyscale textures in the faithful pack —
-    // they need a biome color multiplied in. Everything else is white (no tint).
+    /**
+     * Biome colour multiplied into the texture. Grass tops and leaves are greyscale in the pack and
+     * take the biome tint; everything else is white.
+     */
     private static Color getTint(Block blockId, Direction dir) {
         if (blockId == Block.OAK_LEAF) return FOLIAGE_TINT;
         if (blockId == Block.GRASS && dir == Direction.UP) return GRASS_TINT;

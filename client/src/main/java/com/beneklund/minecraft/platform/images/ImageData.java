@@ -3,8 +3,14 @@ package com.beneklund.minecraft.platform.images;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 
-// STB-decoded image in native memory. Must be closed after uploading to a GL texture —
-// pixels is an off-heap ByteBuffer that stbi_image_free must reclaim.
+/**
+ * A decoded image whose pixels live in native memory. Close it once the pixels are uploaded: the
+ * garbage collector never frees off-heap memory, so {@code onClose} hands the buffer back to the
+ * allocator that made it.
+ *
+ * @param channels channel count in the source file; {@code pixels} holds whatever the loader
+ *     requested
+ */
 public record ImageData(ByteBuffer pixels, int width, int height, int channels, Consumer<ImageData> onClose)
         implements AutoCloseable {
     @Override

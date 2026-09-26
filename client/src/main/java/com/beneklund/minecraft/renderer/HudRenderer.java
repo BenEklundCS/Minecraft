@@ -13,6 +13,13 @@ import java.util.Optional;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 
+/**
+ * Draws the hotbar, the selected-slot highlight and the crosshair in the {@link RenderPass#HUD}
+ * pass, in window pixels with the origin at the top left.
+ *
+ * <p>Meshes are rebuilt only when the window size, hotbar contents or selection change. Each slot
+ * shows the top-face texture of its block from the atlas.
+ */
 public class HudRenderer implements IRenderable {
     private final BlockRegistry blocks;
     private final TextureAtlas atlas;
@@ -76,12 +83,15 @@ public class HudRenderer implements IRenderable {
                 new DrawCall(crosshair, ortho, HUD_COLOR, Optional.empty(), RenderPass.HUD, Map.of()));
     }
 
-    // Clearing lastWindowSize is not optional. Uniform values live on the GL program object,
-    // and a reload builds a brand new one where every uniform starts at its default — for a
-    // mat4 that's all zeros. uOrtho is the only uniform in the codebase written once and left
-    // there (getDrawCalls only sets it when the window size changes), so after a reload every
-    // HUD vertex gets multiplied by a zero matrix and collapses to the origin. Nulling this
-    // makes the next getDrawCalls take the resize branch and re-upload it.
+    /**
+     * Rebuilds both HUD programs and forces {@code uOrtho} to re-upload.
+     *
+     * <p>Clearing {@code lastWindowSize} is required. Uniform values live on the program object and
+     * a reloaded program starts at defaults, a zero matrix for a {@code mat4}. {@code uOrtho} is
+     * uploaded only when the window size changes, so without this every HUD vertex would multiply
+     * by zero and collapse to the origin. A null size makes the next {@code getDrawCalls} take the
+     * resize branch.
+     */
     @Override
     public void reload() {
         HUD_COLOR.reload();

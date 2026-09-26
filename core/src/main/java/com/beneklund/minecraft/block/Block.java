@@ -1,8 +1,12 @@
 package com.beneklund.minecraft.block;
 
-// A block type. The enum is the readable currency passed around the world API; the byte `id`
-// is the compact storage form that Chunk packs into its byte[] (1 byte/block keeps 65k-block
-// chunks at 64 KiB and cache-friendly). Convert with id() and fromId().
+/**
+ * A block type. The enum is what the world API passes around; {@link #id()} is the byte stored per
+ * block in chunk storage, which keeps a 16x256x16 chunk of 65,536 blocks at 64 KiB.
+ *
+ * <p>Ids are persisted in save files, so an existing id must never change. Properties live in
+ * {@link BlockRegistry}, keyed by this enum.
+ */
 public enum Block {
     AIR((byte) 0),
     STONE((byte) 1),
@@ -65,7 +69,6 @@ public enum Block {
         this.id = id;
     }
 
-    // The storage byte that goes into Chunk's byte[].
     public byte id() {
         return id;
     }
@@ -79,6 +82,7 @@ public enum Block {
         for (Block b : values()) BY_ID[b.id & 0xFF] = b;
     }
 
+    /** The block stored as {@code id}, or {@link #AIR} for an unknown id. */
     public static Block fromId(byte id) {
         Block b = BY_ID[id & 0xFF];
         return b == null ? AIR : b;

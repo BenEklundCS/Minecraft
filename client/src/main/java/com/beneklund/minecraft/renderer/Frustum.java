@@ -3,26 +3,26 @@ package com.beneklund.minecraft.renderer;
 import com.beneklund.minecraft.util.AABB;
 import org.joml.Matrix4f;
 
-// The six planes bounding what the camera can see, pulled straight out of the
-// view-projection matrix (Gribb/Hartmann method).
-//
-// Why this works: multiplying a world point P by VP gives its clip-space coords
-// (x', y', z', w'), where each component is one row of VP dotted with P:
-//     x' = row0·P    y' = row1·P    z' = row2·P    w' = row3·P
-// A point is inside the view volume when it passes the clip test on every axis:
-//     -w' <= x' <= w'    -w' <= y' <= w'    -w' <= z' <= w'
-// Rearrange any one of those bounds into ">= 0" form and the coefficients ARE a plane:
-//     left  edge:  x' >= -w'  ->  x' + w' >= 0  ->  (row0 + row3)·P >= 0
-//     right edge:  x' <=  w'  ->  w' - x' >= 0  ->  (row3 - row0)·P >= 0
-// Bottom/top fall out of row1 the same way, near/far out of row2. Each resulting
-// (a,b,c,d) is a plane whose normal points inward, so plugging in a point and getting
-// a positive number means "on the inside of that plane".
-//
-// Normals are left un-normalized on purpose — we only ever read the sign of that
-// number, never the true distance, so dividing through by |normal| would be wasted work.
-//
-// JOML is column-major with accessors m{col}{row}, so row r of the matrix is
-// (m0r, m1r, m2r, m3r) — e.g. row3 is (m03, m13, m23, m33).
+/**
+ * The six planes bounding the camera's view volume, extracted from the view-projection matrix by
+ * the Gribb and Hartmann method, and a conservative box test against them.
+ *
+ * <p>A world point {@code P} maps to clip space as {@code (x', y', z', w')}, each component one row
+ * of the matrix dotted with {@code P}. {@code P} is inside when {@code -w' <= x', y', z' <= w'}.
+ * Each of those six inequalities rearranged into {@code (...) . P >= 0} is a plane: left is {@code
+ * (row3 + row0) . P >= 0}, right is {@code (row3 - row0) . P >= 0}, and bottom, top, near and far
+ * follow from rows 1 and 2. The plane normals point inward, so a positive result means the inside
+ * of that plane.
+ *
+ * <p>The normals stay unnormalised because the test reads only the sign of the result, never the
+ * distance. JOML accessors are {@code m<col><row>}, so row {@code r} is {@code (m0r, m1r, m2r,
+ * m3r)}.
+ *
+ * @see <a
+ *     href="https://www.gamedevs.org/uploads/fast-extraction-viewing-frustum-planes-from-world-view-projection-matrix.pdf">
+ *     Gribb and Hartmann: Fast Extraction of Viewing Frustum Planes from the World-View-Projection
+ *     Matrix</a>
+ */
 public class Frustum {
     private final float[] nx = new float[6];
     private final float[] ny = new float[6];
@@ -51,25 +51,25 @@ public class Frustum {
         d[i] = w;
     }
 
+    /**
+     * False only when the box lies entirely behind one plane. Boxes near a frustum corner can pass
+     * while outside it; that costs a draw and never hides visible geometry.
+     */
     public boolean isVisible(AABB box) {
         return isVisible(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ());
     }
 
-    // True unless the box is fully outside the frustum: if it sits entirely behind
-    // any single plane, the camera can't see it.
-    //
-    // Rather than test all 8 corners against a plane, we test only the one corner that
-    // reaches furthest toward that plane's inside — the "positive vertex." Build it per
-    // axis: take max on an axis where the normal points +, min where it points -. If even
-    // that best-case corner has a negative signed distance (is behind the plane), then all
-    // 8 corners are too, so the whole box is outside and we cull it. One dot product per
-    // plane instead of eight.
+    /**
+     * Tests each plane against the box's positive vertex: per axis, the max where the normal
+     * component is positive and the min where it is negative. That corner reaches furthest into
+     * the plane's inside, so if it is behind the plane, all eight corners are. One dot product per
+     * plane.
+     */
     private boolean isVisible(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
         for (int i = 0; i < 6; i++) {
             float px = nx[i] >= 0 ? maxX : minX;
             float py = ny[i] >= 0 ? maxY : minY;
             float pz = nz[i] >= 0 ? maxZ : minZ;
-            // signed distance of the positive vertex from plane i; < 0 means fully outside
             if (nx[i] * px + ny[i] * py + nz[i] * pz + d[i] < 0) return false;
         }
         return true;

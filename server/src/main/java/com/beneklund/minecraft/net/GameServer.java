@@ -11,6 +11,31 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * The authoritative game simulation: owns the world, applies what clients ask for, and streams
+ * the result back.
+ *
+ * <p>Clients never write the world. They send {@link IPacket.ToServer} requests; the server
+ * validates each one, applies it, and tells every affected client what changed. The client's
+ * replica holds only what arrived as packets.
+ *
+ * <p>{@link #tick()} runs on the {@code server-tick} thread at 20 Hz, in fixed phases:
+ *
+ * <ol>
+ *   <li>drain every link into its session's inbox
+ *   <li>apply each session's packets, then drop sessions whose link closed
+ *   <li>tick the {@link ServerChunkManager} around the load centre
+ *   <li>per session: stream chunk unloads, chunk data and this tick's edits, then flush
+ * </ol>
+ *
+ * <p>Draining every player before applying anything means packet handling never depends on
+ * which player's link was read first. Nothing leaves the server until the flush phase.
+ *
+ * @see <a href="https://www.gabrielgambetta.com/client-server-game-architecture.html">Gabriel
+ *     Gambetta: Client-Server Game Architecture</a>
+ * @see <a href="https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking">Valve:
+ *     Source Multiplayer Networking</a>
+ */
 public class GameServer implements IGameServer {
     private final World world;
     private final IWorldAuthority authority;
@@ -47,6 +72,7 @@ public class GameServer implements IGameServer {
         players.add(new PlayerSession(client.playerId(), client));
     }
 
+    /** Runs one server tick. See the class comment for the phase order. */
     public void tick() {
         players.forEach(PlayerSession::drainLink);
         players.forEach(this::apply);
@@ -66,7 +92,7 @@ public class GameServer implements IGameServer {
         return tick;
     }
 
-    // Players who left were saved as they went.
+    /** Saves every joined player still connected. Players who disconnected were saved on leaving. */
     public void saveConnectedPlayers() {
         players.forEach(this::save);
     }
@@ -87,7 +113,10 @@ public class GameServer implements IGameServer {
         }
     }
 
-    // Placed at the spawn, so chunks start loading there before the client reports anything.
+    /**
+     * Accepts a join and places the player at spawn, so chunks start loading there before the
+     * client reports a position.
+     */
     private void join(PlayerSession session) {
         session.markJoined();
         session.moved(spawn);
@@ -98,7 +127,7 @@ public class GameServer implements IGameServer {
         if (session.isJoined()) playerStore.save(session.state());
     }
 
-    // One player for now: the first joined one.
+    /** The chunk the load radius centres on: the first joined player's, or null before anyone joins. */
     private ChunkPos loadCenter() {
         for (PlayerSession session : players) {
             if (session.isJoined()) return session.chunkPos();
@@ -106,9 +135,14 @@ public class GameServer implements IGameServer {
         return null;
     }
 
-    // "If the server agrees": joined, inside the world's height, and in a chunk this player was sent
-    // and the server still holds. authority.setBlock returns silently on a bad target, so without
-    // this a refused edit would still go out as a BlockChanged.
+    /**
+     * Applies a client's block edit if the server agrees, and records it for broadcast.
+     *
+     * <p>The edit is accepted when the player has joined, {@code y} is inside the world's height,
+     * and the target chunk was sent to this player and is still {@code LIVE} here. {@code
+     * authority.setBlock} returns silently on a bad target, so without these checks a refused edit
+     * would still go out as a {@code BlockChanged}.
+     */
     private void applyEdit(PlayerSession session, IPacket.ToServer.BlockEdit edit) {
         if (!session.isJoined() || !Chunk.inYRange(edit.y())) return;
         ChunkPos pos = ChunkPos.containing(edit.x(), edit.z());
@@ -117,8 +151,15 @@ public class GameServer implements IGameServer {
         changesThisTick.add(new IPacket.ToClient.BlockChanged(edit.x(), edit.y(), edit.z(), edit.block()));
     }
 
-    // Unloads, then chunks, then edits, so an edit never arrives for a chunk the client lacks.
-    // replicable() before markChunkSent: a generating chunk is still air, and marking it would stick.
+    /**
+     * Queues this tick's world traffic for one player: unloads, then chunk data, then edits, so an
+     * edit never arrives for a chunk the client lacks.
+     *
+     * <p>A chunk is sent once, the first tick it is both {@code LIVE} and allowed by the {@link
+     * IChunkStreamer}. The {@code replicable} check comes before {@code markChunkSent} because a
+     * generating chunk is still air, and marking it sent would stop the real one from ever going
+     * out.
+     */
     private void stream(PlayerSession session) {
         if (!session.isJoined()) return;
         PlayerState player = session.state();

@@ -2,19 +2,26 @@ package com.beneklund.minecraft.platform.input;
 
 import com.beneklund.minecraft.input.IInputAction;
 
-// Ties a raw input code (key or mouse button) to the action it produces and how it triggers.
-// Keeping the trigger here is what lets bindings be fully data-driven — no side list of
-// "which keys are holdable" to keep in sync.
+/**
+ * The action a key or mouse button produces, and when it fires.
+ *
+ * <p>The trigger travels with the action, so a binding table is the complete description of input
+ * behaviour, with no separate list of holdable keys to keep in sync.
+ */
 public record Binding(IInputAction action, Trigger trigger) {
 
     public sealed interface Trigger {
-        // Fires once, on key-up. Firing on release (not press) sidesteps GLFW's auto-repeat,
-        // which streams PRESS then repeated REPEAT events while a key is held.
+        /**
+         * Fires once, on release. Release happens once per press, while GLFW streams {@code
+         * GLFW_REPEAT} events for as long as a key is held.
+         */
         record Tap() implements Trigger {}
 
-        // Fires while held: immediately on press, then once every repeatSeconds.
-        // repeatSeconds == 0 means "every frame" (movement, jump); > 0 rate-limits it
-        // (holding to mine/place repeatedly instead of once-per-frame spam).
+        /**
+         * Fires on the frame of the press, then every {@code repeatSeconds} while held. Zero fires
+         * every frame, for movement and jump; a positive value rate-limits, so holding the mouse
+         * mines on a cadence.
+         */
         record Hold(float repeatSeconds) implements Trigger {}
     }
 

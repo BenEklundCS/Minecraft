@@ -4,6 +4,14 @@ import com.beneklund.minecraft.platform.graphics.SkyMesh;
 import java.util.List;
 import org.joml.Matrix4f;
 
+/**
+ * Draws the sky as one fullscreen triangle in the opaque pass.
+ *
+ * <p>{@code sky.frag} rebuilds each pixel's world-space view direction from the frame uniforms and
+ * evaluates the Preetham daylight model there, then composites the cloud buffer on top. All of its
+ * inputs are frame uniforms {@link Renderer} uploads, so the draw call carries only the mesh and
+ * program.
+ */
 public class SkyRenderer implements IRenderable {
     private static final String VERT_PATH = "/shaders/sky.vert";
     private static final String FRAG_PATH = "/shaders/sky.frag";

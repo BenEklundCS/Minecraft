@@ -16,18 +16,33 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
 
-/*
- * Wraps an OpenGL shader program. Compile and link both happen in the constructor
- * so you can never get a half-built shader - it either works or throws.
+/**
+ * A linked GLSL program built from one vertex and one fragment stage.
  *
- * OpenGL treats this like a compiler + linker: compile() turns GLSL source into
- * GPU machine code for each stage, link() connects them into a runnable program.
- * After linking, the individual shader objects are dead weight - same idea as
- * deleting .o files after a successful build.
+ * <p>The constructor compiles both stages and links them, so an instance is always a runnable
+ * program; any compile or link failure logs the driver's info log to {@code GPU} and throws.
+ * GL splits the build the way a C toolchain does: {@code glCompileShader} turns each stage into
+ * an object, {@code glLinkProgram} resolves the interface between them (vertex outputs to fragment
+ * inputs, uniforms shared by name) into one executable. The stage objects are kept only so
+ * {@link #delete()} can release them.
  *
- * vertexShader and fragmentShader remain as fields only so delete() can clean them up.
+ * <p>After linking, the program's active uniforms are enumerated once and cached by name with
+ * their location and GL type. Every setter looks up that cache, so a uniform the driver optimised
+ * away is a silent no-op, matching GL's own rule that location {@code -1} is ignored. Arrays are
+ * expanded to one entry per element; see {@link #link()}.
  *
- * Lifecycle: new -> use() each frame -> delete() on shutdown.
+ * <p>All {@code set*} calls write into the program currently bound with {@link #use()}, because
+ * {@code glUniform*} targets the active program and takes no program argument.
+ *
+ * <p>Lifecycle: construct, {@link #use()} and set uniforms each frame, {@link #delete()} on
+ * shutdown. Shader hot reload builds a new instance.
+ *
+ * @see <a href="https://wikis.khronos.org/opengl/Shader_Compilation">OpenGL Wiki: Shader
+ *     Compilation</a>
+ * @see <a href="https://wikis.khronos.org/opengl/Uniform_(GLSL)">OpenGL Wiki: Uniform
+ *     (GLSL)</a>
+ * @see <a href="https://registry.khronos.org/OpenGL/specs/gl/glspec33.core.pdf">OpenGL 3.3 Core
+ *     Profile, section 2.11: Vertex Shaders</a>
  */
 public final class GlShader {
     private int programId;
@@ -43,6 +58,12 @@ public final class GlShader {
 
     private record ActiveUniform(String name, int location, int type) {}
 
+    /**
+     * Compiles and links a program from GLSL source.
+     *
+     * @throws RuntimeException if either stage fails to compile or the program fails to link;
+     *     the driver's info log is written to the {@code GPU} logger first
+     */
     public GlShader(String vertexShaderSource, String fragmentShaderSource) {
         this.vertexShaderSource = vertexShaderSource;
         this.fragmentShaderSource = fragmentShaderSource;
@@ -50,13 +71,28 @@ public final class GlShader {
         link();
     }
 
+    /**
+     * Makes this the active program for subsequent draws and {@code set*} calls.
+     *
+     * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glUseProgram.xhtml">
+     *     glUseProgram</a>
+     */
     public void use() {
         glUseProgram(programId);
     }
 
-    // Uploads every driven uniform this program declares. Safe to call on every draw: frame is the
-    // render-loop counter, and a second call with the same value returns immediately, so the guard
-    // below is what makes it once per program per frame rather than the caller remembering to.
+    /**
+     * Uploads the frame-wide uniforms this program declares, at most once per frame.
+     *
+     * <p>Only active uniforms of type {@code float}, {@code vec3} and {@code mat4} are candidates.
+     * A candidate with no entry in {@code uniforms} is skipped: that absence marks it as a per-draw
+     * uniform such as {@code uModel}, which the caller sets itself. Calling this on every draw is
+     * safe because a repeat call with the same {@code frame} returns immediately.
+     *
+     * @param frame the render loop's frame counter, starting at 1
+     * @param uniforms frame-wide values keyed by GLSL uniform name, array elements as {@code
+     *     name[i]}
+     */
     public void apply(long frame, Map<String, UniformValue<?>> uniforms) {
         if (frame == uniformsUploadedForFrame) return;
         uniformsUploadedForFrame = frame;
@@ -72,10 +108,12 @@ public final class GlShader {
         }
     }
 
+    /** The GL program name, for binding outside this wrapper. */
     public int getProgramId() {
         return programId;
     }
 
+    /** Sets an {@code int} or {@code sampler*} uniform; samplers take a texture unit index. */
     public void setInt(String name, int value) {
         int location = location(name);
         if (location < 0) return;
@@ -104,15 +142,22 @@ public final class GlShader {
         EngineStats.countUniformUpload();
     }
 
-    // Uploads a 4x4 matrix into a mat4 uniform. The program must be bound (use()) first - glUniform*
-    // always writes into the currently-active program, not the one named here.
+    /**
+     * Sets a {@code mat4} uniform.
+     *
+     * <p>JOML and GLSL both store matrices column-major, so the upload passes {@code transpose =
+     * false} and {@link Matrix4f#get(FloatBuffer)} writes the 16 floats in the order GL reads them.
+     * The buffer comes from LWJGL's {@link MemoryStack}, so a per-frame upload allocates nothing on
+     * the Java heap.
+     *
+     * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glUniform.xhtml">
+     *     glUniform</a>
+     * @see <a href="https://github.com/LWJGL/lwjgl3-wiki/wiki/1.3.-Memory-FAQ">LWJGL Memory FAQ</a>
+     */
     public void setMatrix4(String name, Matrix4f matrix) {
         int location = location(name);
-        if (location < 0) return; // uniform doesn't exist or got stripped as unused; nothing to set
+        if (location < 0) return;
 
-        // JOML and OpenGL are both column-major, so no transpose (false). The GPU wants the 16
-        // floats laid out contiguously; matrix.get() writes them in column-major order. We alloc
-        // on the LWJGL stack so this per-frame upload doesn't churn the GC heap.
         try (MemoryStack stack = stackPush()) {
             FloatBuffer buffer = stack.mallocFloat(16);
             matrix.get(buffer);
@@ -146,6 +191,7 @@ public final class GlShader {
         return uniform == null ? -1 : uniform.location();
     }
 
+    /** Deletes the program and both stage objects. */
     public void delete() {
         glDeleteProgram(programId);
         glDeleteShader(vertexShader);
@@ -169,6 +215,15 @@ public final class GlShader {
         }
     }
 
+    /**
+     * Links the program and caches every active uniform, one entry per array element.
+     *
+     * <p>GL reports an array uniform as a single active uniform named {@code uFoo[0]} with a size,
+     * and each element has its own location queried by {@code uFoo[i]}.
+     *
+     * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glGetActiveUniform.xhtml">
+     *     glGetActiveUniform</a>
+     */
     private void link() {
         programId = glCreateProgram();
         glAttachShader(programId, vertexShader);

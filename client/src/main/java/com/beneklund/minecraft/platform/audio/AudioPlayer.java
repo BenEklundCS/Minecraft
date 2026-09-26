@@ -11,18 +11,22 @@ import org.lwjgl.openal.ALC;
 import org.lwjgl.openal.ALCCapabilities;
 import org.lwjgl.openal.ALCapabilities;
 
-/*
- * Owns the OpenAL device/context lifecycle and drives playback. Decoding is delegated
- * to AudioLoader (StbAudioLoader by default), which returns an AudioData holding decoded
- * PCM samples. This class uploads that PCM to an AL buffer, attaches it to a source, and plays.
+/**
+ * Plays one looping track through OpenAL, owning the device and context.
  *
- * OpenAL separates buffers (raw PCM data) from sources (playback state: position, volume,
- * looping). One buffer can be shared across many sources without duplicating audio data.
+ * <p>OpenAL splits audio into buffers, which hold PCM samples, and sources, which hold playback
+ * state such as position, gain and looping; one buffer can feed many sources. {@link #play} decodes
+ * a file through the {@link IAudioLoader}, copies the PCM into a new buffer with {@code
+ * alBufferData}, frees the decoded copy, and plays it from a single looping source. A second
+ * {@link #play} replaces the first track.
  *
- * init() is lazy - deferred until the first play() call so the audio device isn't opened
- * if no music is configured (e.g. in headless test environments).
+ * <p>The device opens on the first {@link #play}, so code that constructs a player and never plays,
+ * such as a test, never needs an audio device. {@link #shutdown()} does nothing if it never
+ * opened.
  *
- * Lifecycle: play() -> shutdown() on app exit. shutdown() is a no-op if play() was never called.
+ * @see <a href="https://www.openal.org/documentation/OpenAL_Programmers_Guide.pdf">OpenAL 1.1
+ *     Programmer's Guide</a>
+ * @see <a href="https://github.com/LWJGL/lwjgl3-wiki/wiki/2.1.-OpenAL">LWJGL wiki: OpenAL</a>
  */
 public class AudioPlayer {
     private final IAudioLoader loader;
@@ -43,13 +47,13 @@ public class AudioPlayer {
         context = alcCreateContext(device, new int[] {0});
         alcMakeContextCurrent(context);
 
-        // Reads driver support and makes the AL functions callable.
         ALCCapabilities alcCaps = ALC.createCapabilities(device);
         ALCapabilities alCaps = AL.createCapabilities(alcCaps);
         AUDIO.info("OpenAL device opened: {}", alcGetString(device, ALC_DEVICE_SPECIFIER));
         AUDIO.debug("AL10={} ALC11={}", alCaps.OpenAL10, alcCaps.OpenALC11);
     }
 
+    /** Stops any current track and loops {@code classpathOgg}, opening the device on first use. */
     public void play(String classpathOgg) {
         if (device == NULL) {
             init();
@@ -79,7 +83,7 @@ public class AudioPlayer {
         alcCloseDevice(device);
     }
 
-    // Called before each play() to avoid leaking AL objects if play() is called multiple times.
+    /** Stops and deletes the previous track's source and buffer, so repeated plays don't leak. */
     private void clean() {
         if (source != 0) {
             alSourceStop(source);

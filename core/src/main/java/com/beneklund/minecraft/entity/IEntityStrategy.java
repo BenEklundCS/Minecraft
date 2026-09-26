@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.entity;
 
-// Strategy / AI hook for entity behaviour. One implementation per entity type
-// (idle wanderer, hostile, scripted, etc.). Swap at runtime to change how an
-// entity acts without touching Entity itself.
+/**
+ * Placeholder for entity behaviour: one implementation per kind (wanderer, hostile, scripted),
+ * swappable at runtime without touching {@link Entity}. Empty today.
+ */
 public interface IEntityStrategy {}

@@ -5,8 +5,16 @@ import org.lwjgl.glfw.GLFWKeyCallbackI;
 import org.lwjgl.glfw.GLFWMouseButtonCallbackI;
 import org.lwjgl.glfw.GLFWScrollCallbackI;
 
-// GLFW callback data captured verbatim and queued for the game thread to process.
-// The callback static factories are here so the wiring stays self-contained per event type.
+/**
+ * GLFW callback arguments captured verbatim, minus the window handle. Codes and actions are
+ * GLFW's ({@code GLFW_KEY_*}, {@code GLFW_PRESS}); {@link InputMapper} is the only reader, so the
+ * GLFW vocabulary stays inside {@code platform/input}.
+ *
+ * <p>Each record's static {@code callback} builds the GLFW callback that enqueues it, which keeps
+ * each event type's wiring in one place.
+ *
+ * @see <a href="https://www.glfw.org/docs/latest/input_guide.html">GLFW: Input guide</a>
+ */
 public sealed interface IRawInputEvent {
     record KeyEvent(int key, int scancode, int action, int mods) implements IRawInputEvent {
         public static GLFWKeyCallbackI callback(InputEventQueue queue) {

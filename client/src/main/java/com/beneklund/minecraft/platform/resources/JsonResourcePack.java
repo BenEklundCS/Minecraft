@@ -13,6 +13,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * A resource pack described by a {@code pack.json} on the classpath: {@code name}, {@code author},
+ * {@code license}, {@code tileSize}, and a {@code tiles} object mapping tile names to PNG paths
+ * relative to the JSON file. Tiles keep the JSON's order.
+ */
 public class JsonResourcePack implements IResourcePack {
     private final IImageLoader loader;
     private final String name;
@@ -34,8 +39,6 @@ public class JsonResourcePack implements IResourcePack {
         license = root.get("license").getAsString();
         tileSize = root.get("tileSize").getAsInt();
 
-        // Tile paths in the JSON are relative to the pack file itself, so prefix with the
-        // pack's directory so ImageLoader gets a full classpath path.
         String baseDir = classpathJson.substring(0, classpathJson.lastIndexOf('/') + 1);
         for (var entry : root.getAsJsonObject("tiles").entrySet()) {
             tilePaths.put(entry.getKey(), baseDir + entry.getValue().getAsString());
@@ -71,7 +74,6 @@ public class JsonResourcePack implements IResourcePack {
 
     @Override
     public Map<String, ImageData> loadTiles() {
-        // LinkedHashMap preserves insertion order, which keeps atlas stitching deterministic.
         Map<String, ImageData> data = new LinkedHashMap<>();
         for (var entry : tilePaths.entrySet()) {
             IO.trace("decoding tile {} from {}", entry.getKey(), entry.getValue());

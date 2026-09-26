@@ -6,6 +6,18 @@ import java.util.Map;
 import java.util.Optional;
 import org.joml.Matrix4f;
 
+/**
+ * One mesh to draw: what, where, with which program and texture, in which pass. Renderables return
+ * these from {@link IRenderable#getDrawCalls} and {@link Renderer} owns every GL state change that
+ * issuing them takes.
+ *
+ * <p>{@code transform} uploads as {@code uModel}, the only uniform that differs between draws in a
+ * frame. {@code cascadeMask} matters only for {@link RenderPass#SHADOW} calls: bit {@code i} set
+ * means the mesh can cast into shadow cascade {@code i}.
+ *
+ * <p>The convenience constructors default to the opaque pass, no extra uniforms, and every
+ * cascade.
+ */
 public record DrawCall(
         Mesh mesh,
         Matrix4f transform,
@@ -15,14 +27,13 @@ public record DrawCall(
         Map<String, UniformValue<?>> uniforms,
         int cascadeMask) {
 
-    /*
-     * Every cascade. The default for anything that is not a shadow call, and for shadow calls that
-     * have not thought about it — drawing into a cascade that did not need this caster is wasted
-     * work, never a wrong image.
+    /**
+     * Every cascade. The default for non-shadow calls and for shadow calls that haven't narrowed
+     * it. Drawing a caster into a cascade that didn't need it costs time and never changes the
+     * image.
      */
     public static final int ALL_CASCADES = ~0;
 
-    // Most callers (HUD, debug, opaque chunks) draw in the opaque pass — default to it.
     public DrawCall(Mesh mesh, Matrix4f transform, ShaderProgram shader, TextureAtlas atlas) {
         this(mesh, transform, shader, Optional.of(atlas), RenderPass.OPAQUE, Map.of(), ALL_CASCADES);
     }
@@ -35,8 +46,7 @@ public record DrawCall(
         this(mesh, transform, shader, Optional.of(atlas), pass, Map.of(), ALL_CASCADES);
     }
 
-    // The shape this record had before cascades existed. Kept so every non-shadow call site reads
-    // exactly as it did — a cascade mask means nothing to the HUD.
+    /** The shape from before cascades existed, so non-shadow call sites carry no mask. */
     public DrawCall(
             Mesh mesh,
             Matrix4f transform,
@@ -47,7 +57,7 @@ public record DrawCall(
         this(mesh, transform, shader, atlas, pass, uniforms, ALL_CASCADES);
     }
 
-    // Shadow calls: which cascades this caster can reach, as a bit per cascade.
+    /** For shadow casters: {@code cascadeMask} holds one bit per cascade the caster can reach. */
     public DrawCall(
             Mesh mesh, Matrix4f transform, ShaderProgram shader, TextureAtlas atlas, RenderPass pass, int cascadeMask) {
         this(mesh, transform, shader, Optional.of(atlas), pass, Map.of(), cascadeMask);

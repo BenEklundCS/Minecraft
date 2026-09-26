@@ -2,6 +2,12 @@ package com.beneklund.minecraft.platform.graphics;
 
 import java.util.Arrays;
 
+/**
+ * Interleaved vertex floats and triangle or line indices, ready to upload into a {@link Mesh}.
+ *
+ * <p>Equality compares array contents, since a record's generated {@code equals} would compare
+ * array identity.
+ */
 public record Geometry(float[] vertices, int[] indices) {
     private static final int MAGIC = 31;
     public static final Geometry EMPTY = new Geometry(new float[] {}, new int[] {});

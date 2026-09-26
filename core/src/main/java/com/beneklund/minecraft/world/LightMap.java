@@ -4,6 +4,20 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * Sky and block light for every cell of one chunk, packed as two 4-bit levels per byte: {@code sky
+ * << 4 | block}.
+ *
+ * <p>Storage is per {@link ChunkSection}. A section whose cells all share one packed value is a
+ * single byte in {@code uniform}; the first write that breaks uniformity materialises a 4096-byte
+ * array filled with that value. {@link LightEngine} writes freely, then calls {@link #compact()}
+ * to fold sections that ended up uniform back to one byte, so open sky and unlit rock cost one
+ * byte per section.
+ *
+ * <p>Cells use {@link Chunk}'s flat index. A map is written by one thread while being computed,
+ * then published whole with {@link Chunk#setLightData}; the only later writer is {@link
+ * LightEngine#removeBlockLight}.
+ */
 public final class LightMap {
     public static int MAX_LEVEL = 15;
     public static int MIN_LEVEL = 0;
@@ -51,8 +65,7 @@ public final class LightMap {
         return true;
     }
 
-    // Run once after the engine has finished writing. A section whose cells all landed on the same value converts to a
-    // uniform value.
+    /** Folds every materialised section whose cells all hold one value back to a uniform byte. */
     public void compact() {
         for (int i = 0; i < Chunk.size(); i += ChunkSection.BLOCK_COUNT) {
             int section = Chunk.sectionOf(i);
@@ -71,8 +84,10 @@ public final class LightMap {
         write(i, (byte) ((packed(i) & 0xF0) | (level & 0x0F)));
     }
 
-    // Set the sky channel for a whole section at once. Folds into the uniform slot when the section
-    // hasn't materialized, which is the whole point — open air above terrain costs one byte, not 4,096.
+    /**
+     * Sets the sky level of every cell in {@code section}, keeping block light. An unmaterialised
+     * section takes it as its uniform byte, so open air above terrain stays one byte.
+     */
     public void fillSky(int section, int level) {
         byte[] cells = sections[section];
         if (cells == null) {
@@ -82,7 +97,7 @@ public final class LightMap {
         for (int i = 0; i < cells.length; i++) cells[i] = (byte) ((cells[i] & 0x0F) | (level << 4));
     }
 
-    // Always one chunk's worth, however the sections underneath happen to be stored.
+    /** Cells covered: always {@link Chunk#size()}, however the sections are stored. */
     public int size() {
         return Chunk.size();
     }

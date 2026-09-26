@@ -1,5 +1,23 @@
 package com.beneklund.minecraft.world;
 
+/**
+ * A chunk's position in the load, generate, mesh and unload pipeline, with the legal moves between
+ * positions.
+ *
+ * <p>The server and the client walk different paths through the same enum:
+ *
+ * <ul>
+ *   <li>Server: {@code UNLOADED}, {@code QUEUED_GEN}, {@code GENERATING}, {@code LIVE}, {@code
+ *       UNLOADING}. A chunk loaded from disk goes straight from {@code UNLOADED} to {@code LIVE}.
+ *   <li>Client: {@code UNLOADED}, {@code QUEUED_MESH}, {@code MESHING}, {@code READY_TO_UPLOAD},
+ *       {@code UPLOADED}, with {@code DIRTY} looping back to {@code QUEUED_MESH} on every edit,
+ *       then {@code UNLOADING}.
+ * </ul>
+ *
+ * <p>{@code GENERATING} and {@code MESHING} are the states a worker thread owns, so they are the
+ * only ones with an exit to {@code ERROR}. {@code ERROR} is terminal. Transitions happen only
+ * through {@link Chunk#tryTransition}, which checks {@link #canTransitionTo} atomically.
+ */
 public enum ChunkState {
     UNLOADED,
     QUEUED_GEN,
@@ -13,6 +31,7 @@ public enum ChunkState {
     LIVE,
     ERROR;
 
+    /** Whether the pipeline allows moving from this state to {@code next}. */
     public boolean canTransitionTo(ChunkState next) {
         return switch (this) {
             // QUEUED_GEN for fresh chunks. A chunk restored from disk already has its blocks, so it

@@ -11,6 +11,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 
+/**
+ * Persists chunks as one {@link SaveFile} per chunk at {@code saves/<seed>/<x>_<z>.bin}.
+ *
+ * <p>The payload is {@link Chunk#serialize()}. A file with the wrong magic, a truncated body or a
+ * different version loads as empty, and the chunk manager regenerates that chunk from the seed.
+ * An I/O failure on either path throws.
+ */
 public class ChunkStore implements IChunkStore {
     private static final int MAGIC = 0x4D435F43; // MC_C
     private static final int VERSION = 1;

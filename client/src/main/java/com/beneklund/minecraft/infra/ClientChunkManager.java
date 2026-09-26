@@ -14,7 +14,29 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-// The client's replica: written only by the on*() methods, then lit, meshed and handed to the main thread.
+/**
+ * The client's replica of the world, filled only by server packets, and the meshing pipeline that
+ * turns it into GPU-ready geometry.
+ *
+ * <p>Three packet handlers write the replica: {@link #onChunkData} inserts a chunk with its blocks,
+ * {@link #onChunkUnload} removes one, {@link #onBlockChanged} applies an edit. The server decides
+ * what the client holds; the client never loads or evicts on its own. Because a chunk enters with
+ * its blocks, presence alone means "has blocks" ({@link #hasBlocks}).
+ *
+ * <p>Meshing runs on a fixed pool of {@code max(2, cores / 2)} threads. A job gathers the chunk and
+ * its eight neighbours into a {@link ChunkWithNeighbors}, computes light with the {@link
+ * LightEngine}, meshes, and queues plain {@link ChunkMeshData}. The main thread drains that queue
+ * under a per-frame budget and uploads; workers never touch GL. Each step goes through {@link
+ * Chunk#tryTransition}, so a job whose chunk was unloaded or re-dirtied mid-flight loses the race
+ * and drops its result instead of publishing a stale mesh. {@link #drainUploadQueue} also drops a
+ * mesh whose chunk is no longer the one in the replica.
+ *
+ * <p>Edits re-dirty the chunk, and the neighbours too when the edit sits on a chunk border or
+ * removes a light source, since a neighbour's faces and light depend on this chunk's blocks.
+ * {@link #tick()} requeues everything {@code DIRTY}.
+ *
+ * @see ChunkState
+ */
 public class ClientChunkManager {
     private final World world;
     private final ChunkMesher mesher;
@@ -40,7 +62,10 @@ public class ClientChunkManager {
         CHUNK.info("{} meshing threads", threads);
     }
 
-    // Neighbours remesh too, or they keep culling against the air this chunk used to be.
+    /**
+     * Inserts a streamed chunk and queues its mesh. Neighbours remesh too, or they keep culling
+     * against the air this chunk used to be.
+     */
     public void onChunkData(IPacket.ToClient.ChunkData packet) {
         Chunk chunk = new Chunk(packet.blocks());
         ChunkPos pos = packet.pos();
@@ -49,7 +74,10 @@ public class ClientChunkManager {
         markNeighborsDirty(pos);
     }
 
-    // The only way out of the replica: the server decides what the client holds.
+    /**
+     * Removes a chunk from the replica and queues its position so the main thread frees its GPU
+     * meshes. The only way a chunk leaves the replica.
+     */
     public void onChunkUnload(IPacket.ToClient.ChunkUnload packet) {
         ChunkPos pos = packet.pos();
         Chunk chunk = world.getChunk(pos);
@@ -59,6 +87,10 @@ public class ClientChunkManager {
         unloadQueue.add(pos);
     }
 
+    /**
+     * Applies a server-confirmed edit and marks what must remesh. An edit to a chunk the client
+     * doesn't hold is dropped, because the chunk will arrive with the edit already in its blocks.
+     */
     public void onBlockChanged(IPacket.ToClient.BlockChanged packet) {
         int x = packet.x(), y = packet.y(), z = packet.z();
         if (!Chunk.inYRange(y)) return;
@@ -80,7 +112,7 @@ public class ClientChunkManager {
         }
     }
 
-    // Re-queues everything DIRTY onto the meshing pool.
+    /** Queues every {@code DIRTY} chunk onto the meshing pool. */
     public void tick() {
         for (var entry : world.getChunkEntries()) {
             Chunk chunk = entry.getValue();
@@ -91,7 +123,11 @@ public class ClientChunkManager {
         }
     }
 
-    // Drains up to max finished meshes. Capped per frame by Game.uploadBudget() to avoid hitching.
+    /**
+     * Takes up to {@code max} finished meshes, skipping any built for a chunk that has since been
+     * unloaded or replaced. {@code Game} passes its per-frame upload budget, so a burst of meshes
+     * spreads over several frames instead of hitching one.
+     */
     public List<ChunkMeshData> drainUploadQueue(int max) {
         List<ChunkMeshData> out = new ArrayList<>();
         ChunkMeshData data;
@@ -103,7 +139,7 @@ public class ClientChunkManager {
         return out;
     }
 
-    // Drains all pending unload positions so the main thread can free their GPU buffers.
+    /** Takes every pending unload, for the main thread to free their GPU meshes. */
     public List<ChunkPos> drainUnloadQueue() {
         List<ChunkPos> res = new ArrayList<>();
         while (!unloadQueue.isEmpty()) {
@@ -112,12 +148,12 @@ public class ClientChunkManager {
         return res;
     }
 
-    // Presence is enough: a chunk only enters the replica with its blocks.
+    /** Whether the replica holds {@code pos}; a chunk only enters the replica with its blocks. */
     public boolean hasBlocks(ChunkPos pos) {
         return world.getChunk(pos) != null;
     }
 
-    // Worker thread.
+    /** Runs on a meshing worker. Any throw parks the chunk in {@code ERROR} and logs it. */
     private void mesh(Chunk chunk, ChunkPos pos) {
         try {
             if (!chunk.tryTransition(ChunkState.MESHING)) return;
@@ -146,6 +182,7 @@ public class ClientChunkManager {
         }
     }
 
+    /** Stops accepting mesh jobs and waits up to {@code timeoutSeconds} for running ones to finish. */
     public void shutdown(long timeoutSeconds) throws InterruptedException {
         CHUNK.debug("draining meshing workers, {}s timeout", timeoutSeconds);
         meshingPool.shutdown();

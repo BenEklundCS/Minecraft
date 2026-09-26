@@ -35,12 +35,31 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import org.joml.Vector3f;
 
-// Composition root — the only place that wires concrete types together.
-// Nothing outside this class should call `new` on platform or renderer objects.
-//
-// The init* methods are grouped by what they're allowed to touch, and run() calls them in
-// an order that respects those rules. The fields exist so the groups can hand objects to
-// each other — nothing outside run() reads them.
+/**
+ * The client's composition root: the one place that calls {@code new} on concrete platform,
+ * renderer and world types and wires them together. {@code ServerContainer} is its counterpart on
+ * the server side of the link.
+ *
+ * <p>Each {@code init*} method is grouped by what it may touch, and {@link #run()} calls them in
+ * numbered phases whose order is load-bearing:
+ *
+ * <ol>
+ *   <li>Config and input: plain data and plain Java.
+ *   <li>Platform objects constructed but inert: the window exists as an object with no GLFW
+ *       window behind it yet.
+ *   <li>{@code window.init()}: creates the window and makes the GL context current on this
+ *       thread. Nothing above this line may call GL.
+ *   <li>Renderer: shaders, textures, framebuffers, all GL.
+ *   <li>Audio, world, player and the optional debug server, then the join request to the server.
+ * </ol>
+ *
+ * <p>Then {@link Game} runs the loop on this thread until the window closes, and {@link
+ * #shutdown()} tears down in reverse dependency order. The fields exist only to pass objects
+ * between phases; nothing outside {@link #run()} reads them.
+ *
+ * @see <a href="https://blog.ploeh.dk/2011/07/28/CompositionRoot/">Mark Seemann: Composition
+ *     Root</a>
+ */
 public class GameContainer {
     // Classloader-relative, no leading slash — StbAudioLoader.listOggs resolves it through the
     // context classloader, which rejects an absolute-looking name. Searched recursively, so
@@ -119,11 +138,13 @@ public class GameContainer {
     private static final String USERNAME = "player";
     private static final int PROTOCOL_VERSION = 1;
 
+    /** @param serverLink the client end of the connection; the server must already accept it */
     public GameContainer(ContainerConfig cfg, IServerLink serverLink) {
         this.cfg = cfg;
         this.serverLink = serverLink;
     }
 
+    /** Builds the client, runs the game loop on the calling thread until exit, then shuts down. */
     public void run() throws IOException {
         long startedAt = System.nanoTime();
         LOGGER.info("starting up");
@@ -166,8 +187,10 @@ public class GameContainer {
         shutdown();
     }
 
-    // Cumulative rather than per-phase: what you actually want to know is how far into startup
-    // you are when something hangs, and cumulative survives phases being reordered.
+    /**
+     * Logs cumulative time since startup. Cumulative answers how far into startup a hang happened,
+     * and stays correct when phases are reordered.
+     */
     private static void phaseDone(String phase, long startedAt) {
         LOGGER.debug("init {} done at {} ms", phase, millisSince(startedAt));
     }
@@ -285,16 +308,17 @@ public class GameContainer {
         window.addResizeListener(sceneBuffer::resize);
     }
 
-    /*
-     * A quarter of the window on each axis, so a sixteenth of the pixels. The raymarch in
-     * cloud.frag costs CLOUD_STEPS view samples and up to CLOUD_LIGHT_STEPS more per lit one, and
-     * paying that per screen pixel is the difference between clouds and a slideshow. Clouds are
-     * low-frequency enough that the bilinear stretch back up is nearly free visually — the cost
-     * shows on the sun disc's edge, not on the clouds themselves.
+    /**
+     * Allocates the cloud raymarch target at {@code 1 / CLOUD_BUFFER_DIVISOR} of the window on each
+     * axis, resized with it.
      *
-     * DepthMode.NONE, like the bloom and godray pairs: one fullscreen triangle, nothing to sort.
-     * RGBA16F because the alpha channel carries transmittance and the rgb carries linear radiance
-     * that runs well past 1.0 wherever the sun catches a rim.
+     * <p>The march in {@code cloud.frag} costs {@code CLOUD_STEPS} view samples per pixel plus up to
+     * {@code CLOUD_LIGHT_STEPS} light samples per lit one, too much to pay at full resolution.
+     * Clouds are low-frequency, so the bilinear upscale is close to invisible on them; it shows on
+     * the sun disc's edge where a cloud crosses it.
+     *
+     * <p>{@code RGBA16F} because alpha carries transmittance and RGB carries linear radiance that
+     * runs well past 1.0 where the sun catches a rim. No depth: one fullscreen triangle.
      */
     private void constructCloudBuffer() {
         int cloudW = Math.max(1, window.getWidth() / CLOUD_BUFFER_DIVISOR);
@@ -317,6 +341,12 @@ public class GameContainer {
         });
     }
 
+    /**
+     * Starts the music: {@code startup.disc} from {@link LocalConfig} if set, otherwise a random
+     * track under {@code music/}, narrowed to {@code preferred.album} when that is set.
+     *
+     * @throws IllegalStateException if no track is configured and none is found
+     */
     private void initAudio() {
         StbAudioLoader loader = new StbAudioLoader();
         music = new AudioPlayer(loader);
@@ -338,7 +368,10 @@ public class GameContainer {
         return discs.get(ThreadLocalRandom.current().nextInt(discs.size()));
     }
 
-    // A replica filled by the server; generation and saves live in ServerContainer.
+    /**
+     * Builds the client's world replica and the systems that act on it. The server fills the
+     * replica; generation and saves belong to {@code ServerContainer}.
+     */
     private void initWorld() {
         World world = new World(new ConcurrentHashMap<>());
         LightEngine lightEngine = new LightEngine(registry);
@@ -350,19 +383,19 @@ public class GameContainer {
         WORLD.debug("client world ready, chunks come from the server");
     }
 
-    // Placed at the spawn when Join.Accepted arrives.
+    /** Creates the player at the configured start; {@code Join.Accepted} later moves it to spawn. */
     private void initPlayer() {
         player = new Player(cfg.player(), camera, authority);
     }
 
-    /*
-     * Opt-in, behind debugserver.enabled: without it no socket is opened and no frame is ever
-     * read back.
+    /**
+     * Starts the debug HTTP server when {@code debugserver.enabled} is set; otherwise opens no
+     * socket and reads back no frames.
      *
-     * Off is the right default for anything you intend to measure. The server captures the
-     * framebuffer every 100 ms with no check for whether a browser is attached, and glReadPixels
-     * is a synchronous stall that waits for the whole pipeline to drain. Logged at info when it
-     * starts, so a timing run that quietly included it is identifiable afterwards.
+     * <p>Leave it off for anything being measured: the server captures the framebuffer every 100
+     * ms whether or not a browser is attached, and {@code glReadPixels} stalls until the pipeline
+     * drains. Startup logs it at info, so a timing run that included it is identifiable afterwards.
+     * A failure to bind the port logs a warning and the game runs without it.
      */
     private void initFrameStream() {
         if (!localConfig.debugServerEnabled()) return;
@@ -403,8 +436,11 @@ public class GameContainer {
                 gpuTimer);
     }
 
-    // Reverse dependency order: audio before window (AL before GLFW/GL).
-    // Chunk flushing is ServerContainer.stop's.
+    /**
+     * Tears down in reverse dependency order: debug server, leave the server, drain meshing
+     * workers, audio, GL resources, and the window with its context last, since every GL delete
+     * needs the context. Saving chunks is {@code ServerContainer.stop}'s job.
+     */
     private void shutdown() {
         // First: it holds a socket and a worker thread, and neither depends on anything below.
         if (frameStream != null) frameStream.stop();
@@ -429,7 +465,7 @@ public class GameContainer {
         LOGGER.info("shutdown complete in {} ms", millisSince(startedAt));
     }
 
-    // The server saves the player from this last position.
+    /** Sends the final position, which the server saves, then disconnects. */
     private void leaveServer() {
         Vector3f p = player.getPosition();
         serverLink.send(new IPacket.ToServer.PlayerPosition(p.x(), p.y(), p.z(), player.getPitch(), player.getYaw()));

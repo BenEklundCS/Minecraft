@@ -3,23 +3,25 @@ package com.beneklund.minecraft.platform.graphics;
 import static org.lwjgl.opengl.GL20.glEnableVertexAttribArray;
 import static org.lwjgl.opengl.GL30.*;
 
-/*
- * A VAO (Vertex Array Object) - remembers how to interpret the data in a VBO.
+/**
+ * A vertex array object (VAO): the recorded description of how vertex buffers feed a vertex
+ * shader's inputs.
  *
- * Uploading vertex data to a VBO gives the GPU a flat stream of bytes. The GPU has
- * no idea what any of it means. attribPointer() is how you tell it: "attribute slot 0
- * starts at byte 0, is 3 floats wide, and vertices are 20 bytes apart." The VAO
- * records that description so you don't have to repeat it every frame.
+ * <p>A VBO is untyped bytes. Each {@link #attribPointer} call records, into the bound VAO, one
+ * attribute slot's component count, type, stride and byte offset, plus the buffer bound to {@code
+ * GL_ARRAY_BUFFER} at that moment. The VAO also records the {@code GL_ELEMENT_ARRAY_BUFFER}
+ * binding. Binding the VAO at draw time restores all of it in one call.
  *
- * The order of calls during setup matters. The VAO records which VBO was bound at
- * the moment attribPointer() was called - that's how it knows which buffer feeds
- * which attribute slot. Bind the VAO first, then upload/bind the VBO, then call
- * attribPointer.
+ * <p>Setup order: {@link #bind()}, bind or upload the VBO and EBO, {@link #attribPointer} once per
+ * attribute, {@link #unbind()}. {@link Mesh} does exactly this through {@link
+ * VertexFormat#describe}.
  *
- * At draw time, binding the VAO restores the entire attribute layout and the VBO
- * association in one call.
+ * <p>The core profile has no default VAO, so every draw needs one bound.
  *
- * Lifecycle: new -> bind() -> attribPointer() per attribute -> unbind() -> bind() each frame -> delete() on shutdown.
+ * @see <a href="https://wikis.khronos.org/opengl/Vertex_Specification">OpenGL Wiki: Vertex
+ *     Specification</a>
+ * @see <a href="https://learnopengl.com/Getting-started/Hello-Triangle">LearnOpenGL: Hello
+ *     Triangle</a>
  */
 public final class GlVertexArray {
     private final int vertexArray;
@@ -32,8 +34,8 @@ public final class GlVertexArray {
         glBindVertexArray(vertexArray);
     }
 
+    /** Binds VAO 0 so later buffer and attribute calls can't write into this one. */
     public void unbind() {
-        // Bind 0 so subsequent GL calls don't accidentally modify this VAO's state.
         glBindVertexArray(0);
     }
 
@@ -41,12 +43,20 @@ public final class GlVertexArray {
         glDeleteVertexArrays(vertexArray);
     }
 
+    /**
+     * Records one attribute's layout into this VAO and enables it. This VAO must be bound, and the
+     * VBO holding the attribute must be bound to {@code GL_ARRAY_BUFFER}.
+     *
+     * @param index attribute slot, matching {@code layout(location = N)} in the vertex shader
+     * @param size component count, 1 to 4
+     * @param glType component type, e.g. {@code GL_FLOAT}
+     * @param normalized whether integer components map to [0, 1] or [-1, 1]
+     * @param stride bytes from one vertex to the next
+     * @param offset byte offset of this attribute within a vertex
+     * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glVertexAttribPointer.xhtml">
+     *     glVertexAttribPointer</a>
+     */
     public void attribPointer(int index, int size, int glType, boolean normalized, int stride, long offset) {
-        // Must be called while this VAO is bound - the VAO records this description.
-        // index = attribute slot (matches layout(location = N) in the vertex shader)
-        // size = number of floats for this attribute
-        // stride = total bytes per vertex across all attributes
-        // offset = byte offset to where this attribute starts within a vertex
         glVertexAttribPointer(index, size, glType, normalized, stride, offset);
         glEnableVertexAttribArray(index);
     }

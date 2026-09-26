@@ -4,7 +4,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-// World exists to safely manage a concurrent hashmap of chunks
+/**
+ * The set of loaded chunks by position, safe to read and write from any thread.
+ *
+ * <p>Presence in the map says nothing about readiness. The server inserts an empty chunk before
+ * generation fills it, so readers gate on {@link Chunk#getState()}.
+ */
 public class World {
     private final ConcurrentHashMap<ChunkPos, Chunk> chunks;
 
@@ -28,10 +33,12 @@ public class World {
         return chunks.containsKey(pos);
     }
 
+    /** A live view of the map's keys; iteration is weakly consistent with concurrent edits. */
     public Set<ChunkPos> getChunkPositions() {
         return chunks.keySet();
     }
 
+    /** A live view of the map's entries; iteration is weakly consistent with concurrent edits. */
     public Set<Map.Entry<ChunkPos, Chunk>> getChunkEntries() {
         return chunks.entrySet();
     }

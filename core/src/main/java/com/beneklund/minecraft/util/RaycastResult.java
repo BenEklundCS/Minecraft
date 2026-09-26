@@ -3,8 +3,12 @@ package com.beneklund.minecraft.util;
 import com.beneklund.minecraft.block.BlockDef;
 import org.joml.Vector3i;
 
-// Carries the hit block position, the block that was struck, and which face.
-// hitBlock is only meaningful when hit is true. On a miss the ray ran past maxDistance,
-// so blockPos is the last cell it walked and hitBlock is that cell's def — air, or null
-// if the chunk isn't loaded. Check hit() before reading either.
+/**
+ * The outcome of {@link Raycast#cast}: the struck cell, its block, the face the ray entered
+ * through, and the distance along the ray.
+ *
+ * <p>Check {@link #hit()} first. On a miss the ray ran past its maximum distance, {@code blockPos}
+ * is the last cell it walked, and {@code hitBlock} is that cell's block: air, or {@code null} if
+ * the chunk isn't loaded.
+ */
 public record RaycastResult(boolean hit, Vector3i blockPos, BlockDef hitBlock, Direction hitFace, float distance) {}

@@ -6,8 +6,11 @@ import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.renderer.Camera;
 import java.util.List;
 
-// Placeholder game-logic handler — everything but EXIT is a stub that just logs. Move, look and
-// scroll are acted on in Game and Player.
+/**
+ * Placeholder action handler: {@link IInputAction.Simple#EXIT} closes the window, and every other
+ * action is logged at debug. {@code Game} and {@code Player} act on movement, look, scroll and
+ * the rest.
+ */
 public class InputHandler {
 
     private final Window window;

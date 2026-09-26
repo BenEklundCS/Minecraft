@@ -2,20 +2,22 @@ package com.beneklund.minecraft.platform.graphics;
 
 import static org.lwjgl.opengl.GL15.*;
 
-/*
- * An EBO (Element Buffer Object) - holds indices into the vertex buffer instead of
- * duplicating vertex data. If two triangles share an edge, you'd normally store those
- * two shared vertices twice in the VBO. With an EBO you store them once and reference
- * them by index.
+/**
+ * An element buffer object (EBO): indices into a VBO, so vertices shared between triangles are
+ * stored once.
  *
- * Works exactly like GlVertexArrayBuffer but binds to GL_ELEMENT_ARRAY_BUFFER instead.
- * At draw time you use glDrawElements instead of glDrawArrays - OpenGL walks the index
- * buffer and fetches the corresponding vertices from the VBO.
+ * <p>A quad is four vertices and six indices instead of six vertices. {@code glDrawElements}
+ * walks this buffer and fetches each referenced vertex from the VBO.
  *
- * The VAO remembers which EBO was bound when attribPointer was called, so binding the
- * VAO at draw time restores this relationship automatically.
+ * <p>The {@code GL_ELEMENT_ARRAY_BUFFER} binding is VAO state: binding this while a {@link
+ * GlVertexArray} is bound attaches it to that VAO, and binding the VAO later restores it.
  *
- * Lifecycle: new -> upload() once -> bind() at draw time -> delete() on shutdown.
+ * <p>Lifecycle: construct, {@link #upload} once while the owning VAO is bound, {@link #delete()}.
+ *
+ * @see <a href="https://wikis.khronos.org/opengl/Vertex_Specification#Index_buffers">OpenGL
+ *     Wiki: Index buffers</a>
+ * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDrawElements.xhtml">
+ *     glDrawElements</a>
  */
 public final class GlElementArrayBuffer implements IGlBuffer {
     private final int buffer;
@@ -24,6 +26,7 @@ public final class GlElementArrayBuffer implements IGlBuffer {
         buffer = glGenBuffers();
     }
 
+    /** Replaces the index data. Binds the buffer, so the owning VAO must already be bound. */
     public void upload(int[] indices) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW);

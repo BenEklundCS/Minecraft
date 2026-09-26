@@ -7,7 +7,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/* A client session existing on the server and all its related state */
+/**
+ * The server's view of one connected client: its link, inbox and outbox, join state, last
+ * reported position, and the set of chunks it has been sent.
+ *
+ * <p>The sent-chunk set is the server's model of the client's replica. {@link GameServer} consults
+ * it to decide what to stream, what to unload, and which edits this player gets.
+ */
 public class PlayerSession {
     private final int playerId;
     private final IClientLink link;
@@ -31,8 +37,11 @@ public class PlayerSession {
         return playerId;
     }
 
-    // Drain phase. Only moves packets off the link and into the inbox; handling them is apply's
-    // job, and doing it here would let one player's packets act before another's have arrived.
+    /**
+     * Moves every packet waiting on the link into the inbox. Handling them happens later in the
+     * tick, once every player has been drained, so one player's packets never act before another's
+     * have arrived.
+     */
     public void drainLink() {
         for (IPacket.ToServer packet : link.drain()) receive(packet);
     }
@@ -41,7 +50,7 @@ public class PlayerSession {
         receivedPackets.add(packet);
     }
 
-    // Hands over everything received and empties the inbox, so a packet is applied exactly once.
+    /** Returns everything received and empties the inbox, so each packet is applied exactly once. */
     public List<IPacket.ToServer> takeReceived() {
         List<IPacket.ToServer> taken = new ArrayList<>(receivedPackets);
         receivedPackets.clear();
@@ -68,6 +77,7 @@ public class PlayerSession {
         return state;
     }
 
+    /** The chunk containing the player's last reported position, or null before it has one. */
     public ChunkPos chunkPos() {
         return state == null ? null : ChunkPos.containing(state.x(), state.z());
     }
@@ -76,13 +86,17 @@ public class PlayerSession {
         tick = inputTick;
     }
 
-    // True the first time a chunk is offered, false every time after. Set.add already answers
-    // "was this new?", so the check and the record can't drift apart.
+    /**
+     * Records {@code pos} as sent.
+     *
+     * @return true the first time, false after; the check and the record are one {@code Set.add},
+     *     so they can't drift apart
+     */
     public boolean markChunkSent(ChunkPos pos) {
         return loadedChunks.add(pos);
     }
 
-    // True if this player had it. Set.remove answers that the same way add answers "was it new".
+    /** Forgets {@code pos}, returning true if this player had it. */
     public boolean markChunkUnloaded(ChunkPos pos) {
         return loadedChunks.remove(pos);
     }
@@ -91,7 +105,7 @@ public class PlayerSession {
         return loadedChunks.contains(pos);
     }
 
-    // A copy, so the caller can unload while iterating.
+    /** A snapshot of the sent chunks, so the caller can unload while iterating. */
     public List<ChunkPos> sentChunks() {
         return List.copyOf(loadedChunks);
     }
@@ -104,8 +118,10 @@ public class PlayerSession {
         link.close();
     }
 
-    // Flush phase. The tick goes unused until the server can send a PlayerUpdate, which needs a
-    // position the server doesn't simulate yet.
+    /**
+     * Sends everything queued this tick, in queue order. {@code tick} is reserved for a {@code
+     * PlayerUpdate} carrying the server's simulated position, which the server doesn't produce yet.
+     */
     public void flush(long tick) {
         for (IPacket.ToClient packet : outbox) link.send(packet);
         outbox.clear();

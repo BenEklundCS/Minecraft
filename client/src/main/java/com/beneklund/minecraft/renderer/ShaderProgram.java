@@ -15,6 +15,19 @@ import java.util.regex.Pattern;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
+/**
+ * A {@link GlShader} built from shader files by path, with {@code #include} expansion and hot
+ * reload.
+ *
+ * <p>Sources are read from disk under {@code src/main/resources}, resolved against the working
+ * directory, when the file exists there, and from the classpath otherwise. When the working
+ * directory holds the shader sources, a reload picks up edits without rebuilding resources.
+ *
+ * <p>A line of the form {@code #include "/shaders/lib/x.glsl"} is replaced by that file's
+ * contents, recursively to a depth of {@value #MAX_INCLUDE_DEPTH}. GLSL has no include directive of
+ * its own, so this is textual substitution before compilation; an included file must not contain
+ * its own {@code #version} line.
+ */
 public class ShaderProgram {
     private static final Path DEV_SHADER_ROOT = Path.of("src/main/resources");
     private static final Pattern INCLUDE =
@@ -25,14 +38,27 @@ public class ShaderProgram {
     private final String fragmentShaderPath;
     private GlShader shader;
 
-    // Paths must start with '/' to be resolved from the classpath root.
-    // Without the leading slash, getResourceAsStream() looks relative to this class's package.
+    /**
+     * Compiles and links the program. Paths start with {@code /}; without it, the classpath lookup
+     * resolves relative to this class's package.
+     *
+     * @throws RuntimeException if a source is missing or the program fails to compile or link
+     */
     public ShaderProgram(String vertexShaderPath, String fragmentShaderPath) {
         this.vertexShaderPath = vertexShaderPath;
         this.fragmentShaderPath = fragmentShaderPath;
         shader = new GlShader(loadSource(vertexShaderPath), loadSource(fragmentShaderPath));
     }
 
+    /**
+     * Rebuilds the program from source. On a compile or link failure the error is logged and the
+     * previous program stays in use, so a typo during live editing leaves the game running.
+     *
+     * <p>Uniform values live on the program object, so a reloaded program starts with every
+     * uniform at its default. Callers that set a uniform once must set it again.
+     *
+     * @return whether the new program replaced the old one
+     */
     public boolean reload() {
         GlShader next;
         try {
@@ -47,12 +73,15 @@ public class ShaderProgram {
         return true;
     }
 
-    // Bind first — glUniform* writes into whichever program is active, not the one this object
-    // wraps. Safe to call on every draw: GlShader's own frame guard is what makes it once.
+    /**
+     * Uploads frame uniforms; see {@link GlShader#apply}. Call {@link #bind()} first, because
+     * {@code glUniform*} writes into the active program.
+     */
     public void apply(long frame, Map<String, UniformValue<?>> uniforms) {
         shader.apply(frame, uniforms);
     }
 
+    /** One source file, unexpanded, from disk if present under the dev root, else the classpath. */
     public String readSource(String path) {
         Path onDisk = DEV_SHADER_ROOT.resolve(path.startsWith("/") ? path.substring(1) : path);
         if (Files.isRegularFile(onDisk)) {

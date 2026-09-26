@@ -2,6 +2,7 @@ package com.beneklund.minecraft.container;
 
 import com.beneklund.minecraft.util.Color;
 
+/** Window creation settings, derived from {@link ContainerConfig} and {@link LocalConfig}. */
 public record WindowConfig(
         String title, int width, int height, boolean vsync, Mode mode, Color clearColor, boolean debugEnabled) {
     public enum Mode {

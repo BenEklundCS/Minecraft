@@ -6,6 +6,30 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
 
+/**
+ * Computes a chunk's sky and block light with breadth-first flood fills, and removes block light
+ * when an emitter goes away.
+ *
+ * <p>Light levels run from 0 to 15 and drop by one per step through any non-opaque block. Sky
+ * light at level 15 falls straight down without dimming. Both channels follow the same three
+ * passes in {@link #compute}:
+ *
+ * <ol>
+ *   <li>Seed sources: every sky-visible cell at 15, or every emitting block at its {@code
+ *       lightLevel}.
+ *   <li>Seed the four seams from the neighbours' stored maps, one level down, so light from an
+ *       already-lit neighbour flows in.
+ *   <li>Flood: pop a cell, offer {@code level - 1} to each non-opaque neighbour, and enqueue any
+ *       neighbour that got brighter. A cell only ever rises, so the fill terminates.
+ * </ol>
+ *
+ * <p>{@link #compute} builds a fresh map and never writes outside the centre chunk. Light flowing
+ * the other way, from this chunk into a neighbour, arrives when that neighbour is recomputed.
+ *
+ * @see <a href="https://minecraft.wiki/w/Light">Minecraft Wiki: Light</a>
+ * @see <a href="https://0fps.net/2018/02/21/voxel-lighting/">Mikola Lysenko: Voxel lighting</a>
+ * @see <a href="https://en.wikipedia.org/wiki/Flood_fill">Flood fill</a>
+ */
 public class LightEngine {
     private final BlockRegistry registry;
 
@@ -13,6 +37,7 @@ public class LightEngine {
         this.registry = registry;
     }
 
+    /** The two light channels, which differ in storage and in whether full sky light falls freely. */
     protected enum Channel {
         SKY,
         BLOCK;
@@ -34,6 +59,11 @@ public class LightEngine {
         }
     }
 
+    /**
+     * A complete light map for {@code cn.center()}, read against its neighbours' current blocks
+     * and stored light. Touches no chunk; the caller publishes the result with {@link
+     * Chunk#setLightData}.
+     */
     public LightMap compute(ChunkWithNeighbors cn) {
         LightMap lightMap = new LightMap();
         Chunk chunk = cn.center();
@@ -58,7 +88,7 @@ public class LightEngine {
         int openColumns = open.length;
 
         for (int s = Chunk.sectionCount() - 1; s >= 0; s--) {
-            int base = s * ChunkSection.SIZE; // lowest y in this section
+            int base = s * ChunkSection.SIZE;
 
             // All air, and nothing above it has closed a single column yet, so every cell is level 15.
             // Store that as the section's uniform value: no array, no per-cell walk. Only the floor row
@@ -166,19 +196,27 @@ public class LightEngine {
         }
     }
 
-    // Removal counterpart to the flood above, and the only part of this class that works in world
-    // coordinates on already-stored LightMaps rather than building a fresh one.
-    //
-    // compute() rebuilds a chunk's map from nothing, so an emitter removed inside a chunk needs no
-    // help — the next remesh simply doesn't find it. The neighbours are the problem. seedSeam reads
-    // their stored maps, and a neighbour that was lit by this emitter isn't remeshing (the edit
-    // wasn't in it), so it keeps claiming the light and feeds it straight back over the seam, one
-    // level down. Recomputing the edited chunk alone can't win: propagateAndSet only ever raises a
-    // level, so nothing in a from-scratch pass can lower what the seam hands it.
-    //
-    // Two phases, because "dimmer than where I came from" is the only local test for "this light
-    // was mine". Walk outward zeroing those cells; a cell as bright or brighter belongs to some
-    // other emitter, so park it and let it refill the hole afterwards.
+    /**
+     * Clears the block light an emitter at world {@code (x, y, z)} cast, across chunk seams, by
+     * patching the already-published maps in place.
+     *
+     * <p>{@link #compute} rebuilds a chunk from nothing, so inside the edited chunk the emitter
+     * simply isn't found next time. The neighbours are the problem: a neighbour this emitter lit
+     * isn't being recomputed, keeps its stored light, and hands it back over the seam one level
+     * down. A from-scratch pass only ever raises levels, so it can't undo that.
+     *
+     * <p>Two phases, since "dimmer than the cell I came from" is the only local test for "this
+     * light was mine". The removal walk zeroes those cells and spreads outward. A cell as bright or
+     * brighter belongs to another emitter and is parked; the relight phase then floods from the
+     * parked cells to refill the hole.
+     *
+     * <p>Unloaded and never-lit chunks read as dark and ignore writes. Their meshes come from a
+     * full {@link #compute}, so nothing built from them can be wrong.
+     *
+     * @param removedLevel the light level the removed block emitted
+     * @see <a href="https://0fps.net/2018/02/21/voxel-lighting/">Mikola Lysenko: Voxel lighting,
+     *     light removal</a>
+     */
     public void removeBlockLight(IWorldView world, int x, int y, int z, int removedLevel) {
         Deque<LitCell> removal = new ArrayDeque<>();
         Deque<LitCell> relight = new ArrayDeque<>();
@@ -224,9 +262,6 @@ public class LightEngine {
 
     private record LitCell(int x, int y, int z, int level) {}
 
-    // A chunk that isn't loaded, or is loaded but has never been through compute(), reads as dark
-    // and swallows writes. Neither is a cell we can be wrong about: there's no mesh built from it
-    // yet, and whenever one is, it comes from a full recompute.
     private int blockLight(IWorldView world, int x, int y, int z) {
         Chunk chunk = chunkAt(world, x, z);
         if (chunk == null || !chunk.hasLight()) return LightMap.MIN_LEVEL;

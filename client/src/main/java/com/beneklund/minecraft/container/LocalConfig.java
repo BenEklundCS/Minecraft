@@ -5,9 +5,14 @@ import java.io.IOException;
 import java.util.Optional;
 import java.util.Properties;
 
-// Optional developer overrides loaded from local.properties in the working directory.
-// The file is intentionally not on the classpath — it's a per-machine dev tool, not a
-// shipped config. Missing file is normal; all getters just return Optional.empty().
+/**
+ * Per-machine developer overrides, read once from {@code local.properties} in the working
+ * directory.
+ *
+ * <p>The file lives outside the classpath and is gitignored because it is a dev tool for one
+ * machine. A missing file is the normal case: every flag reads as off, every optional as empty,
+ * and anyone without the file gets the full default pipeline.
+ */
 public class LocalConfig {
     private static final boolean DEFAULT_DEBUG_MODE = false;
     private static final int DEFAULT_DEBUG_SERVER_PORT = 8099;
@@ -17,11 +22,13 @@ public class LocalConfig {
         try (var in = new FileInputStream("local.properties")) {
             props.load(in);
         } catch (IOException ignored) {
-            // no local.properties — all settings will be absent
         }
     }
 
-    // e.g. "music/public/Kai_Engel_-_01_-_Prologue.ogg" — plays on startup if set.
+    /**
+     * {@code startup.disc}: a track to play on startup, e.g. {@code
+     * music/public/Kai_Engel_-_01_-_Prologue.ogg}.
+     */
     public Optional<String> startupDisc() {
         return Optional.ofNullable(props.getProperty("startup.disc"));
     }
@@ -30,24 +37,24 @@ public class LocalConfig {
         return Optional.ofNullable(props.getProperty("preferred.album"));
     }
 
-    /*
-     * debugserver.enabled=true turns on the debug HTTP server and the frame stream it serves.
+    /**
+     * {@code debugserver.enabled=true} starts the debug HTTP server and its frame stream.
      *
-     * Its own flag rather than "the port is set", because the two answer different questions and
-     * the server is not free: it does a glReadPixels every 100 ms whether or not a browser is
-     * connected, and glReadPixels drains the whole GL pipeline. Measured on an RTX 2070 at render
-     * distance 32, that is worth ~10 ms of p99 — invisible standing still, obvious while flying.
-     *
-     * Keeping the port in a separate key means you can switch the server off for a timing run and
-     * back on without losing the port you always use.
+     * <p>The server costs frame time: it runs a synchronous {@code glReadPixels} every 100 ms
+     * whether or not a browser is connected, which drains the GL pipeline. Measured on an RTX 2070
+     * at render distance 32, that is about 10 ms of p99 frame time, unnoticeable standing still
+     * and obvious while flying. The enable flag is separate from the port so a timing run can turn
+     * the server off without losing the configured port.
      */
     public boolean debugServerEnabled() {
         return "true".equals(props.getProperty("debugserver.enabled"));
     }
 
-    // Port for the debug server and its live frame stream. Only read when debugserver.enabled is
-    // true; a malformed or absent value falls back to the default rather than silently not
-    // starting, because "enabled" already said what was wanted.
+    /**
+     * {@code framestream.port}: the debug server's port, read only when {@link
+     * #debugServerEnabled()} is true. An absent or malformed value falls back to 8099, because the
+     * enable flag already asked for a running server.
+     */
     public int debugServerPort() {
         try {
             return Optional.ofNullable(props.getProperty("framestream.port"))
@@ -58,21 +65,24 @@ public class LocalConfig {
         }
     }
 
-    // gputimer.enabled=true turns on the per-pass GPU timers. Opt-in because a query per
-    // pass per frame is cheap but not free, and a before/after comparison wants it off.
+    /**
+     * {@code gputimer.enabled=true} turns on the per-pass GPU timers. Opt-in because a query per
+     * pass per frame has a small cost, and a before/after comparison wants it off.
+     */
     public boolean gpuTimerEnabled() {
         return "true".equals(props.getProperty("gputimer.enabled"));
     }
 
-    // shaders.simple=true strips the frame back to terrain and sky — no cast shadows, no clouds,
-    // no light shafts, no bloom, no distance haze. Opt-in and absent-means-off like the rest of
-    // this file, so the full pipeline is what anyone without a local.properties sees.
-    // GameContainer turns this into a RenderFeatures preset; the list of what that covers lives
-    // there, not here.
+    /**
+     * {@code shaders.simple=true} strips the frame back to terrain and sky. {@code GameContainer}
+     * turns it into a {@code RenderFeatures} preset, and that class lists what each flag switches
+     * off.
+     */
     public boolean simpleShaders() {
         return "true".equals(props.getProperty("shaders.simple"));
     }
 
+    /** {@code debug.enabled}: exactly {@code true} or {@code false}; anything else reads as off. */
     public boolean debugEnabled() {
         Optional<String> prop = Optional.ofNullable(props.getProperty("debug.enabled"));
         if (prop.isPresent()) {

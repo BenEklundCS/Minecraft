@@ -6,8 +6,21 @@ import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 
-// Pure view/projection calculator. Holds the eye position and look direction that
-// Player pushes in each frame; owns no simulation state of its own.
+/**
+ * Builds the view and projection matrices from an eye position and look direction that {@code
+ * Player} pushes in each frame. Holds no simulation state.
+ *
+ * <p>The view matrix is a JOML {@code lookAt} with world +Y as up. The projection is a right-handed
+ * OpenGL perspective with depth mapped to [-1, 1], vertical FOV in degrees, and the aspect ratio
+ * recomputed on every call so a resize takes effect immediately. Every getter allocates a new
+ * matrix.
+ *
+ * @see <a href="https://learnopengl.com/Getting-started/Camera">LearnOpenGL: Camera</a>
+ * @see <a href="https://learnopengl.com/Getting-started/Coordinate-Systems">LearnOpenGL: Coordinate
+ *     Systems</a>
+ * @see <a href="https://www.songho.ca/opengl/gl_projectionmatrix.html">Song Ho Ahn: OpenGL
+ *     Projection Matrix</a>
+ */
 public class Camera {
     public static final float NEAR_PLANE = 0.1f;
     public static final float FAR_PLANE = 1000.0f;
@@ -30,17 +43,16 @@ public class Camera {
         this.front.set(front);
     }
 
-    // Builds the view matrix from the eye position and look direction Player last pushed.
     public Matrix4f getViewMatrix() {
         return new Matrix4f().lookAt(position, new Vector3f(position).add(front), new Vector3f(0, 1, 0));
     }
 
-    // Standard perspective projection; aspect recalculated each call so setWindowSize() is always reflected.
     public Matrix4f getProjectionMatrix() {
         return new Matrix4f()
                 .perspective((float) Math.toRadians(fov), windowSize.x / windowSize.y, NEAR_PLANE, FAR_PLANE);
     }
 
+    /** Projection times view: world space to clip space. */
     public Matrix4f getViewProjectionMatrix() {
         return getProjectionMatrix().mul(getViewMatrix());
     }
@@ -61,9 +73,11 @@ public class Camera {
         return windowSize;
     }
 
-    // The eye position the view matrix was built from. chunk.frag needs the camera's height to
-    // work out how much air a view ray passes through, and a height is cheaper to hand it than
-    // a world-space position varying on every vertex.
+    /**
+     * The eye position the view matrix was built from. {@code chunk.frag} uses its height to work
+     * out how much air a view ray passes through, which is cheaper than a world-space position
+     * varying on every vertex.
+     */
     public Vector3f getPosition() {
         return position;
     }

@@ -2,6 +2,13 @@ package com.beneklund.minecraft.block;
 
 import java.util.Map;
 
+/**
+ * Maps each {@link Block} to its {@link BlockDef}. Constructor-injected everywhere it is read;
+ * {@link #createDefault()} is the game's content table.
+ *
+ * <p>Meshing and lighting read it from worker threads without locks; the default table is an
+ * immutable {@code Map.ofEntries}, and nothing writes to a registry after construction.
+ */
 public class BlockRegistry {
     private final Map<Block, BlockDef> blockDefs;
 
@@ -9,14 +16,17 @@ public class BlockRegistry {
         this.blockDefs = blockDefs;
     }
 
-    // Falls back to AIR so an unregistered block renders as invisible rather than NPE-ing
-    // in a worker thread where the stack trace would be hard to trace back to the bad block.
+    /**
+     * The definition for {@code block}, or AIR's for an unregistered one. An unregistered block then
+     * renders invisible, where a {@code null} would throw on a worker thread far from the missing
+     * entry.
+     */
     public BlockDef get(Block block) {
         return blockDefs.getOrDefault(block, blockDefs.get(Block.AIR));
     }
 
+    /** Every block the game ships. Tile names are faces up, down, north, south, east, west. */
     public static BlockRegistry createDefault() {
-        // face order: up, down, north, south, east, west
         return new BlockRegistry(Map.<Block, BlockDef>ofEntries(
                 Map.entry(
                         Block.AIR,
@@ -60,7 +70,7 @@ public class BlockRegistry {
                                 "oak_log_side",
                                 "oak_log_side",
                                 "oak_log_side")),
-                // leaves are solid (you collide with them) but transparent, so isOpaque() is false
+                // leaves are solid (you collide with them) but transparent, so opaque() is false
                 // and face culling against them still emits the neighbour face
                 Map.entry(
                         Block.OAK_LEAF,

@@ -1,47 +1,45 @@
 package com.beneklund.minecraft.util;
 
-/*
- * The main thread's frame, cut into named regions.
+/**
+ * The main thread's frame, cut into named, sequential regions for CPU timing.
  *
- * There are GPU timers per render pass and there is a frame-time ring buffer, and between them
- * they answer "how long was the frame" and "how much of it was the GPU". Neither answers the
- * question that matters when those two disagree: the frame is 25 ms, the GPU did 5 ms of it, so
- * where did the other 20 go. That gap is what this measures.
+ * <p>The GPU pass timers and the frame-time ring buffer say how long a frame took and how much of
+ * it the GPU spent. These regions account for the rest: a 25 ms frame with 5 ms of GPU work has 20
+ * ms to find here.
  *
- * Flat and sequential on purpose, exactly like the GPU pass timers. A region ends before the next
- * begins, so the parts sum to something close to the frame and a missing region shows up as a
- * shortfall rather than hiding inside a parent. SWAP is last and absorbs whatever the driver makes
- * us wait for, which is the one region that is not really CPU work — it is the CPU standing still,
- * and telling those apart is the whole point.
+ * <p>Regions are flat, like the GPU pass timers. Each ends before the next begins, so the parts sum
+ * to roughly the frame and an unmeasured stretch shows as a shortfall. {@link #SWAP} is last and
+ * holds the time the CPU spends waiting on the driver, which separates idle from work.
  */
 public enum CpuPhase {
-    /** `processInput` — drain the queue, map to actions, run them, raycast the targeted block. */
+    /** {@code processInput}: drain the input queue, map to actions, run them, raycast the target. */
     INPUT,
 
-    /** `processPhysics` — the fixed-step loop and the camera sync. */
+    /** {@code processPhysics}: the fixed-step loop and the camera sync. */
     PHYSICS,
 
     /**
-     * `processChunks` — draining the upload queue and creating GL buffers, plus `ChunkManager.tick`
-     * if that is still on the main thread. The prime suspect for the standing-still-to-flying gap.
+     * {@code processChunks}: server packets, mesh uploads and GL buffer creation, and unloaded
+     * chunks' buffer deletes. Near zero standing still and large while flying, which is the gap
+     * this instrument exists to size.
      */
     CHUNKS,
 
-    /** `drawScene` — collecting every renderable's draw calls, then the shadow, cloud and scene passes. */
+    /** {@code drawScene}: collect every renderable's draw calls, then the shadow, cloud and scene passes. */
     SCENE,
 
-    /** `PostProcessor.draw` — the CPU cost of issuing it, not the GPU cost of running it. */
+    /** {@code PostProcessor.draw}: the CPU cost of issuing the post passes. The GPU cost is timed separately. */
     POST,
 
-    /** `drawHud`. */
+    /** {@code drawHud}. */
     HUD,
 
-    /** `glReadPixels` plus the copy handed to the encoder. Zero unless a viewer is watching. */
+    /** {@code glReadPixels} plus the copy handed to the encoder. Zero unless a viewer is watching. */
     CAPTURE,
 
     /**
-     * `glfwSwapBuffers`. Mostly the CPU waiting for the GPU or for vsync, so a large SWAP with
-     * small everything else means the frame is GPU-bound and the CPU had nothing to do.
+     * {@code glfwSwapBuffers}. Mostly the CPU waiting for the GPU or for vsync, so a large SWAP
+     * with everything else small means the frame is GPU-bound.
      */
     SWAP;
 

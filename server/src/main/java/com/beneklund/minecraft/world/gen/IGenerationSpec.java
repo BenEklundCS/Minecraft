@@ -3,13 +3,24 @@ package com.beneklund.minecraft.world.gen;
 import com.beneklund.minecraft.block.Block;
 import java.util.List;
 
+/**
+ * Data that parameterises {@link WorldGenerator}: noise layers, ores, trees, caves and the two
+ * climate fields biomes are chosen from.
+ *
+ * <p>The interface is sealed so {@code WorldGenerator}'s constructor can sort a flat list of specs
+ * by type. {@link #DEFAULT_WORLD_GENERATION} is the shipped world.
+ */
 public sealed interface IGenerationSpec {
     int BIOME_OCTAVES = 3;
 
-    // Temperature varies over continental distances, humidity over the distance to water.
-    // Ratio 0.00090 / 0.00035 = 2.57, deliberately not 2 or 4: integer ratios stack the two
-    // fields' octaves on top of each other and the coincidences read as grid structure.
+    /**
+     * Temperature varies over continental distances, humidity over roughly the distance to water.
+     * The ratio {@code HUMIDITY_SCALE / TEMPERATURE_SCALE} is about 2.58, deliberately far from an
+     * integer: an integer ratio lines the two fields' octaves up on each other, and the
+     * coincidences read as grid structure in the biome map.
+     */
     double TEMPERATURE_SCALE = 0.00012; // ~8300 block features
+
     double HUMIDITY_SCALE = 0.00031; // ~3200 block features
 
     List<IGenerationSpec> DEFAULT_WORLD_GENERATION = List.of(
@@ -24,22 +35,33 @@ public sealed interface IGenerationSpec {
             new BiomeSpec(BIOME_OCTAVES, TEMPERATURE_SCALE, 0.5, 300), // temperature
             new BiomeSpec(BIOME_OCTAVES, HUMIDITY_SCALE, 0.5, 700)); // humidity
 
-    // Component type — used inside NoiseLayersSpec, not a spec on its own.
+    /**
+     * One fBm layer of the height field, a component of {@link NoiseLayersSpec}. The sampled value
+     * is multiplied by {@code weight}; {@code ridged} passes it through {@link NoiseHelper#ridge}.
+     */
     record NoiseLayerSpec(
             int octaves, double scale, double persistence, double weight, long seedOffset, boolean ridged) {}
 
-    // The three terrain-blend layers, named so their roles are unambiguous at the call site.
+    /** The three weighted layers summed into the height field, named by role. */
     record NoiseLayersSpec(NoiseLayerSpec continental, NoiseLayerSpec erosion, NoiseLayerSpec detail)
             implements IGenerationSpec {}
 
+    /** Replaces stone with {@code blockId} at each y in [{@code minY}, {@code maxY}] with probability {@code chance}. */
     record OreSpec(Block blockId, int minY, int maxY, float chance) implements IGenerationSpec {}
 
+    /**
+     * Places a tree on a grass column above sea level with probability {@code spawnChance}, when
+     * at least {@code minHeadroom} blocks remain below the world ceiling.
+     */
     record TreeSpec(float spawnChance, int minHeadroom) implements IGenerationSpec {}
 
+    /** Carves air wherever 3D fBm exceeds {@code threshold}, from {@code minY} up; lower thresholds mean more cave. */
     record CaveSpec(double threshold, int octaves, double scale, double persistence, int minY, long seedOffset)
             implements IGenerationSpec {}
 
-    // Controls the low-frequency noise that selects biomes. Kept separate from
-    // NoiseLayerSpec because biome noise isn't weighted or blended — it's a single sample.
+    /**
+     * One climate field biomes are selected from: the first is temperature, the second humidity.
+     * A single unweighted fBm sample, so it carries no weight or ridge flag.
+     */
     record BiomeSpec(int octaves, double scale, double persistence, long seedOffset) implements IGenerationSpec {}
 }

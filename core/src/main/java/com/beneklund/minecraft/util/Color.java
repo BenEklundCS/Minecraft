@@ -3,6 +3,7 @@ package com.beneklund.minecraft.util;
 import org.joml.Math;
 import org.joml.Vector3f;
 
+/** A linear RGBA colour with {@code float} channels, plus the named colours the game uses. */
 public record Color(float red, float green, float blue, float alpha) {
     public static final Color SKY = new Color(0.53f, 0.81f, 0.98f, 1.0f);
     public static final Color BLACK = new Color(0.0f, 0.0f, 0.0f, 1.0f);
@@ -21,6 +22,7 @@ public record Color(float red, float green, float blue, float alpha) {
         return new Vector3f(red, green, blue);
     }
 
+    /** Channel-wise linear interpolation, alpha included: {@code a} at {@code t = 0}. */
     public static Color lerp(Color a, Color b, double t) {
         return new Color(
                 (float) Math.lerp(a.red(), b.red(), t),
@@ -29,6 +31,7 @@ public record Color(float red, float green, float blue, float alpha) {
                 (float) Math.lerp(a.alpha(), b.alpha(), t));
     }
 
+    /** Multiplies RGB by {@code factor} and keeps alpha. */
     public Color scale(float factor) {
         return new Color(red * factor, green * factor, blue * factor, alpha);
     }

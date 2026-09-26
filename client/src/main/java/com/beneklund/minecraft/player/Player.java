@@ -16,8 +16,17 @@ import java.util.List;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
-// The local player entity. Owns world position, orientation, and the fly-mode toggle; Physics
-// does the moving, through IPhysicsBody.
+/**
+ * The local player: position, orientation, hotbar and fly mode, driven by this frame's input
+ * actions.
+ *
+ * <p>{@link #tick} turns actions into a desired velocity, a look change, a jump and block edits.
+ * {@code Physics} integrates that velocity and resolves collisions through {@link IPhysicsBody},
+ * then the game loop calls {@link #syncCamera()} with the settled position.
+ *
+ * <p>Block edits go through {@link IWorldAuthority}. On the client that is {@code
+ * ClientWorldAuthority}, which forwards them to the server.
+ */
 public class Player implements IPhysicsBody {
     private static final float MAX_PITCH = 89.0f;
     // Scales raw mouse pixel delta to degrees of look. Player owns this since it decodes LookActions.
@@ -28,7 +37,7 @@ public class Player implements IPhysicsBody {
     // Eye sits above the feet (position). Matches Minecraft's 1.62 eye height.
     public static final float EYE_HEIGHT = 1.62f;
 
-    private static final long DOUBLE_TAP_NANOS = 300_000_000L; // 300ms window
+    private static final long DOUBLE_TAP_NANOS = 300_000_000L;
     private static final float FLY_SPEED = 50.0f;
 
     private boolean flyMode = false;
@@ -115,7 +124,10 @@ public class Player implements IPhysicsBody {
         return ChunkPos.containing(position.x, position.z);
     }
 
-    // Spherical -> cartesian from yaw/pitch. Yaw=0 faces +Z; yaw grows clockwise.
+    /**
+     * The unit view vector from yaw and pitch, spherical to Cartesian. Yaw 0 faces +Z and yaw 90
+     * faces +X; positive pitch looks up.
+     */
     public Vector3f getLookDirection() {
         double y = Math.toRadians(yaw);
         double p = Math.toRadians(pitch);
@@ -124,14 +136,21 @@ public class Player implements IPhysicsBody {
                 .normalize();
     }
 
-    // Right vector for strafing: cross(look, up), normalized.
+    /** The horizontal strafe axis, {@code normalize(look x up)}. */
     public Vector3f getRight() {
         return getLookDirection().cross(new Vector3f(0, 1, 0)).normalize();
     }
 
-    // Consume this frame's input: turn movement keys into a horizontal velocity, apply
-    // look, and trigger a jump. Physics integrates this velocity and resolves collisions;
-    // syncCamera() runs afterward (in the game loop) once the new position is settled.
+    /**
+     * Consumes one frame of input actions.
+     *
+     * <p>Raycasts from the eye for the targeted block first, so break and place act on what the
+     * crosshair showed. Movement sets horizontal velocity only; vertical velocity changes on a
+     * grounded jump or, in fly mode, from jump and sneak. A second jump press within 300 ms of the
+     * last toggles fly mode.
+     *
+     * @return one {@link Interaction} per break or place action, carrying the ray that produced it
+     */
     public List<Interaction> tick(List<IInputAction> actions) {
         Vector3f wish = new Vector3f(); // desired horizontal heading in world space
         boolean jumpHeld = false;
@@ -170,7 +189,6 @@ public class Player implements IPhysicsBody {
                         hotbar.scroll(delta > 0 ? 1 : -1);
                     }
                 }
-                // Number keys jump straight to a slot.
                 case IInputAction.HotbarAction.Select(int slot) -> {
                     hotbar.select(slot);
                 }
@@ -190,19 +208,16 @@ public class Player implements IPhysicsBody {
         }
         wasJumpHeld = jumpHeld;
 
-        // Horizontal velocity — faster in fly mode.
         float hSpeed = flyMode ? FLY_SPEED : movementSpeed;
         if (wish.lengthSquared() > 0) wish.normalize().mul(hSpeed);
         velocity.x = wish.x;
         velocity.z = wish.z;
 
         if (flyMode) {
-            // Space = ascend, shift = descend, neither = hover.
             if (jumpHeld) velocity.y = FLY_SPEED;
             else if (sneakHeld) velocity.y = -FLY_SPEED;
             else velocity.y = 0;
         } else {
-            // Normal mode: jump when grounded.
             if (jumpHeld && isOnGround) velocity.y = jumpVelocity;
         }
 
@@ -213,14 +228,18 @@ public class Player implements IPhysicsBody {
         return flyMode;
     }
 
-    // Apply mouse delta in degrees. -dy so mouse-up looks up; clamp pitch short of vertical.
+    /**
+     * Turns by a mouse delta in degrees. Both axes are subtracted because screen y grows downward,
+     * so moving the mouse up looks up. Pitch clamps at 89 degrees, since at 90 the look vector is
+     * parallel to up and {@link #getRight()} degenerates to zero.
+     */
     public void look(float dxDegrees, float dyDegrees) {
         yaw -= dxDegrees;
         pitch -= dyDegrees;
         pitch = Math.clamp(pitch, -MAX_PITCH, MAX_PITCH);
     }
 
-    // Push the eye position and look direction into the camera. Call after movement each frame.
+    /** Moves the camera to the eye position and look direction. Call once physics has settled. */
     public void syncCamera() {
         camera.setPosition(new Vector3f(position).add(0, EYE_HEIGHT, 0));
         camera.setFront(getLookDirection());

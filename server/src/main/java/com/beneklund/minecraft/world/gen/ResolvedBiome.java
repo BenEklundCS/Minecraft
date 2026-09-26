@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.world.gen;
 
-// Pairs the dominant Biome enum (used for block-type decisions) with blended TerrainProfile
-// (used for terrain height math). The dominant biome is whichever of the two neighbouring
-// biomes the noise sample falls closest to.
+/**
+ * The biome at one column: the nearest {@link Biome} in climate space, used for block choices,
+ * and a {@link TerrainProfile} blended between the nearest two, used for height and tint.
+ */
 record ResolvedBiome(Biome type, TerrainProfile data) {}

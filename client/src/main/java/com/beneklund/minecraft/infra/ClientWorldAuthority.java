@@ -13,7 +13,14 @@ import com.beneklund.minecraft.world.IWorldAuthority;
 import com.beneklund.minecraft.world.World;
 import java.util.List;
 
-// Reads the replica; writes go to the server and show up when BlockChanged comes back.
+/**
+ * The client side of {@link IWorldAuthority}: reads come from the local replica, writes go to the
+ * server as {@code BlockEdit} packets.
+ *
+ * <p>An edit takes effect when the server echoes it back as {@code BlockChanged} and {@code
+ * ClientChunkManager} applies it, so the replica only ever holds server-confirmed state. Reads
+ * outside the loaded replica or the world's height return air.
+ */
 public class ClientWorldAuthority implements IWorldAuthority {
     private final World world;
     private final BlockRegistry registry;
@@ -33,13 +40,13 @@ public class ClientWorldAuthority implements IWorldAuthority {
         return registry.get(chunk.getBlock(Math.floorMod(x, Chunk.SIZE_XZ), y, Math.floorMod(z, Chunk.SIZE_XZ)));
     }
 
-    // tick 0: GameServer doesn't read it yet.
+    /** Sends the edit to the server. The tick field is 0 because {@code GameServer} ignores it. */
     @Override
     public void setBlock(int x, int y, int z, Block block) {
         serverLink.send(new IPacket.ToServer.BlockEdit(0, x, y, z, block, block == Block.AIR));
     }
 
-    // ClientChunkManager remeshes when the change arrives.
+    /** No-op: {@code ClientChunkManager} marks neighbours when the confirmed change arrives. */
     @Override
     public void markNeighborsDirty(ChunkPos pos) {}
 

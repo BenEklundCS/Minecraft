@@ -6,21 +6,33 @@ import com.beneklund.minecraft.world.IWorldView;
 import org.joml.Vector3f;
 import org.joml.Vector3i;
 
-// Applies gravity, integrates velocity, and resolves AABB collisions against
-// solid blocks. Operates on IPhysicsBody so it isn't tied to Player alone.
-//
-// Tuning baseline — start here, then playtest by feel:
-//   gravity        32.0 m/s²   downward acceleration
-//   jump velocity   9.0 m/s    → ~1.2 blocks of air time (lives in Player)
-//   walk speed      4.3 m/s    horizontal (lives in PlayerConfig)
-//
-// Collision is resolved one axis at a time (X, then Z, then Y). Doing the axes
-// separately is what lets you slide along a wall instead of sticking to it: a
-// diagonal move into a wall blocks one axis but the other still goes through.
+/**
+ * Moves an {@link IPhysicsBody} one fixed step: gravity, velocity integration, and collision
+ * against solid blocks.
+ *
+ * <p>Collision is discrete and per axis, in the order X, Z, Y. Each axis moves the body by {@code
+ * velocity * dt}, then checks every cell its {@link AABB} overlaps; if any is solid, the body snaps
+ * flush against the first solid cell in the direction of travel and that axis's velocity is zeroed.
+ * Axes are resolved separately so a diagonal move into a wall stops on one axis and slides along
+ * the other. Landing on Y is what sets {@link IPhysicsBody#setOnGround}.
+ *
+ * <p>The check samples the end position, so a body moving more than a block per step could pass
+ * through a one-block wall. {@code TERMINAL_VELOCITY} of 40 blocks/s at the 60 Hz {@code
+ * FixedTimestep} moves at most 0.67 blocks per step on Y.
+ *
+ * <p>Units are blocks and seconds. Jump peak height is {@code v * v / (2 * GRAVITY)}; the jump
+ * velocity and walk speed live in {@code PlayerConfig}.
+ *
+ * <p>Fly mode integrates velocity with no gravity and no collision.
+ *
+ * @see <a href="https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection">
+ *     MDN: 3D collision detection</a>
+ */
 public class Physics {
     private static final float GRAVITY = 32.0f;
     private static final float TERMINAL_VELOCITY = 40.0f;
 
+    /** Advances {@code body} by {@code dt} seconds, with collision unless {@code flying}. */
     public void update(IPhysicsBody body, IWorldView world, float dt, boolean flying) {
         if (flying) {
             fly(body, dt);
@@ -49,7 +61,7 @@ public class Physics {
     private void resolveX(IPhysicsBody body, IWorldView world, float dt) {
         Vector3f position = body.getPosition();
         Vector3f velocity = body.getVelocity();
-        position.x += velocity.x * dt; // tentatively move, then push back out of anything solid
+        position.x += velocity.x * dt;
 
         AABB box = body.getBoundingBox();
         float halfWidth = (box.maxX() - box.minX()) / 2f; // position sits at the horizontal center

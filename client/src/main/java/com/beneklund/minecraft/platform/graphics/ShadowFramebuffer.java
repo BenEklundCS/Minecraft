@@ -4,7 +4,26 @@ import static org.lwjgl.opengl.GL30.*;
 
 import java.nio.ByteBuffer;
 
-// A depth-only framebuffer, for rendering the scene from the sun's point of view.
+/**
+ * The depth-only render target for cascaded shadow maps: one square {@code GL_DEPTH_COMPONENT24}
+ * array texture, one layer per cascade.
+ *
+ * <p>Each cascade renders the scene from the sun into its own layer via {@link #bindLayer}. The
+ * terrain shader then samples the whole stack through one {@code sampler2DArray}, picking the
+ * layer per fragment by view distance.
+ *
+ * <p>Its size is a quality setting independent of the window, so there is no resize. It has no
+ * colour attachment; draw and read buffers are {@code GL_NONE}, which is what makes a depth-only
+ * framebuffer complete.
+ *
+ * @see <a href="https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping">LearnOpenGL:
+ *     Shadow Mapping</a>
+ * @see <a href="https://learnopengl.com/Guest-Articles/2021/CSM">LearnOpenGL: Cascaded Shadow
+ *     Mapping</a>
+ * @see <a href="https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps">
+ *     Microsoft: Cascaded Shadow Maps</a>
+ * @see <a href="https://wikis.khronos.org/opengl/Array_Texture">OpenGL Wiki: Array Texture</a>
+ */
 public class ShadowFramebuffer {
     private final int fbo;
     private final int depthTexture;
@@ -69,10 +88,12 @@ public class ShadowFramebuffer {
         validate();
     }
 
-    /*
-     * Point the depth attachment at one cascade's layer. Callers must clear GL_DEPTH_BUFFER_BIT
-     * after this — there is no colour buffer to clear, and the clear applies to whichever layer is
-     * attached right now, so attaching and clearing cannot be reordered.
+    /**
+     * Binds this framebuffer with its depth attachment on {@code layer} and sets the viewport to
+     * the map size.
+     *
+     * <p>The caller clears {@code GL_DEPTH_BUFFER_BIT} after this call. A clear applies to the layer
+     * attached at that moment, so clearing first would wipe the previous cascade.
      */
     public void bindLayer(int layer) {
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -89,7 +110,7 @@ public class ShadowFramebuffer {
         glDeleteTextures(depthTexture);
     }
 
-    // Bind this to a texture unit and hand the unit number to the shader's sampler.
+    /** The array texture name, for binding to {@code GL_TEXTURE_2D_ARRAY} on a texture unit. */
     public int depthTexture() {
         return depthTexture;
     }
@@ -98,8 +119,6 @@ public class ShadowFramebuffer {
         return size;
     }
 
-    // No resize(). The shadow map's resolution is a quality setting, not a function of the
-    // window — GlFramebuffer resizes because it is screen-sized and this is not.
     private void validate() {
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);

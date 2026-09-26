@@ -1,8 +1,8 @@
 package com.beneklund.minecraft.world;
 
+/** A chunk's column coordinate: world block coordinates divided by 16, rounded down. */
 public record ChunkPos(int x, int z) {
-    // Chunk-space step. Note this is not the same as offsetting world coordinates — one step
-    // here is a whole chunk.
+    /** The chunk {@code dx} chunks east and {@code dz} chunks south; one step is 16 blocks. */
     public ChunkPos offset(int dx, int dz) {
         return new ChunkPos(x + dx, z + dz);
     }

@@ -8,11 +8,21 @@ import java.util.Collection;
 import java.util.HashMap;
 import org.joml.Matrix4f;
 
-// Main-thread-only store of uploaded chunk meshes. Workers never touch this —
-// ChunkMesh creation and deletion must happen on the GL thread.
+/**
+ * The uploaded chunk meshes, keyed by chunk position. Main thread only, because creating and
+ * deleting a {@link ChunkMesh} are GL calls; meshing workers hand their output to {@code
+ * ClientChunkManager}'s upload queue and never reach this class.
+ *
+ * <p>Each entry carries its model matrix and world-space bounds, computed once at upload, so the
+ * renderer translates and frustum-culls a chunk without recomputing either per frame. {@link
+ * #version()} counts every add, replace and remove, which lets the shadow pass reuse a cascade
+ * when nothing it could see has changed.
+ */
 public class RenderWorld {
-    // opaqueMesh / transparentMesh may be null when a chunk has no geometry of that kind
-    // (e.g. an all-stone chunk has no transparent mesh; an all-air chunk has neither).
+    /**
+     * One chunk's GPU meshes. Either mesh is {@code null} when the chunk has no geometry of that
+     * kind: an all-stone chunk has no transparent mesh, an all-air chunk has neither.
+     */
     public record Entry(ChunkMesh opaqueMesh, ChunkMesh transparentMesh, Matrix4f model, AABB bounds) {
         public void delete() {
             if (opaqueMesh != null) opaqueMesh.delete();
@@ -22,17 +32,17 @@ public class RenderWorld {
 
     private final HashMap<ChunkPos, Entry> meshes = new HashMap<>();
 
-    /*
-     * Bumped whenever the set of meshes changes. Lets a consumer tell "the world is exactly as I
-     * last saw it" from "something moved", without diffing the map.
+    /**
+     * Bumped whenever the set of meshes changes, so a consumer can tell "exactly as I last saw it"
+     * from "something moved" without diffing the map.
      *
-     * The shadow pass uses it to skip redrawing a cascade whose contents cannot have changed. That
-     * is only sound if every mutation is counted here — miss one and a cascade keeps showing
-     * terrain that is no longer there, which reads as a shadow with no caster.
+     * <p>The shadow pass skips redrawing a cascade whose contents can't have changed. That is only
+     * sound if every mutation bumps this: miss one and a cascade keeps showing terrain that is gone,
+     * which reads as a shadow with no caster.
      */
     private int version;
 
-    // Computes and stores the model matrix and bounds once at upload time.
+    /** Stores a chunk's meshes, deleting any meshes they replace. */
     public void add(ChunkPos pos, ChunkMesh opaqueMesh, ChunkMesh transparentMesh) {
         float x = pos.x() * Chunk.SIZE_XZ;
         float z = pos.z() * Chunk.SIZE_XZ;
@@ -49,7 +59,7 @@ public class RenderWorld {
         version++;
     }
 
-    // Removes and returns the entry so the caller can delete its GL buffers.
+    /** Removes and returns the entry, or {@code null}; the caller deletes its meshes. */
     public Entry remove(ChunkPos pos) {
         Entry removed = meshes.remove(pos);
         if (removed != null) version++;
@@ -60,7 +70,7 @@ public class RenderWorld {
         return meshes.values();
     }
 
-    // Changes whenever a mesh is added, replaced or removed. See the field.
+    /** Changes whenever a mesh is added, replaced or removed. See the field for the invariant. */
     public int version() {
         return version;
     }

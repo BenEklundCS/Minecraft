@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.entity;
 
-// Base entity — holds position/state shared by all in-world objects.
-// Behaviour is delegated to EntityStrategy so this class stays data-only.
+/**
+ * Placeholder for in-world objects other than the player. Empty today; the intended shape is data
+ * only, with behaviour supplied by an {@link IEntityStrategy}.
+ */
 public class Entity {}

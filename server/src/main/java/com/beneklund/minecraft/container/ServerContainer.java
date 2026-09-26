@@ -26,8 +26,14 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-// Server composition root. No GL, so the whole graph is built in the constructor. Clients reach it
-// only through links; nothing it builds is handed out.
+/**
+ * The server's composition root: builds the world, generator, chunk manager and {@link GameServer},
+ * and runs the tick thread.
+ *
+ * <p>The server touches no GL, so the whole object graph is built in the constructor. Clients
+ * reach it only through {@link IClientLink}s passed to {@link #accept}; nothing it builds is handed
+ * out.
+ */
 public class ServerContainer {
     private static final int TICKS_PER_SECOND = 20;
     private static final long NANOS_PER_TICK = 1_000_000_000L / TICKS_PER_SECOND;
@@ -63,12 +69,18 @@ public class ServerContainer {
         WORLD.debug("server world ready: {} generation spec(s), seed {}", generationSpecs.size(), cfg.seed());
     }
 
-    // Before start(): GameServer's player list isn't thread-safe.
+    /**
+     * Connects a client. Call before {@link #start()}, because {@link GameServer}'s player list is
+     * owned by the tick thread and isn't thread-safe.
+     *
+     * @throws IllegalStateException if the tick thread has started
+     */
     public void accept(IClientLink client) {
         if (tickThread != null) throw new IllegalStateException("accept() after start()");
         server.accept(client);
     }
 
+    /** Starts the {@code server-tick} daemon thread at 20 Hz. */
     public void start() {
         running = true;
         tickThread = new Thread(this::tickLoop, "server-tick");
@@ -77,7 +89,11 @@ public class ServerContainer {
         LOGGER.info("server ticking at {} Hz", TICKS_PER_SECOND);
     }
 
-    // Fixed rate; an overrun starts the next tick immediately rather than bursting to catch up.
+    /**
+     * Ticks at a fixed rate against an absolute deadline, so sleep jitter doesn't accumulate. A
+     * tick that overruns resets the deadline to now, and the next tick starts immediately with no
+     * burst of catch-up ticks.
+     */
     private void tickLoop() {
         long nextTick = System.nanoTime();
         try {
@@ -98,8 +114,12 @@ public class ServerContainer {
         }
     }
 
-    // Tick thread, one last tick for anything a client sent on its way out, players, generation,
-    // then chunks — a running generate() can dirty a saved chunk.
+    /**
+     * Stops the server and saves everything, in this order: join the tick thread, run one last
+     * tick for anything a client sent on its way out, save connected players, drain generation,
+     * then flush dirty chunks. Generation drains before the flush because a running generation job
+     * can dirty a chunk the flush already saved.
+     */
     public void stop() {
         long startedAt = System.nanoTime();
         long timeout = cfg.shutdownTimeoutSeconds();
@@ -121,8 +141,10 @@ public class ServerContainer {
         LOGGER.info("server stopped in {} ms", (System.nanoTime() - startedAt) / 1_000_000);
     }
 
-    // Saved position, or standing on the surface at the configured column — spawning in the air
-    // used to tunnel the player through the ground.
+    /**
+     * The saved player position, or else one block above the surface at the configured spawn
+     * column. Spawning at a fixed height in the air used to tunnel the player through the ground.
+     */
     private PlayerState spawn(IPlayerStore playerStore) {
         PlayerState saved = playerStore.load().orElse(null);
         PlayerState spawn = saved != null
@@ -138,7 +160,10 @@ public class ServerContainer {
         return spawn;
     }
 
-    // Highest solid block in a column. Bedrock at y=0 means it always finds one.
+    /**
+     * The y of the highest solid block in a column, found by generating that column's chunk into a
+     * throwaway {@link Chunk}. Bedrock at y=0 means a solid block always exists.
+     */
     private int surfaceHeight(int worldX, int worldZ) {
         Chunk chunk = new Chunk();
         worldGen.generate(ChunkPos.containing(worldX, worldZ), cfg.seed(), chunk);

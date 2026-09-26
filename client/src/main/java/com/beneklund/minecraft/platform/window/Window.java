@@ -24,27 +24,36 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GLUtil;
 import org.lwjgl.system.MemoryStack;
 
-/*
- * Owns the OS window, the OpenGL context, and the game loop boundary (beginFrame/endFrame).
- * Everything GLFW-related is confined here - nothing else in the codebase calls glfwInit
- * or touches a window handle.
+/**
+ * The OS window, its OpenGL context, and the frame boundary ({@link #beginFrame()}, {@link
+ * #endFrame()}). The only class that calls GLFW.
  *
- * The window handle is a long because GLFW is a C library. NULL (0L) means no window.
- * GLFW_CORE_PROFILE disables the old OpenGL compatibility features we don't want -
- * if you accidentally use a deprecated API, you get an error instead of silent garbage.
+ * <p>{@link #init()} runs in three steps, and nothing may touch GL before it returns:
  *
- * The window starts hidden (GLFW_VISIBLE = false) so it doesn't flash on screen while
- * we're still setting up. glfwShowWindow() reveals it only after everything is ready.
+ * <ol>
+ *   <li>Creates the window with hints for an OpenGL 3.3 core profile context. Core drops the
+ *       fixed-function and other deprecated API, so every draw goes through shaders, VAOs and
+ *       buffers. The window is created hidden, sized for the {@link WindowConfig.Mode},
+ *       centred on the primary monitor, then shown. The cursor is disabled, which hides it and
+ *       reports unbounded virtual positions for mouse look.
+ *   <li>Makes the context current on the calling thread, which becomes the only thread allowed
+ *       to call GL. {@code GL.createCapabilities()} then loads the function pointers the driver
+ *       supports; LWJGL can't call any GL function before it. With {@code debugEnabled}, LWJGL's
+ *       debug message callback prints driver messages as they happen. Depth testing ({@code
+ *       GL_LEQUAL}) and back-face culling are enabled once here.
+ *   <li>Routes key, mouse button, cursor and scroll callbacks into the {@link InputEventQueue},
+ *       and framebuffer resizes to the {@link IResizeListener}s.
+ * </ol>
  *
- * GL.createCapabilities() is the LWJGL handshake - it reads what the driver supports
- * and makes the corresponding GL functions available. Nothing GL-related works before this.
+ * <p>The context is double-buffered: the frame draws into the back buffer, and {@link #endFrame()}
+ * swaps it to the screen whole. Swap interval 1 when {@code vsync} is set waits for vertical
+ * blank; 0 swaps immediately.
  *
- * GLUtil.setupDebugMessageCallback() hooks into the GL debug extension. Without it,
- * bad GL calls silently return error codes. With it, every GL error prints immediately
- * with a full description.
- *
- * Double buffering: the game draws into a back buffer each frame. glfwSwapBuffers()
- * flips it to the screen atomically - the player never sees a half-drawn frame.
+ * @see <a href="https://www.glfw.org/docs/latest/window_guide.html">GLFW: Window guide</a>
+ * @see <a href="https://www.glfw.org/docs/latest/context_guide.html">GLFW: Context guide</a>
+ * @see <a href="https://www.glfw.org/docs/latest/input_guide.html#cursor_mode">GLFW: Cursor
+ *     mode</a>
+ * @see <a href="https://www.lwjgl.org/guide">LWJGL: Getting started</a>
  */
 public class Window {
     private long window;
@@ -73,14 +82,23 @@ public class Window {
         glfwSetWindowShouldClose(window, true);
     }
 
+    /**
+     * Processes pending OS events. Every input and resize callback runs inside this call, on the
+     * calling thread.
+     *
+     * @see <a href="https://www.glfw.org/docs/latest/input_guide.html#events">GLFW: Event
+     *     processing</a>
+     */
     public void pollEvents() {
         glfwPollEvents();
     }
 
+    /** Clears colour and depth of the bound framebuffer. */
     public void beginFrame() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
+    /** Swaps the back buffer to the screen, blocking for vertical blank when vsync is on. */
     public void endFrame() {
         glfwSwapBuffers(window);
     }
@@ -97,12 +115,15 @@ public class Window {
         return height;
     }
 
-    // Register interest in framebuffer resizes. Window never learns who's listening - the
-    // composition root decides (e.g. the Camera, so its aspect ratio tracks the window).
+    /**
+     * Adds a framebuffer resize listener. The composition root decides who listens, e.g. the
+     * camera so its aspect ratio tracks the window.
+     */
     public void addResizeListener(IResizeListener listener) {
         resizeListeners.add(listener);
     }
 
+    /** Seconds since GLFW initialised, from a monotonic high-resolution timer. */
     public double getTime() {
         return glfwGetTime();
     }
@@ -111,6 +132,7 @@ public class Window {
         glClearColor(clearColor.red(), clearColor.green(), clearColor.blue(), clearColor.alpha());
     }
 
+    /** Frees the callbacks, destroys the window and context, and terminates GLFW. */
     public void shutdown() {
         GPU.info("destroying window and terminating GLFW");
         glfwFreeCallbacks(window);
@@ -154,7 +176,6 @@ public class Window {
             glfwSetWindowMonitor(window, monitor, 0, 0, width, height, rr);
         }
 
-        // Center the window on the primary monitor.
         try (MemoryStack stack = stackPush()) {
             IntBuffer pWidth = stack.mallocInt(1);
             IntBuffer pHeight = stack.mallocInt(1);
@@ -180,7 +201,6 @@ public class Window {
     }
 
     private void initOpenGL() {
-        // Bind the GL context to this thread - must happen before any GL call.
         glfwMakeContextCurrent(window);
         glfwSwapInterval(config.vsync() ? 1 : 0);
         GL.createCapabilities();
@@ -204,8 +224,10 @@ public class Window {
         glfwSetFramebufferSizeCallback(window, resizeCallback());
     }
 
-    // GLFW fires this during glfwPollEvents() on the main thread, so notifying listeners straight
-    // from here needs no cross-thread handoff.
+    /**
+     * Resets the viewport and notifies listeners. GLFW calls this during {@link #pollEvents()} on
+     * the main thread, so listeners may touch GL directly.
+     */
     private GLFWFramebufferSizeCallbackI resizeCallback() {
         return (long window, int width, int height) -> {
             GPU.debug("framebuffer resized to {}x{}, notifying {} listener(s)", width, height, resizeListeners.size());

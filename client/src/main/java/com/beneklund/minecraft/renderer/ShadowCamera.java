@@ -4,52 +4,66 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
-/*
- * The sun's view-projection: where the shadow map is rendered from.
+/**
+ * The sun's view-projection for each shadow cascade: the matrices the shadow map is rendered from
+ * and sampled with.
  *
- * Pure maths on purpose — no GL, no Camera, no window. That is what lets ShadowCameraTest pin the
- * properties below, none of which can be checked once the answer only exists inside a depth
- * texture.
+ * <p>Cascaded shadow maps split the view distance into bands, each covered by its own square
+ * orthographic box around the eye. Near bands get small boxes and therefore fine texels; far bands
+ * trade resolution for reach. The terrain shader picks a band per fragment by view distance, using
+ * {@link #splitDistance}. The projection is orthographic because the sun's rays are parallel, and
+ * orthographic depth is linear, so the generous {@code NEAR}/{@code FAR} range costs no precision.
  *
- * Note what update() accepts: an eye POSITION and a sun direction. Not a Camera. Where the player
- * is looking is deliberately not expressible here, because it must not matter — a shadow map is a
- * property of the world and the sun, and the moment the viewer leaks into it, shadows change when
- * you move the mouse. Keep it that way; pass a position, never a camera or a view matrix.
+ * <p>{@link #update} takes an eye position and a sun direction, never a camera or view matrix. A
+ * shadow map is a property of the world and the sun; the moment the view direction reaches it,
+ * shadows change when the mouse moves. The class is pure maths with no GL, which lets {@code
+ * ShadowCameraTest} pin properties that are invisible once the result is inside a depth texture.
  *
- * Orthographic, not perspective: the sun's rays are parallel, so there is no vanishing point.
- * Ortho depth is also linear, which is why NEAR/FAR can be generous without costing the precision
- * a wide perspective range would.
+ * <p>Two quantisations keep the map stable frame to frame. The eye enters each cascade's matrix
+ * only in whole texels of that cascade, and the sun direction moves in quarter-degree steps; see
+ * {@link #update} and {@link #quantiseSunDirection()}.
+ *
+ * @see <a href="https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps">
+ *     Microsoft: Cascaded Shadow Maps</a>
+ * @see <a
+ *     href="https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps">
+ *     Microsoft: Common Techniques to Improve Shadow Depth Maps (texel snapping, bias)</a>
+ * @see <a href="https://learnopengl.com/Guest-Articles/2021/CSM">LearnOpenGL: Cascaded Shadow
+ *     Mapping</a>
+ * @see <a
+ *     href="https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus">
+ *     GPU Gems 3, ch. 10: Parallel-Split Shadow Maps</a>
  */
 public class ShadowCamera {
 
-    /*
-     * Half-width of each cascade's square, in blocks. One map covering everything has to pick a
-     * single trade between sharpness and reach; cascades are how you stop picking.
+    /**
+     * Half-width of each cascade's square, in blocks. The array length is the cascade count; add a
+     * cascade by adding an entry here and to {@link #SPLIT_DISTANCES}.
      *
-     * At a 2048 map these are 0.031 and 0.125 blocks per texel. The near cascade is four times
-     * finer than a single 128 map, which is the whole point — it is what shadow edges close to the
-     * player are rasterised into.
-     *
-     * Add a third by adding an entry here and to SPLIT_DISTANCES. Nothing else counts cascades.
+     * <p>At a 2048 map these are 0.031, 0.125 and 0.5 blocks per texel. The near cascade, where
+     * shadow edges close to the player are rasterised, is four times finer than a single 128-block
+     * map.
      */
     private static final float[] BOX_HALVES = {32.0f, 128.0f, 512.0f};
 
-    /*
-     * View distance at which each cascade hands over, in blocks. The last entry is the end of
-     * shadowing altogether.
+    /**
+     * View distance at which each cascade hands over to the next, in blocks. The last entry ends
+     * shadowing.
      *
-     * 28 rather than 32: a cascade's box is centred on the eye and axis-aligned in LIGHT space, so
-     * a fragment 32 blocks away along the view ray is not necessarily inside a box of half-width
-     * 32. The margin keeps the handover strictly inside the near box, where the lookup is valid.
+     * <p>The first split is 28, inside the 32-block box, because the box is axis-aligned in light
+     * space: a fragment 32 blocks along the view ray can sit outside a box of half-width 32. The
+     * margin keeps every handover inside the box it leaves.
      */
     private static final float[] SPLIT_DISTANCES = {28.0f, 120.0f, 500.0f};
 
     // Widest cascade, for anything that needs one number for the whole system.
     public static final float BOX_HALF = 128.0f;
 
-    // How far from the eye a chunk can be and still cast into a given cascade. The box itself is
-    // BOX_HALVES[i] wide; the extra margin is for low sun, where a tall caster outside the box
-    // still throws a shadow across it. Read by ChunkRenderer, which does the actual selection.
+    /**
+     * How far from the eye a chunk can be and still cast into {@code cascade}, with a flat 128-block
+     * margin that covers a tall caster outside the box throwing a shadow across it at low sun.
+     * {@code ChunkRenderer} uses the sun-aware overload.
+     */
     public static float casterRadius(int cascade) {
         return BOX_HALVES[cascade] + 128.0f;
     }
@@ -62,19 +76,16 @@ public class ShadowCamera {
     // that the exact formula stops being useful.
     private static final float MAX_SHADOW_REACH = 128.0f;
 
-    /*
+    /**
      * How far a shadow reaches horizontally at this sun elevation, in blocks.
      *
-     * A caster h blocks above the surface it shadows lands its shadow h / tan(elevation) away
-     * along the ground. For a normalised sun direction tan(elevation) is y / |xz|, so the reach
-     * is h * |xz| / y.
+     * <p>A caster {@code h} blocks above the surface lands its shadow {@code h / tan(elevation)}
+     * away. For a unit sun direction {@code tan(elevation) = y / |xz|}, so the reach is {@code h *
+     * |xz| / y}. At noon {@code |xz|} is near 0 and shadows fall straight down, so a caster outside
+     * the box can't reach into it.
      *
-     * The flat 128 is that number worked out once for a low sun and then paid at every hour of
-     * the day. At noon |xz| is ~0 and the true reach is ~0: shadows fall straight down, and a
-     * caster outside the box cannot reach into it at all.
-     *
-     * Clamped, because the formula runs to infinity as the sun touches the horizon. With the sun
-     * below it there is nothing to cast, so the conservative old answer is the safe one.
+     * <p>Clamped to 128, because the formula runs to infinity as the sun reaches the horizon. With
+     * the sun below the horizon there is nothing to cast, and the clamp is the conservative answer.
      */
     public static float shadowReach(Vector3fc sunDirection) {
         float up = sunDirection.y();
@@ -83,12 +94,12 @@ public class ShadowCamera {
         return Math.min(MAX_CASTER_HEIGHT * horizontal / up, MAX_SHADOW_REACH);
     }
 
-    /*
+    /**
      * Caster radius for one cascade, with the sun taken into account.
      *
-     * upSun is how much the chunk sits on the side the light comes FROM, 0 to 1. A caster
-     * down-sun of the box throws its shadow further away and can never reach in, so it gets no
-     * margin at all and is tested against the bare box.
+     * @param upSun how far the chunk sits on the side the light comes from, 0 to 1. A caster
+     *     down-sun of the box throws its shadow away from it, so at 0 it gets no margin and is
+     *     tested against the bare box.
      */
     public static float casterRadius(int cascade, Vector3fc sunDirection, float upSun) {
         return BOX_HALVES[cascade] + shadowReach(sunDirection) * upSun;
@@ -109,16 +120,16 @@ public class ShadowCamera {
     private static final float NEAR = 1.0f;
     private static final float FAR = 1200.0f;
 
-    /*
-     * Depth margin between a fragment and the nearest surface the sun saw, measured in TEXELS.
+    /**
+     * Depth margin between a fragment and the nearest surface the sun saw, in texels.
      *
-     * Acne is a texel-footprint problem: one stored depth stands for a whole texel of world, and a
-     * surface tilted to the sun genuinely varies in depth across it. The margin that absorbs that
-     * therefore scales with how much world a texel covers — so a cascade with finer texels needs a
-     * proportionally smaller bias, and one number covers every cascade.
+     * <p>Shadow acne is a texel-footprint problem: one stored depth stands for a whole texel of
+     * world, and a surface tilted to the sun varies in depth across it. The margin scales with how
+     * much world a texel covers, so stating it in texels gives each cascade a proportional bias
+     * from one number.
      *
-     * 2.4 texels is the value tuned on the single 128 map, restated in its natural units:
-     *   0.3 blocks / (256 blocks / 2048 texels) = 0.3 / 0.125 = 2.4 texels
+     * <p>2.4 texels is the value tuned on the original single 128-block map: {@code 0.3 blocks /
+     * (256 blocks / 2048 texels) = 2.4 texels}.
      */
     private static final float BIAS_TEXELS = 2.4f;
 
@@ -126,17 +137,15 @@ public class ShadowCamera {
     // of the box centre. Chunk.SIZE_Y is 256, so this comfortably contains any caster.
     private static final float DEPTH_WINDOW = 300.0f;
 
-    /*
-     * Lowest sun elevation the shadow box is allowed to see, as sin(elevation) — about 20 degrees.
+    /**
+     * Lowest sun elevation the shadow box sees, as {@code sin(elevation)}: about 20 degrees.
      *
-     * The box is a fixed square in light space. As the sun approaches the horizon the light looks
-     * nearly sideways, so that square stands on its edge: it spans 256 blocks *vertically*, spends
-     * most of its texels on empty sky, and catches terrain only in a thin strip. Ground resolution
-     * collapses and geometry crosses the strip boundary constantly, which reads as flicker.
-     *
-     * Clamping keeps the box looking down enough to stay full of terrain. It makes late-afternoon
-     * shadows point at a slightly wrong angle, which is invisible next to the alternative. Real
-     * engines fade shadows out near the horizon instead; that is a later card.
+     * <p>The box is a fixed square in light space. As the sun nears the horizon that square stands
+     * on its edge, spans 256 blocks vertically, spends most of its texels on sky and catches
+     * terrain in a thin strip. Ground resolution collapses and geometry crosses the strip boundary
+     * constantly, which reads as flicker. The clamp keeps the box looking down; late-afternoon
+     * shadows point at a slightly wrong angle, which is invisible by comparison. Fading shadows
+     * out near the horizon is the usual engine answer and isn't implemented.
      */
     private static final float MIN_SUN_ELEVATION = 0.35f;
 
@@ -160,18 +169,18 @@ public class ShadowCamera {
     private final Vector3f shadowSunDir = new Vector3f();
     private final Vector3f snapScratch = new Vector3f();
 
+    /** @param mapSize shadow map width and height in texels */
     public ShadowCamera(int mapSize) {
         this.mapSize = mapSize;
         for (int i = 0; i < lightViewProj.length; i++) lightViewProj[i] = new Matrix4f();
     }
 
-    /*
-     * Rebuilt every frame because it depends on where the player is standing as well as where the
-     * sun is. Anchoring it to the eye is what keeps the shadowed region under the player instead
-     * of at a fixed point in the world — which is also why the eye cannot simply be dropped as an
-     * input: a world-anchored box would run out of shadows as soon as you walked out of it.
+    /**
+     * Rebuilds every cascade's matrix for this eye position and sun. Runs every frame.
      *
-     * What it can do is enter only in whole texels. See the snapping below.
+     * <p>Each box is centred on the eye so the shadowed region follows the player; a world-anchored
+     * box would run out of shadows as soon as the player walked out of it. The eye enters only in
+     * whole texels of each cascade's own grid, which keeps the texel grid anchored to the world.
      */
     public void update(Vector3fc eyePosition, Vector3fc sunDirection) {
         // Shadows use their own copy of the sun, floored in elevation. See the constant.
@@ -241,28 +250,29 @@ public class ShadowCamera {
         lightProj.mul(lightView, lightViewProj[cascade]);
     }
 
-    /*
-     * The sun enters in discrete steps, for the same reason the eye does.
+    /**
+     * Rounds the shadow sun's azimuth and elevation to {@code SUN_STEP_RADIANS}, so the light's
+     * rotation holds still between steps.
      *
-     * Texel snapping quantises where the box sits. It cannot quantise how the box is ORIENTED, and
-     * the light's rotation is rebuilt from the sun every frame. Two things follow from a rotation
-     * that changes continuously, and both were visible:
+     * <p>Texel snapping fixes where the box sits and leaves its orientation free, and the rotation
+     * is rebuilt from the sun every frame. A continuously turning rotation caused two visible
+     * faults:
      *
-     * 1. Every world point's light-space position drifts, so the whole map re-rasterises each
-     *    frame and every shadow edge crawls.
-     * 2. Worse, the snap is computed from the eye expressed in light space. Rotating by dTheta
-     *    moves that value by |eye| * dTheta — with the player 700 blocks from the world origin and
-     *    a 20-minute day, half a texel per frame. Math.round then steps almost every frame, and
-     *    each step jerks the ENTIRE map back one texel while it drifts forward. Measured before
-     *    this: a fixed world point reversed direction in the map 231 times in 240 frames. That is
-     *    the "back and forth, up and down" — it is judder, not the sun crossing the sky.
+     * <ol>
+     *   <li>Every world point's light-space position drifts, so the whole map re-rasterises each
+     *       frame and every shadow edge crawls.
+     *   <li>The snap is computed from the eye in light space, and rotating by {@code dTheta} moves
+     *       that value by {@code |eye| * dTheta}. With the player 700 blocks from the origin and a
+     *       20-minute day that is half a texel per frame, so {@code Math.round} stepped almost
+     *       every frame and jerked the whole map back a texel while it drifted forward. Measured
+     *       before this fix: a fixed world point reversed direction in the map 231 times in 240
+     *       frames.
+     * </ol>
      *
-     * Holding the sun still between steps makes the whole matrix bit-identical frame to frame, so
-     * neither happens. The cost is that shadows update in steps rather than continuously; at this
-     * step size a shadow edge moves under a tenth of a block per step, which reads as motion.
-     *
-     * The step is a quality knob. Smaller means smoother steps but a return toward per-frame
-     * re-rasterisation; larger means rock-steady shadows that visibly click round.
+     * <p>With the sun held between steps, the matrix is bit-identical frame to frame. Shadows move
+     * in steps; at a quarter degree an edge moves under a tenth of a block per step, which reads as
+     * motion. A smaller step drifts back toward per-frame re-rasterisation; a larger one gives
+     * steady shadows that visibly click round.
      */
     private void quantiseSunDirection() {
         float azimuth = (float) Math.atan2(shadowSunDir.x, shadowSunDir.z);
@@ -280,47 +290,47 @@ public class ShadowCamera {
                 .normalize();
     }
 
-    // Live view of the matrix, reused each frame — the renderer hands it straight to a uniform.
+    /** Live view of the cascade's matrix, reused each frame and handed straight to a uniform. */
     public Matrix4f lightViewProj(int cascade) {
         return lightViewProj[cascade];
     }
 
-    // The bias in the map's [0,1] depth units, which is what the shader compares in. Per cascade,
-    // because it is authored in texels and a texel is worth different amounts of world in each.
+    /**
+     * The cascade's bias in the map's [0, 1] depth units, which is what the shader compares in.
+     * Per cascade because the bias is authored in texels and a texel covers a different amount of
+     * world in each.
+     */
     public float normalizedBias(int cascade) {
         return (BIAS_TEXELS * texelWorldSize(cascade)) / (FAR - NEAR);
     }
 
-    /*
-     * The slice of the shadow map's [0,1] depth range that terrain actually occupies, for the
-     * debug overlay to stretch across its contrast range.
-     *
-     * The light's eye sits SUN_DISTANCE in front of the box centre, so the centre lands at that
-     * depth; terrain reaches roughly a world-height either side of it. Everything outside this
-     * window is either empty sky or below bedrock.
+    /**
+     * Lower end of the slice of [0, 1] shadow depth that terrain occupies, for the debug overlay
+     * to stretch to full contrast. The light's eye sits {@code SUN_DISTANCE} in front of the box
+     * centre, so the centre lands at that depth and terrain reaches about a world height either
+     * side.
      */
     public float depthWindowMin() {
         return (SUN_DISTANCE - DEPTH_WINDOW - NEAR) / (FAR - NEAR);
     }
 
+    /** Upper end of the window; see {@link #depthWindowMin()}. */
     public float depthWindowMax() {
         return (SUN_DISTANCE + DEPTH_WINDOW - NEAR) / (FAR - NEAR);
     }
 
-    // One shadow texel in blocks, for the given cascade. Exposed because the snapping guarantee
-    // and the bias are both stated in these units.
+    /** One shadow texel in blocks for {@code cascade}: the unit the snapping and bias are stated in. */
     public float texelWorldSize(int cascade) {
         return (2.0f * BOX_HALVES[cascade]) / mapSize;
     }
 
-    /*
-     * The sun direction the shadow map was actually built from, after the elevation floor. Differs
-     * from the sun the sky and the lighting use whenever the real sun is low.
+    /**
+     * The sun direction the shadow map was built from, after the elevation floor and quantisation.
+     * Differs from the sky's and the lighting's sun whenever the real sun is low.
      *
-     * Worth knowing that the floor is approximate: raising y to MIN_SUN_ELEVATION and then
-     * renormalising pulls y back down a little, so a near-horizontal sun settles slightly under
-     * the nominal 20 degrees rather than exactly on it. Harmless — the point is to get the box
-     * looking downward, not to hit a specific angle.
+     * <p>Raising {@code y} to {@code MIN_SUN_ELEVATION} and renormalising pulls {@code y} back down
+     * slightly, so a near-horizontal sun settles a little under 20 degrees. The goal is a box that
+     * looks down, so the exact angle doesn't matter.
      */
     public Vector3fc effectiveSunDirection() {
         return shadowSunDir;

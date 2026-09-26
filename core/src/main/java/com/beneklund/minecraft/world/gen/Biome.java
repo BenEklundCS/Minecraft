@@ -2,18 +2,18 @@ package com.beneklund.minecraft.world.gen;
 
 import com.beneklund.minecraft.util.Color;
 
-// Each biome shapes how computeSurfaceY() maps raw noise [-1,1] to a world Y:
-//   finalY = clamp(baseHeight + raw * amplitude, 4, 250)
-//
-// baseHeight is the Y the surface lands at when raw=0 (flat noise).
-// amplitude stretches how much the terrain varies around that base.
-// Sea level is 62 — bases above it produce dry land, bases below produce ocean.
-//
-// Biome is selected from a very-low-frequency noise sample (scale=0.0005) so the
-// transition zones are hundreds of blocks wide and the patterns don't correlate
-// with the terrain detail noise (which uses seed offsets 0, 100, 200).
-// ordinal() order matters: the noise value is mapped linearly across the array,
-// so adjacent biomes in this list will also be geographically adjacent in-world.
+/**
+ * A biome: an anchor point in climate space plus the terrain shape and tints it contributes.
+ *
+ * <p>The generator samples temperature and humidity noise at each column, normalised to {@code [0,
+ * 1]}, and picks the biome whose {@code (temperature, humidity)} anchor is nearest, with a small
+ * per-biome noise jitter on the distance so borders come out ragged. It then blends the nearest
+ * two biomes' {@link TerrainProfile}s by relative distance, so height and colour change smoothly
+ * across a border while the dominant biome still decides block types.
+ *
+ * <p>The surface height is {@code baseHeight + noise * amplitude}, clamped to the world. Sea level
+ * is 62, so a base above it tends to dry land and a base below it to ocean.
+ */
 public enum Biome {
     PLAINS(
             0.5f,
@@ -62,12 +62,15 @@ public enum Biome {
         return humidity;
     }
 
-    // Used by ChunkMesher to tint greyscale grass_top and leaf textures.
-    // ChunkMesher defaults to PLAINS until chunks carry per-block biome data.
+    /**
+     * Tint for the greyscale grass textures. The mesher tints everything with {@link #PLAINS} until
+     * chunks carry per-column biome data.
+     */
     public Color grassColor() {
         return data.grassColor();
     }
 
+    /** Tint for the greyscale leaf textures. */
     public Color foliageColor() {
         return data.foliageColor();
     }
