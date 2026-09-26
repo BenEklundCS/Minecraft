@@ -4,10 +4,15 @@ import static com.beneklund.minecraft.util.Log.CHUNK;
 
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.net.IPacket;
-import com.beneklund.minecraft.renderer.ChunkMeshData;
-import com.beneklund.minecraft.renderer.ChunkMesher;
+import com.beneklund.minecraft.renderer.chunk.ChunkMeshData;
+import com.beneklund.minecraft.renderer.chunk.ChunkMesher;
 import com.beneklund.minecraft.util.Threads;
 import com.beneklund.minecraft.world.*;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.chunk.ChunkState;
+import com.beneklund.minecraft.world.chunk.ChunkWithNeighbors;
+import com.beneklund.minecraft.world.chunk.LightEngine;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;

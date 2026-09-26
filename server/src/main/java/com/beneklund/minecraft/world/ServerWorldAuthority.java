@@ -7,6 +7,11 @@ import com.beneklund.minecraft.block.BlockDef;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.util.AABB;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.chunk.ChunkState;
+import com.beneklund.minecraft.world.chunk.ChunkWithNeighbors;
+import com.beneklund.minecraft.world.chunk.LightEngine;
 import java.util.List;
 
 /**

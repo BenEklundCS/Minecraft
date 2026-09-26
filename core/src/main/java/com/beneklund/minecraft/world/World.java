@@ -1,5 +1,7 @@
 package com.beneklund.minecraft.world;
 
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;

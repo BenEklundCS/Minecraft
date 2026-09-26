@@ -8,7 +8,7 @@ import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
  *
  * @see <a href="https://wikis.khronos.org/opengl/Primitive">OpenGL Wiki: Primitive</a>
  */
-public enum PrimitiveMode {
+enum PrimitiveMode {
     TRIANGLES(GL_TRIANGLES),
     LINES(GL_LINES);
 

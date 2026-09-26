@@ -1,0 +1,8 @@
+# Low settings: terrain and sky only. No cast shadows, clouds, light shafts, bloom or haze.
+# Highly recommended for most machines as shaders are experimental and largely unoptimized
+shaders.simple=true
+
+# Off for low settings: the debug server does a synchronous glReadPixels every 100 ms.
+debugserver.enabled=false
+gputimer.enabled=false
+debug.enabled=false

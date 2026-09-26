@@ -1,7 +1,5 @@
 package com.beneklund.minecraft.world.gen;
 
-import com.beneklund.minecraft.util.OpenSimplex2;
-
 /**
  * Fractal Brownian motion (fBm): octaves of {@link OpenSimplex2} summed at rising frequency and
  * falling amplitude.

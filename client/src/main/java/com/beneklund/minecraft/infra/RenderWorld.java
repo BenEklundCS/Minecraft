@@ -2,8 +2,8 @@ package com.beneklund.minecraft.infra;
 
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
 import com.beneklund.minecraft.util.AABB;
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.Collection;
 import java.util.HashMap;
 import org.joml.Matrix4f;

@@ -3,7 +3,7 @@ package com.beneklund.minecraft.input;
 import static com.beneklund.minecraft.util.Log.INPUT;
 
 import com.beneklund.minecraft.platform.window.Window;
-import com.beneklund.minecraft.renderer.Camera;
+import com.beneklund.minecraft.renderer.camera.Camera;
 import java.util.List;
 
 /**

@@ -4,6 +4,10 @@ import static com.beneklund.minecraft.util.Log.CHUNK;
 
 import com.beneklund.minecraft.util.Threads;
 import com.beneklund.minecraft.world.*;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.chunk.ChunkState;
+import com.beneklund.minecraft.world.chunk.IChunkStore;
 import com.beneklund.minecraft.world.gen.IWorldGenerator;
 import java.util.*;
 import java.util.concurrent.ExecutorService;

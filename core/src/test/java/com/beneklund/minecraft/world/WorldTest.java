@@ -2,6 +2,8 @@ package com.beneklund.minecraft.world;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.Test;
 

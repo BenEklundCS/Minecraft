@@ -1,5 +1,6 @@
 package com.beneklund.minecraft.renderer;
 
+import com.beneklund.minecraft.renderer.camera.Camera;
 import java.util.List;
 
 /**

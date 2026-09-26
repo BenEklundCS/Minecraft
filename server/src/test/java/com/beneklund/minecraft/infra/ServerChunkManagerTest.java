@@ -3,6 +3,10 @@ package com.beneklund.minecraft.infra;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.beneklund.minecraft.world.*;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.chunk.ChunkState;
+import com.beneklund.minecraft.world.chunk.IChunkStore;
 import com.beneklund.minecraft.world.gen.IWorldGenerator;
 import java.util.List;
 import java.util.Optional;

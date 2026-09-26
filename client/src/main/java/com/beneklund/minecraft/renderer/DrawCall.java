@@ -2,6 +2,8 @@ package com.beneklund.minecraft.renderer;
 
 import com.beneklund.minecraft.platform.graphics.Mesh;
 import com.beneklund.minecraft.platform.graphics.UniformValue;
+import com.beneklund.minecraft.renderer.asset.ShaderProgram;
+import com.beneklund.minecraft.renderer.asset.TextureAtlas;
 import java.util.Map;
 import java.util.Optional;
 import org.joml.Matrix4f;

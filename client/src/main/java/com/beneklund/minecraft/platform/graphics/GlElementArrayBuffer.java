@@ -19,7 +19,7 @@ import static org.lwjgl.opengl.GL15.*;
  * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDrawElements.xhtml">
  *     glDrawElements</a>
  */
-public final class GlElementArrayBuffer implements IGlBuffer {
+final class GlElementArrayBuffer implements IGlBuffer {
     private final int buffer;
 
     public GlElementArrayBuffer() {

@@ -1,7 +1,7 @@
 package com.beneklund.minecraft.net;
 
 import com.beneklund.minecraft.player.PlayerState;
-import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 
 /**
  * Decides which chunks a player may have. A client sees only what it was sent, so this is the

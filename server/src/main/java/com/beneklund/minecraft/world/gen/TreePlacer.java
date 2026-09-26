@@ -1,7 +1,7 @@
 package com.beneklund.minecraft.world.gen;
 
 import com.beneklund.minecraft.block.Block;
-import com.beneklund.minecraft.world.Chunk;
+import com.beneklund.minecraft.world.chunk.Chunk;
 
 /** Places oak trees: a five-block trunk under a two-tier square canopy. */
 public class TreePlacer {

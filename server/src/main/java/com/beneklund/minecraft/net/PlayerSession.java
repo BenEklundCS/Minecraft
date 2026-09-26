@@ -1,7 +1,7 @@
 package com.beneklund.minecraft.net;
 
 import com.beneklund.minecraft.player.PlayerState;
-import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;

@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;

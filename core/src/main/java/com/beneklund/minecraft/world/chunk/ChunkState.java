@@ -1,0 +1,62 @@
+package com.beneklund.minecraft.world.chunk;
+
+/**
+ * A chunk's position in the load, generate, mesh and unload pipeline, with the legal moves between
+ * positions.
+ *
+ * <p>The server and the client walk different paths through the same enum:
+ *
+ * <ul>
+ *   <li>Server: {@code UNLOADED}, {@code QUEUED_GEN}, {@code GENERATING}, {@code LIVE}, {@code
+ *       UNLOADING}. A chunk loaded from disk goes straight from {@code UNLOADED} to {@code LIVE}.
+ *   <li>Client: {@code UNLOADED}, {@code QUEUED_MESH}, {@code MESHING}, {@code READY_TO_UPLOAD},
+ *       {@code UPLOADED}, with {@code DIRTY} looping back to {@code QUEUED_MESH} on every edit,
+ *       then {@code UNLOADING}.
+ * </ul>
+ *
+ * <p>{@code GENERATING} and {@code MESHING} are the states a worker thread owns, so they are the
+ * only ones with an exit to {@code ERROR}. {@code ERROR} is terminal. Transitions happen only
+ * through {@link Chunk#tryTransition}, which checks {@link #canTransitionTo} atomically.
+ */
+public enum ChunkState {
+    UNLOADED,
+    QUEUED_GEN,
+    GENERATING,
+    QUEUED_MESH,
+    MESHING,
+    READY_TO_UPLOAD,
+    UPLOADED,
+    DIRTY,
+    UNLOADING,
+    LIVE,
+    ERROR;
+
+    /** Whether the pipeline allows moving from this state to {@code next}. */
+    public boolean canTransitionTo(ChunkState next) {
+        return switch (this) {
+            // QUEUED_GEN for fresh chunks. A chunk restored from disk already has its blocks, so it
+            // skips generation: QUEUED_MESH on the client, LIVE on the server.
+            case UNLOADED -> next == QUEUED_GEN || next == QUEUED_MESH || next == LIVE;
+            // only queued, no worker owns it yet, so it's safe to cancel early
+            case QUEUED_GEN -> next == GENERATING || next == UNLOADING;
+            // GENERATING and MESHING are the two states a worker runs in, so they're the only
+            // ones a job can throw out of — the jobs bail early if the entry transition fails.
+            case GENERATING -> next == LIVE || next == ERROR;
+            // Nothing to re-enter: edits replicate as BlockChanged and persist via needsPersisting,
+            // so the only way out is eviction.
+            case LIVE -> next == UNLOADING;
+            case QUEUED_MESH -> next == MESHING;
+            // DIRTY mid-mesh: the job's READY_TO_UPLOAD then fails and tick() meshes it again, so an
+            // edit that lands while a mesh is in flight isn't lost.
+            case MESHING -> next == READY_TO_UPLOAD || next == DIRTY || next == ERROR;
+            // Same for an edit after meshing: the queued mesh still uploads, then tick() remeshes.
+            case READY_TO_UPLOAD -> next == UPLOADED || next == DIRTY;
+            // on screen: an edit dirties it, or it gets unloaded
+            case UPLOADED -> next == DIRTY || next == UNLOADING;
+            // re-enter the mesh pipeline, or unload before we get to it
+            case DIRTY -> next == QUEUED_MESH || next == UNLOADING;
+            case UNLOADING -> next == UNLOADED;
+            case ERROR -> false;
+        };
+    }
+}

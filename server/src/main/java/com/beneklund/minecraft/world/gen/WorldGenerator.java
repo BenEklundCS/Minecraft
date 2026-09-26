@@ -5,8 +5,8 @@ import static org.joml.Math.lerp;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.util.Color;
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.*;
 
 /**

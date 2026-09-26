@@ -17,7 +17,7 @@ import static org.lwjgl.opengl.GL15.*;
  * @see <a href="https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBufferData.xhtml">
  *     glBufferData</a>
  */
-public final class GlVertexArrayBuffer implements IGlBuffer {
+final class GlVertexArrayBuffer implements IGlBuffer {
     private final int buffer;
 
     public GlVertexArrayBuffer() {

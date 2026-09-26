@@ -2,9 +2,9 @@ package com.beneklund.minecraft.infra;
 
 import static com.beneklund.minecraft.util.Log.IO;
 
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkPos;
-import com.beneklund.minecraft.world.IChunkStore;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.chunk.IChunkStore;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

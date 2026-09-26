@@ -23,7 +23,7 @@ import static org.lwjgl.opengl.GL30.*;
  * @see <a href="https://learnopengl.com/Getting-started/Hello-Triangle">LearnOpenGL: Hello
  *     Triangle</a>
  */
-public final class GlVertexArray {
+final class GlVertexArray {
     private final int vertexArray;
 
     public GlVertexArray() {

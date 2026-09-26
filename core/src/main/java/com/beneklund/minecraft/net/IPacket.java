@@ -2,7 +2,7 @@ package com.beneklund.minecraft.net;
 
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.player.PlayerState;
-import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 
 /**
  * Every message that crosses between client and server, as a sealed hierarchy of records.

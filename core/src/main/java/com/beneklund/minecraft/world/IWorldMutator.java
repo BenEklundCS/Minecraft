@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.world;
 
 import com.beneklund.minecraft.block.Block;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 
 /** The write half of {@link IWorldAuthority}, in world block coordinates. */
 public interface IWorldMutator {

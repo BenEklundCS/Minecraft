@@ -1,7 +1,7 @@
 package com.beneklund.minecraft.net;
 
 import com.beneklund.minecraft.player.PlayerState;
-import com.beneklund.minecraft.world.ChunkPos;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 
 /**
  * Allows every chunk within a square of half-width {@code radius} around the player's chunk, the

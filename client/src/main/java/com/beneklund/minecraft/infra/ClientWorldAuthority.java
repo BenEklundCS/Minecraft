@@ -7,10 +7,10 @@ import com.beneklund.minecraft.entity.Entity;
 import com.beneklund.minecraft.net.IPacket;
 import com.beneklund.minecraft.net.IServerLink;
 import com.beneklund.minecraft.util.AABB;
-import com.beneklund.minecraft.world.Chunk;
-import com.beneklund.minecraft.world.ChunkPos;
 import com.beneklund.minecraft.world.IWorldAuthority;
 import com.beneklund.minecraft.world.World;
+import com.beneklund.minecraft.world.chunk.Chunk;
+import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.List;
 
 /**
