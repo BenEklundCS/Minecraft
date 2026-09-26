@@ -1,5 +1,6 @@
 package com.beneklund.minecraft.player;
 
+import static com.beneklund.minecraft.player.PlayerBody.*;
 import static com.beneklund.minecraft.util.Log.PLAYER;
 
 import com.beneklund.minecraft.block.Block;
@@ -29,9 +30,6 @@ public class Player implements IPhysicsBody {
     private static final float MAX_PITCH = 89.0f;
     // Scales raw mouse pixel delta to degrees of look. Player owns this since it decodes LookActions.
     private static final float MOUSE_SENSITIVITY = 0.15f;
-    private static final float WIDTH = 0.6f;
-    private static final float HEIGHT = 1.6f;
-    private static final float DEPTH = 0.6f;
     // Eye sits above the feet (position). Matches Minecraft's 1.62 eye height.
     public static final float EYE_HEIGHT = 1.62f;
 
