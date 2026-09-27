@@ -15,7 +15,5 @@ public record ServerConfig(
         float spawnYaw,
         long shutdownTimeoutSeconds) {
 
-    public static ServerConfig defaults() {
-        return new ServerConfig(87L, 32, 8.0f, -5.0f, 20.0f, 0.0f, 5L);
-    }
+    public static final ServerConfig DEFAULT = new ServerConfig(87L, 12, 8.0f, -5.0f, 20.0f, 0.0f, 5L);
 }

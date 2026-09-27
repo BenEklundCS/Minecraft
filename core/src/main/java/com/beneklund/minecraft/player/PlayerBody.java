@@ -4,53 +4,74 @@ import com.beneklund.minecraft.util.AABB;
 import org.joml.Vector3f;
 
 public final class PlayerBody implements IPhysicsBody {
-    public static final float WIDTH = 0.6f, HEIGHT = 1.6f, DEPTH = 0.6f;
+    public static final float WIDTH = 0.6f;
+    public static final float HEIGHT = 1.6f;
+    public static final float DEPTH = 0.6f;
 
-    public PlayerBody(PlayerState at) {}
+    private final Vector3f position;
+    private final Vector3f velocity;
+    private float pitch;
+    private float yaw;
+    private boolean onGround;
 
-    // IPhysicsBody: live Vector3f getters, same contract as Player
+    public PlayerBody(PlayerState at) {
+        position = new Vector3f(at.x(), at.y(), at.z());
+        velocity = new Vector3f();
+        pitch = at.pitch();
+        yaw = at.yaw();
+        onGround = false;
+    }
 
     public float pitch() {
-        return 0.0f;
+        return pitch;
     }
 
     public float yaw() {
-        return 0.0f;
+        return yaw;
     }
 
     public PlayerState state() {
-        return new PlayerState(0, 0, 0, 0, 0);
+        return new PlayerState(position.x, position.y, position.z, pitch, yaw);
     }
 
     @Override
     public Vector3f getPosition() {
-        return null;
+        return position;
     }
 
     @Override
     public Vector3f getVelocity() {
-        return null;
+        return velocity;
     }
 
     @Override
     public AABB getBoundingBox() {
-        return null;
+        return AABB.ofSize(position, WIDTH, HEIGHT, DEPTH);
     }
 
     @Override
-    public void setPosition(Vector3f position) {}
+    public void setPosition(Vector3f position) {
+        this.position.set(position);
+    }
 
     @Override
-    public void setOrientation(float pitch, float yaw) {}
+    public void setOrientation(float pitch, float yaw) {
+        this.pitch = pitch;
+        this.yaw = yaw;
+    }
 
     @Override
-    public void setVelocity(Vector3f velocity) {}
+    public void setVelocity(Vector3f velocity) {
+        this.velocity.set(velocity);
+    }
 
     @Override
     public boolean isOnGround() {
-        return false;
+        return onGround;
     }
 
     @Override
-    public void setOnGround(boolean onGround) {}
+    public void setOnGround(boolean onGround) {
+        this.onGround = onGround;
+    }
 }

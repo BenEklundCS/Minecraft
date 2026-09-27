@@ -19,9 +19,9 @@ import org.joml.Vector3i;
  * The local player: position, orientation, hotbar and fly mode, driven by this frame's input
  * actions.
  *
- * <p>{@link #tick} turns actions into a desired velocity, a look change, a jump and block edits.
- * {@code Physics} integrates that velocity and resolves collisions through {@link IPhysicsBody},
- * then the game loop calls {@link #syncCamera()} with the settled position.
+ * <p>{@link #tick} turns actions into a look change, block edits and a {@link PlayerIntent}.
+ * {@code PlayerMovement} steps the body from that intent, the same function the server runs, then
+ * the game loop calls {@link #syncCamera()} with the settled position.
  *
  * <p>Block edits go through {@link IWorldAuthority}. On the client that is {@code
  * ClientWorldAuthority}, which forwards them to the server.
@@ -34,7 +34,6 @@ public class Player implements IPhysicsBody {
     public static final float EYE_HEIGHT = 1.62f;
 
     private static final long DOUBLE_TAP_NANOS = 300_000_000L;
-    private static final float FLY_SPEED = 50.0f;
 
     private boolean flyMode = false;
     private boolean wasJumpHeld = false;
@@ -42,12 +41,11 @@ public class Player implements IPhysicsBody {
 
     private RaycastResult targetedBlock;
 
+    private PlayerIntent intent;
     private final IWorldAuthority authority;
     private final Vector3f position;
     private final Vector3f velocity;
     private boolean isOnGround;
-    private final float movementSpeed;
-    private final float jumpVelocity;
     private final float reach;
     private final Camera camera;
     private float yaw;
@@ -56,14 +54,13 @@ public class Player implements IPhysicsBody {
     private final Hotbar hotbar;
 
     public Player(PlayerConfig config, Camera camera, IWorldAuthority authority) {
-        position = config.startPosition();
+        position = new Vector3f(config.startPosition());
         velocity = new Vector3f();
-        movementSpeed = config.movementSpeed();
-        jumpVelocity = config.jumpVelocity();
         reach = config.reach();
         this.camera = camera;
         look(config.startYaw(), config.startPitch());
         this.authority = authority;
+        intent = new PlayerIntent(0, 0, false, false, false, pitch, yaw);
         hotbar = new Hotbar();
     }
 
@@ -120,6 +117,10 @@ public class Player implements IPhysicsBody {
         return ChunkPos.containing(position.x, position.z);
     }
 
+    public PlayerIntent intent() {
+        return intent;
+    }
+
     /**
      * The unit view vector from yaw and pitch, spherical to Cartesian. Yaw 0 faces +Z and yaw 90
      * faces +X; positive pitch looks up.
@@ -141,14 +142,15 @@ public class Player implements IPhysicsBody {
      * Consumes one frame of input actions.
      *
      * <p>Raycasts from the eye for the targeted block first, so break and place act on what the
-     * crosshair showed. Movement sets horizontal velocity only; vertical velocity changes on a
-     * grounded jump or, in fly mode, from jump and sneak. A second jump press within 300 ms of the
+     * crosshair showed. Movement, jump, sneak and fly mode end up in {@link #intent()}, built after
+     * this frame's look; nothing here writes velocity. A second jump press within 300 ms of the
      * last toggles fly mode.
      *
      * @return one {@link Interaction} per break or place action, carrying the ray that produced it
      */
     public List<Interaction> tick(List<IInputAction> actions) {
-        Vector3f wish = new Vector3f(); // desired horizontal heading in world space
+        float moveX = 0;
+        float moveZ = 0;
         boolean jumpHeld = false;
         boolean sneakHeld = false;
 
@@ -161,10 +163,8 @@ public class Player implements IPhysicsBody {
         for (IInputAction action : actions) {
             switch (action) {
                 case IInputAction.MoveAction(float dx, float dz) -> {
-                    Vector3f forward = getLookDirection();
-                    forward.y = 0;
-                    if (forward.lengthSquared() > 0) forward.normalize();
-                    wish.fma(dz, forward).fma(dx, getRight());
+                    moveX += dx;
+                    moveZ += dz;
                 }
                 case IInputAction.LookAction(float dx, float dy) ->
                     look(dx * MOUSE_SENSITIVITY, dy * MOUSE_SENSITIVITY);
@@ -197,26 +197,13 @@ public class Player implements IPhysicsBody {
             long now = System.nanoTime();
             if (now - lastJumpPressNanos < DOUBLE_TAP_NANOS) {
                 flyMode = !flyMode;
-                velocity.y = 0;
                 PLAYER.info("Fly mode {}", flyMode ? "ON" : "OFF");
             }
             lastJumpPressNanos = now;
         }
         wasJumpHeld = jumpHeld;
 
-        float hSpeed = flyMode ? FLY_SPEED : movementSpeed;
-        if (wish.lengthSquared() > 0) wish.normalize().mul(hSpeed);
-        velocity.x = wish.x;
-        velocity.z = wish.z;
-
-        if (flyMode) {
-            if (jumpHeld) velocity.y = FLY_SPEED;
-            else if (sneakHeld) velocity.y = -FLY_SPEED;
-            else velocity.y = 0;
-        } else {
-            if (jumpHeld && isOnGround) velocity.y = jumpVelocity;
-        }
-
+        intent = new PlayerIntent(moveX, moveZ, jumpHeld, sneakHeld, flyMode, pitch, yaw);
         return interactions;
     }
 

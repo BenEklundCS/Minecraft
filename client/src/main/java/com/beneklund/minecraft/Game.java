@@ -17,8 +17,9 @@ import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.window.Window;
 import com.beneklund.minecraft.player.Hotbar;
 import com.beneklund.minecraft.player.Interaction;
-import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
+import com.beneklund.minecraft.player.PlayerIntent;
+import com.beneklund.minecraft.player.PlayerMovement;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.player.RaycastResult;
 import com.beneklund.minecraft.renderer.RenderPass;
@@ -32,7 +33,6 @@ import com.beneklund.minecraft.renderer.overlay.HudRenderer;
 import com.beneklund.minecraft.renderer.post.PostProcessor;
 import com.beneklund.minecraft.util.*;
 import com.beneklund.minecraft.world.*;
-import com.beneklund.minecraft.world.chunk.ChunkPos;
 import com.beneklund.minecraft.world.chunk.ChunkState;
 import com.beneklund.minecraft.world.sky.DayNightCycle;
 import com.google.gson.JsonObject;
@@ -55,8 +55,8 @@ import org.joml.Vector4f;
  * GpuTimer} pass, so the debug server's {@code /stats} can break a frame down.
  *
  * <p>The client joins before the loop starts and learns its spawn from {@code Join.Accepted}.
- * From then on it reports its position whenever it crosses into a new chunk, which is what the
- * server streams chunks around.
+ * From then on it sends one {@code PlayerInput} per physics step; the server steps its own copy
+ * of the player from those and streams chunks around where that copy is.
  */
 public class Game {
 
@@ -78,7 +78,7 @@ public class Game {
     private final RenderWorld renderWorld;
     private final Camera camera;
     private final Player player;
-    private final Physics physics;
+    private final PlayerMovement movement;
     private final DayNightCycle cycle;
     private final InputHandler inputHandler;
     private final IServerLink serverLink;
@@ -93,7 +93,9 @@ public class Game {
 
     // Nothing is reported until the server has placed the player.
     private boolean joined;
-    private ChunkPos lastReportedChunk;
+    // Sequence number for PlayerInput, one per predicted step. The server acks it back in
+    // PlayerUpdate; it restarts at 0 on join.
+    private long nextInputTick;
     private int uploadsThisSecond;
     private int deletesThisSecond;
     private boolean screenshotRequested;
@@ -127,7 +129,7 @@ public class Game {
             RenderWorld renderWorld,
             Camera camera,
             Player player,
-            Physics physics,
+            PlayerMovement movement,
             DayNightCycle cycle,
             InputHandler inputHandler,
             IServerLink serverLink,
@@ -149,7 +151,7 @@ public class Game {
         this.renderWorld = renderWorld;
         this.camera = camera;
         this.player = player;
-        this.physics = physics;
+        this.movement = movement;
         this.cycle = cycle;
         this.inputHandler = inputHandler;
         this.serverLink = serverLink;
@@ -494,40 +496,31 @@ public class Game {
     }
 
     /**
-     * Runs however many fixed physics steps this frame's time covers, then syncs the camera and
-     * reports the position.
+     * Runs however many fixed physics steps this frame's time covers, sending one input per step,
+     * then syncs the camera.
      */
     private void processPhysics() {
         float dt = delta.getDelta();
         int steps = timestep.stepsFor(dt);
-        if (physicsReady()) {
+        // Step and send stay under one condition: reconciliation replays unacked inputs, so a
+        // predicted step with no input on the wire (or the reverse) is a drift it can't undo.
+        if (joined && physicsReady()) {
+            PlayerIntent intent = player.intent();
             for (int i = 0; i < steps; i++) {
-                physics.update(player, authority, FixedTimestep.STEP_SECONDS, player.isFlyMode());
+                movement.step(player, authority, intent);
+                serverLink.send(new IPacket.ToServer.PlayerInput(nextInputTick++, intent));
             }
         }
         player.syncCamera();
-        reportPosition();
     }
 
-    /**
-     * Sends the position when the player enters a new chunk, which is what the server loads and
-     * streams around. Silent until joined.
-     */
-    private void reportPosition() {
-        if (!joined) return;
-        ChunkPos chunk = player.getChunkPos();
-        if (chunk.equals(lastReportedChunk)) return;
-        lastReportedChunk = chunk;
-        Vector3f p = player.getPosition();
-        serverLink.send(new IPacket.ToServer.PlayerPosition(p.x, p.y, p.z, player.getPitch(), player.getYaw()));
-    }
-
-    /** Moves the player to the spawn the server chose and starts position reports. */
+    /** Moves the player to the spawn the server chose and starts sending inputs. */
     private void onJoined(IPacket.Join.Accepted accepted) {
         PlayerState spawn = accepted.spawn();
         player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
         player.setOrientation(spawn.pitch(), spawn.yaw());
         joined = true;
+        nextInputTick = 0;
         LOGGER.info("joined as player {} at server tick {}", accepted.playerId(), accepted.serverTick());
     }
 

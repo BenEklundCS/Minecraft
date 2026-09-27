@@ -6,8 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.ServerChunkManager;
-import com.beneklund.minecraft.player.IPlayerStore;
-import com.beneklund.minecraft.player.PlayerState;
+import com.beneklund.minecraft.player.*;
 import com.beneklund.minecraft.world.ServerWorldAuthority;
 import com.beneklund.minecraft.world.World;
 import com.beneklund.minecraft.world.WorldConfig;
@@ -76,8 +75,15 @@ class RoundTripTest {
         ServerWorldAuthority authority = new ServerWorldAuthority(world, registry, new LightEngine(registry));
         // Radius 0: only the player's own chunk is loaded or streamed.
         ServerChunkManager chunks = new ServerChunkManager(new WorldConfig(SEED, 0), world, NO_GENERATION, NO_DISK);
-        GameServer server =
-                new GameServer(world, authority, chunks, new RadiusChunkStreamer(0), NO_PLAYER_SAVES, SPAWN, SEED);
+        GameServer server = new GameServer(
+                world,
+                authority,
+                chunks,
+                new RadiusChunkStreamer(0),
+                NO_PLAYER_SAVES,
+                SPAWN,
+                new PlayerMovement(new Physics(), MovementTuning.DEFAULT),
+                SEED);
         return new Fixture(server, world);
     }
 
@@ -152,7 +158,11 @@ class RoundTripTest {
         InJvmLink.Pair pair = joined(fixture);
         pair.server().drain();
 
-        pair.server().send(new IPacket.ToServer.PlayerPosition(200f, 65f, 200f, 0f, 0f));
+        // Flies east rather than teleporting: 30 steps at 50 blocks/s is 25 blocks, x 8 -> 33, chunk
+        // (2,0). Flying skips the server's LIVE-chunk gate, so the empty chunks along the way don't
+        // hold the body in place.
+        PlayerIntent flyEast = new PlayerIntent(0f, 1f, false, false, true, 0f, 90f);
+        for (int i = 0; i < 30; i++) pair.server().send(new IPacket.ToServer.PlayerInput(i, flyEast));
         fixture.server().tick();
 
         assertTrue(pair.server().drain().contains(new IPacket.ToClient.ChunkUnload(ONLY_CHUNK)));

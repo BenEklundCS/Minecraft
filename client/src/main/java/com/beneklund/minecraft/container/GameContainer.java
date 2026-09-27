@@ -20,8 +20,10 @@ import com.beneklund.minecraft.platform.input.InputEventQueue;
 import com.beneklund.minecraft.platform.input.InputMapper;
 import com.beneklund.minecraft.platform.resources.JsonResourcePack;
 import com.beneklund.minecraft.platform.window.Window;
+import com.beneklund.minecraft.player.MovementTuning;
 import com.beneklund.minecraft.player.Physics;
 import com.beneklund.minecraft.player.Player;
+import com.beneklund.minecraft.player.PlayerMovement;
 import com.beneklund.minecraft.renderer.RenderFeatures;
 import com.beneklund.minecraft.renderer.Renderer;
 import com.beneklund.minecraft.renderer.asset.TextureAtlas;
@@ -45,7 +47,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
-import org.joml.Vector3f;
 
 /**
  * The client's composition root: the one place that calls {@code new} on concrete platform,
@@ -140,7 +141,7 @@ public class GameContainer {
     // world
     private ClientWorldAuthority authority;
     private ClientChunkManager chunkManager;
-    private Physics physics;
+    private PlayerMovement movement;
     private DayNightCycle cycle;
 
     // player
@@ -390,7 +391,8 @@ public class GameContainer {
         authority = new ClientWorldAuthority(world, registry, serverLink);
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         chunkManager = new ClientChunkManager(world, mesher, lightEngine, registry, authority);
-        physics = new Physics();
+        // Same tuning as ServerContainer; prediction only matches the server if both step alike.
+        movement = new PlayerMovement(new Physics(), MovementTuning.DEFAULT);
         cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.VERY_SHORT_DAY_SECONDS);
         WORLD.debug("client world ready, chunks come from the server");
     }
@@ -432,7 +434,7 @@ public class GameContainer {
                 renderWorld,
                 camera,
                 player,
-                physics,
+                movement,
                 cycle,
                 inputHandler,
                 serverLink,
@@ -477,10 +479,8 @@ public class GameContainer {
         LOGGER.info("shutdown complete in {} ms", millisSince(startedAt));
     }
 
-    /** Sends the final position, which the server saves, then disconnects. */
+    /** Disconnects. The server saves its own body of the player, not anything the client reports. */
     private void leaveServer() {
-        Vector3f p = player.getPosition();
-        serverLink.send(new IPacket.ToServer.PlayerPosition(p.x(), p.y(), p.z(), player.getPitch(), player.getYaw()));
         serverLink.send(new IPacket.ToServer.Disconnect("quit"));
     }
 }

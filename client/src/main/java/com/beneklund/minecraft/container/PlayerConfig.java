@@ -18,4 +18,7 @@ public record PlayerConfig(
         float startYaw,
         float movementSpeed,
         float jumpVelocity,
-        float reach) {}
+        float reach) {
+    public static final PlayerConfig DEFAULT =
+            new PlayerConfig(new Vector3f(8.0f, 75.0f, -5.0f), 20.0f, 0.0f, 4.3f, 8.4f, 8.0f);
+}

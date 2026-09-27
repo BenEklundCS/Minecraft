@@ -12,8 +12,7 @@ import com.beneklund.minecraft.infra.ServerChunkManager;
 import com.beneklund.minecraft.net.GameServer;
 import com.beneklund.minecraft.net.IClientLink;
 import com.beneklund.minecraft.net.RadiusChunkStreamer;
-import com.beneklund.minecraft.player.IPlayerStore;
-import com.beneklund.minecraft.player.PlayerState;
+import com.beneklund.minecraft.player.*;
 import com.beneklund.minecraft.world.ServerWorldAuthority;
 import com.beneklund.minecraft.world.World;
 import com.beneklund.minecraft.world.WorldConfig;
@@ -65,6 +64,7 @@ public class ServerContainer {
                 new RadiusChunkStreamer(cfg.loadRadius()),
                 playerStore,
                 spawn(playerStore),
+                new PlayerMovement(new Physics(), MovementTuning.DEFAULT),
                 cfg.seed());
         WORLD.debug("server world ready: {} generation spec(s), seed {}", generationSpecs.size(), cfg.seed());
     }

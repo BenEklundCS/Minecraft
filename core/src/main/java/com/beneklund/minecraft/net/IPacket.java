@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.net;
 
 import com.beneklund.minecraft.block.Block;
+import com.beneklund.minecraft.player.PlayerIntent;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
 
@@ -19,8 +20,7 @@ import com.beneklund.minecraft.world.chunk.ChunkPos;
 public sealed interface IPacket {
     /** Client to server. */
     sealed interface ToServer extends IPacket {
-        record PlayerInput(long tick, float moveX, float moveZ, boolean jump, boolean sneak, float pitch, float yaw)
-                implements ToServer {}
+        record PlayerInput(long tick, PlayerIntent intent) implements ToServer {}
 
         /**
          * A break or place request. The client changes nothing locally; its replica updates when
@@ -29,10 +29,6 @@ public sealed interface IPacket {
         record BlockEdit(long tick, int x, int y, int z, Block block, boolean breaking) implements ToServer {}
 
         record Disconnect(String reason) implements ToServer {}
-
-        // Client-reported and trusted until the server simulates the player. The server loads
-        // chunks around it and saves it when the player leaves.
-        record PlayerPosition(float x, float y, float z, float pitch, float yaw) implements ToServer {}
     }
 
     /** Server to client. */
@@ -47,7 +43,7 @@ public sealed interface IPacket {
 
         record Chat(String message) implements ToClient {}
 
-        record PlayerUpdate(long ackTick, float x, float y, float z, boolean onGround) implements ToClient {}
+        record PlayerUpdate(long ackTick, float x, float y, float z, float vy, boolean onGround) implements ToClient {}
 
         record PlayerDisconnected(int playerId) implements ToClient {}
 

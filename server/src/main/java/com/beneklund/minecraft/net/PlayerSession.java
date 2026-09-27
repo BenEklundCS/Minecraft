@@ -1,11 +1,10 @@
 package com.beneklund.minecraft.net;
 
+import com.beneklund.minecraft.player.PlayerBody;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import org.joml.Vector3fc;
 
 /**
  * The server's view of one connected client: its link, inbox and outbox, join state, last
@@ -19,14 +18,17 @@ public class PlayerSession {
     private final IClientLink link;
     // The last input tick this player sent that the server has consumed. Goes back down as
     // PlayerUpdate's ackTick once the server simulates a body.
-    private long tick;
+    private long lastInputTick = -1;
     private final Set<ChunkPos> loadedChunks = new HashSet<>();
     private final List<IPacket.ToServer> receivedPackets = new ArrayList<>();
     // What this player is owed, held until flush so nothing leaves the server mid-tick.
     private final List<IPacket.ToClient> outbox = new ArrayList<>();
+    /** Inputs waiting for {@code simulate()} **/
+    private final ArrayDeque<IPacket.ToServer.PlayerInput> inputs = new ArrayDeque<>();
+
     private boolean joined;
-    // Where the player last reported being. The spawn until the client says otherwise.
-    private PlayerState state;
+    // The server's simulation of this player. Null until joined.
+    private PlayerBody body;
 
     public PlayerSession(int playerId, IClientLink link) {
         this.playerId = playerId;
@@ -69,21 +71,41 @@ public class PlayerSession {
         return joined;
     }
 
-    public void moved(PlayerState state) {
-        this.state = state;
+    /** Creates the body at {@code at}. Called once, on join. */
+    public void spawnAt(PlayerState at) {
+        body = new PlayerBody(at);
+    }
+
+    public PlayerBody body() {
+        return body;
     }
 
     public PlayerState state() {
-        return state;
+        return body == null ? null : body.state();
     }
 
-    /** The chunk containing the player's last reported position, or null before it has one. */
+    /** The chunk containing the body, or null before join. */
     public ChunkPos chunkPos() {
-        return state == null ? null : ChunkPos.containing(state.x(), state.z());
+        return body == null ? null : ChunkPos.containing(body.getPosition().x, body.getPosition().z);
     }
 
-    public void consumedInput(long inputTick) {
-        tick = inputTick;
+    public void enqueueInput(IPacket.ToServer.PlayerInput input) {
+        inputs.add(input);
+    }
+
+    /** Returns every queued input, oldest first, and empties the queue. */
+    public List<IPacket.ToServer.PlayerInput> takeInputs() {
+        List<IPacket.ToServer.PlayerInput> taken = new ArrayList<>(inputs);
+        inputs.clear();
+        return taken;
+    }
+
+    public long lastInputTick() {
+        return lastInputTick;
+    }
+
+    public void acked(long inputTick) {
+        lastInputTick = inputTick;
     }
 
     /**
@@ -119,10 +141,16 @@ public class PlayerSession {
     }
 
     /**
-     * Sends everything queued this tick, in queue order. {@code tick} is reserved for a {@code
-     * PlayerUpdate} carrying the server's simulated position, which the server doesn't produce yet.
+     * Sends everything queued this tick, in queue order, then a {@code PlayerUpdate} with where the
+     * body ended up. A joined player gets one every tick, input or not, so the client always has a
+     * state to reconcile against.
      */
-    public void flush(long tick) {
+    public void flush() {
+        if (joined && body != null) {
+            Vector3fc p = body.getPosition();
+            queue(new IPacket.ToClient.PlayerUpdate(
+                    lastInputTick, p.x(), p.y(), p.z(), body.getVelocity().y, body.isOnGround()));
+        }
         for (IPacket.ToClient packet : outbox) link.send(packet);
         outbox.clear();
     }

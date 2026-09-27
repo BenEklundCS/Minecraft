@@ -2,6 +2,7 @@ package com.beneklund.minecraft.net;
 
 import com.beneklund.minecraft.infra.ServerChunkManager;
 import com.beneklund.minecraft.player.IPlayerStore;
+import com.beneklund.minecraft.player.PlayerMovement;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.IWorldAuthority;
 import com.beneklund.minecraft.world.World;
@@ -43,6 +44,7 @@ public class GameServer implements IGameServer {
     private final IChunkStreamer streamer;
     private final IPlayerStore playerStore;
     private final PlayerState spawn;
+    private final PlayerMovement movement;
     private final long seed;
     private long tick = 0;
     private final List<PlayerSession> players = new ArrayList<>();
@@ -57,6 +59,7 @@ public class GameServer implements IGameServer {
             IChunkStreamer streamer,
             IPlayerStore playerStore,
             PlayerState spawn,
+            PlayerMovement movement,
             long seed) {
         this.world = world;
         this.authority = authority;
@@ -64,6 +67,7 @@ public class GameServer implements IGameServer {
         this.streamer = streamer;
         this.playerStore = playerStore;
         this.spawn = spawn;
+        this.movement = movement;
         this.seed = seed;
     }
 
@@ -77,14 +81,26 @@ public class GameServer implements IGameServer {
         players.forEach(PlayerSession::drainLink);
         players.forEach(this::apply);
         players.removeIf(session -> !session.isOpen());
+        players.forEach(this::simulate);
         ChunkPos center = loadCenter();
         if (center != null) chunks.tick(center);
         players.forEach(session -> {
             stream(session);
-            session.flush(tick);
+            session.flush();
         });
         changesThisTick.clear();
         tick++;
+    }
+
+    private void simulate(PlayerSession session) {
+        if (!session.isJoined()) return;
+        for (IPacket.ToServer.PlayerInput input : session.takeInputs()) {
+            if (input.tick() <= session.lastInputTick()) continue;
+            session.body().setOrientation(input.intent().pitch(), input.intent().yaw());
+            if (input.intent().flying() || chunks.replicable(session.chunkPos()))
+                movement.step(session.body(), authority, input.intent());
+            session.acked(input.tick());
+        }
     }
 
     @Override
@@ -102,9 +118,7 @@ public class GameServer implements IGameServer {
             switch (packet) {
                 case IPacket.Join.Request request -> join(session);
                 case IPacket.ToServer.BlockEdit edit -> applyEdit(session, edit);
-                case IPacket.ToServer.PlayerInput input -> session.consumedInput(input.tick());
-                case IPacket.ToServer.PlayerPosition p ->
-                    session.moved(new PlayerState(p.x(), p.y(), p.z(), p.pitch(), p.yaw()));
+                case IPacket.ToServer.PlayerInput input -> session.enqueueInput(input);
                 case IPacket.ToServer.Disconnect disconnect -> {
                     save(session);
                     session.close();
@@ -119,7 +133,7 @@ public class GameServer implements IGameServer {
      */
     private void join(PlayerSession session) {
         session.markJoined();
-        session.moved(spawn);
+        session.spawnAt(spawn);
         session.queue(new IPacket.Join.Accepted(session.playerId(), seed, tick, spawn));
     }
 

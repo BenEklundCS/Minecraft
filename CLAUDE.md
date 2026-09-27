@@ -42,7 +42,7 @@ run of the game; a startup crash fails the build.
   timing run**, because it captures the framebuffer every 100 ms with a synchronous
   `glReadPixels` whether or not a browser is attached. `framestream.port` only sets the port.
 - **Shader hot reload:** the `RELOAD_SHADERS` input action calls `renderer.reloadAll()` in-game.
-- **Launch config:** `container/ContainerConfig.defaults()` — seed, render distance, FOV,
+- **Launch config:** `container/ContainerConfig.DEFAULT` — seed, render distance, FOV,
   window, resource pack, spawn.
 
 ## Architecture

@@ -8,11 +8,13 @@ import com.beneklund.minecraft.util.AABB;
 import com.beneklund.minecraft.world.IWorldView;
 import com.beneklund.minecraft.world.chunk.Chunk;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
+import java.util.ArrayList;
 import java.util.List;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Test;
 
 class PlayerMovementTest {
+    private static final BlockDef SOLID = new BlockDef(true, false, true, new String[0]);
     private static final BlockDef AIR = new BlockDef(false, true, true, new String[0]);
     private static final MovementTuning TUNING = MovementTuning.DEFAULT;
 
@@ -192,5 +194,50 @@ class PlayerMovementTest {
         movement().step(body, EMPTY_WORLD, new PlayerIntent(1, 1, true, false, false, 30, 60));
 
         assertEquals(0, body.orientationWrites);
+    }
+
+    // determinism
+
+    // Client prediction and server reconciliation both run step on the same intents; any drift
+    // between two runs shows up as a correction the player feels. Passes as long as step stays a
+    // pure function of body, world and intent. Goes red the day a clock read or a HashSet
+    // iteration order sneaks into it. No delta: Vector3f.equals compares exactly.
+    @Test
+    void sameIntentsSameWorldGiveBitIdenticalBodies() {
+        // floor below y=0, wall from x=-2 down, so strafing (-X at yaw 0) runs into it
+        IWorldView world = new IWorldView() {
+            public BlockDef getBlock(int x, int y, int z) {
+                return y < 0 || x <= -3 ? SOLID : AIR;
+            }
+
+            public Chunk getChunk(ChunkPos pos) {
+                return null;
+            }
+
+            public List<Entity> getEntities(AABB aabb) {
+                return List.of();
+            }
+        };
+        List<PlayerIntent> script = new ArrayList<>();
+        for (int i = 0; i < 60; i++) script.add(intent(0, 1, false, false, false)); // walk
+        script.add(intent(0, 1, true, false, false)); // jump
+        for (int i = 0; i < 90; i++) script.add(intent(1, 0, false, false, false)); // strafe into the wall
+        for (int i = 0; i < 60; i++) script.add(intent(0, 0, false, false, false)); // land
+
+        PlayerState start = new PlayerState(0.5f, 0, 0.5f, 0, 0);
+        PlayerBody a = new PlayerBody(start);
+        PlayerBody b = new PlayerBody(start);
+        PlayerMovement movement = movement();
+        for (PlayerIntent intent : script) {
+            movement.step(a, world, intent);
+            movement.step(b, world, intent);
+        }
+
+        // guards against a vacuous pass where neither body went anywhere
+        assertEquals(-1.7f, a.getPosition().x, 1e-4, "strafe reached the wall face at x=-2");
+
+        assertEquals(a.getPosition(), b.getPosition());
+        assertEquals(a.getVelocity(), b.getVelocity());
+        assertEquals(a.isOnGround(), b.isOnGround());
     }
 }

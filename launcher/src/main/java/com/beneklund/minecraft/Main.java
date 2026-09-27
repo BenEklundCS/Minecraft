@@ -14,6 +14,6 @@ class Main {
     private static final int DEFAULT_PORT = 25565;
 
     void main() throws Exception {
-        Launcher.launch(new LaunchMode.Host(DEFAULT_PORT, ContainerConfig.defaults(), ServerConfig.defaults()));
+        Launcher.launch(new LaunchMode.Host(DEFAULT_PORT, ContainerConfig.DEFAULT, ServerConfig.DEFAULT));
     }
 }
