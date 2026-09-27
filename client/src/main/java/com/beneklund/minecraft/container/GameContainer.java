@@ -11,6 +11,7 @@ import com.beneklund.minecraft.infra.*;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.net.IPacket;
 import com.beneklund.minecraft.net.IServerLink;
+import com.beneklund.minecraft.net.PlayerPrediction;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbAudioLoader;
 import com.beneklund.minecraft.platform.debug.FrameStreamServer;
@@ -141,7 +142,7 @@ public class GameContainer {
     // world
     private ClientWorldAuthority authority;
     private ClientChunkManager chunkManager;
-    private PlayerMovement movement;
+    private PlayerPrediction prediction;
     private DayNightCycle cycle;
 
     // player
@@ -392,7 +393,7 @@ public class GameContainer {
         ChunkMesher mesher = new ChunkMesher(registry, atlas);
         chunkManager = new ClientChunkManager(world, mesher, lightEngine, registry, authority);
         // Same tuning as ServerContainer; prediction only matches the server if both step alike.
-        movement = new PlayerMovement(new Physics(), MovementTuning.DEFAULT);
+        prediction = new PlayerPrediction(new PlayerMovement(new Physics(), MovementTuning.DEFAULT));
         cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.VERY_SHORT_DAY_SECONDS);
         WORLD.debug("client world ready, chunks come from the server");
     }
@@ -434,7 +435,7 @@ public class GameContainer {
                 renderWorld,
                 camera,
                 player,
-                movement,
+                prediction,
                 cycle,
                 inputHandler,
                 serverLink,

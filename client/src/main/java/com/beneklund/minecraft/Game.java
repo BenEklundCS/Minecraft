@@ -8,6 +8,7 @@ import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.net.IPacket;
 import com.beneklund.minecraft.net.IServerLink;
+import com.beneklund.minecraft.net.PlayerPrediction;
 import com.beneklund.minecraft.platform.debug.FrameStreamServer;
 import com.beneklund.minecraft.platform.graphics.ChunkMesh;
 import com.beneklund.minecraft.platform.graphics.GlFramebuffer;
@@ -19,7 +20,6 @@ import com.beneklund.minecraft.player.Hotbar;
 import com.beneklund.minecraft.player.Interaction;
 import com.beneklund.minecraft.player.Player;
 import com.beneklund.minecraft.player.PlayerIntent;
-import com.beneklund.minecraft.player.PlayerMovement;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.player.RaycastResult;
 import com.beneklund.minecraft.renderer.RenderPass;
@@ -78,7 +78,7 @@ public class Game {
     private final RenderWorld renderWorld;
     private final Camera camera;
     private final Player player;
-    private final PlayerMovement movement;
+    private final PlayerPrediction prediction;
     private final DayNightCycle cycle;
     private final InputHandler inputHandler;
     private final IServerLink serverLink;
@@ -93,9 +93,6 @@ public class Game {
 
     // Nothing is reported until the server has placed the player.
     private boolean joined;
-    // Sequence number for PlayerInput, one per predicted step. The server acks it back in
-    // PlayerUpdate; it restarts at 0 on join.
-    private long nextInputTick;
     private int uploadsThisSecond;
     private int deletesThisSecond;
     private boolean screenshotRequested;
@@ -129,7 +126,7 @@ public class Game {
             RenderWorld renderWorld,
             Camera camera,
             Player player,
-            PlayerMovement movement,
+            PlayerPrediction prediction,
             DayNightCycle cycle,
             InputHandler inputHandler,
             IServerLink serverLink,
@@ -151,7 +148,7 @@ public class Game {
         this.renderWorld = renderWorld;
         this.camera = camera;
         this.player = player;
-        this.movement = movement;
+        this.prediction = prediction;
         this.cycle = cycle;
         this.inputHandler = inputHandler;
         this.serverLink = serverLink;
@@ -502,13 +499,12 @@ public class Game {
     private void processPhysics() {
         float dt = delta.getDelta();
         int steps = timestep.stepsFor(dt);
-        // Step and send stay under one condition: reconciliation replays unacked inputs, so a
-        // predicted step with no input on the wire (or the reverse) is a drift it can't undo.
+        // prediction.step both moves the player and returns the input for that step, so a
+        // predicted step and an input on the wire can't come apart; replay depends on that.
         if (joined && physicsReady()) {
             PlayerIntent intent = player.intent();
             for (int i = 0; i < steps; i++) {
-                movement.step(player, authority, intent);
-                serverLink.send(new IPacket.ToServer.PlayerInput(nextInputTick++, intent));
+                serverLink.send(prediction.step(player, authority, intent));
             }
         }
         player.syncCamera();
@@ -520,7 +516,7 @@ public class Game {
         player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
         player.setOrientation(spawn.pitch(), spawn.yaw());
         joined = true;
-        nextInputTick = 0;
+        prediction.reset();
         LOGGER.info("joined as player {} at server tick {}", accepted.playerId(), accepted.serverTick());
     }
 
@@ -549,11 +545,31 @@ public class Game {
                 case IPacket.ToClient.ChunkData data -> chunkManager.onChunkData(data);
                 case IPacket.ToClient.ChunkUnload unload -> chunkManager.onChunkUnload(unload);
                 case IPacket.ToClient.BlockChanged changed -> chunkManager.onBlockChanged(changed);
+                case IPacket.ToClient.PlayerUpdate update -> reconcile(update);
                 case IPacket.Join.Accepted accepted -> onJoined(accepted);
                 case IPacket.Join.Rejected rejected -> LOGGER.warn("server refused the join: {}", rejected.reason());
                 default -> {}
             }
         }
+    }
+
+    /**
+     * Adopts the server's view of the player and replays what it hasn't acked yet. When the
+     * prediction was right the body ends where it started, so the traced distance should read 0.0
+     * almost every time. Breaking the block underfoot is the usual exception: the server applies
+     * the edit a tick before the replica hears about it.
+     *
+     * <p>This runs after {@code processPhysics} has synced the camera, so a correction reaches the
+     * screen a frame late. At 0 that's invisible; if a one-frame pop ever shows, sync again here.
+     */
+    private void reconcile(IPacket.ToClient.PlayerUpdate update) {
+        Vector3f before = new Vector3f(player.getPosition());
+        prediction.reconcile(player, authority, update);
+        PLAYER.trace(
+                "reconciled ack {} pending {} correction {}",
+                update.ackTick(),
+                prediction.pending(),
+                before.distance(player.getPosition()));
     }
 
     private void processChunks() {
