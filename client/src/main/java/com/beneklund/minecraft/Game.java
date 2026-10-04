@@ -326,7 +326,7 @@ public class Game {
             // passes first, so it has to do its own binding between them.
             //
             // depthTexture() only answers because sceneBuffer is built with DepthMode.TEXTURE; if
-            // this throws, the argument to fix is the one in GameContainer, not the one here.
+            // this throws, the argument to fix is the one in ClientContainer, not the one here.
             EngineStats.beginPhase(CpuPhase.POST);
             if (gpuTimer != null) gpuTimer.begin(Renderer.TIMER_POST, frame);
             postProcessor.draw(

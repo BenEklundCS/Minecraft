@@ -1,6 +1,6 @@
 package com.beneklund.minecraft;
 
-import com.beneklund.minecraft.container.GameContainer;
+import com.beneklund.minecraft.container.ClientContainer;
 import com.beneklund.minecraft.container.ServerContainer;
 import com.beneklund.minecraft.net.InJvmLink;
 
@@ -36,7 +36,7 @@ final class Launcher {
         server.accept(link.client());
         server.start();
         try {
-            new GameContainer(host.client(), link.server()).run();
+            new ClientContainer(host.client(), link.server()).run();
         } finally {
             server.stop();
         }

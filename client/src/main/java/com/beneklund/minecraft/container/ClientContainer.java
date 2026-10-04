@@ -74,7 +74,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * @see <a href="https://blog.ploeh.dk/2011/07/28/CompositionRoot/">Mark Seemann: Composition
  *     Root</a>
  */
-public class GameContainer {
+public class ClientContainer {
     // Classloader-relative, no leading slash — StbAudioLoader.listOggs resolves it through the
     // context classloader, which rejects an absolute-looking name. Searched recursively, so
     // every album under it is in the pool and none of them is named here: the repo ships one
@@ -153,7 +153,7 @@ public class GameContainer {
     private static final int PROTOCOL_VERSION = 1;
 
     /** @param serverLink the client end of the connection; the server must already accept it */
-    public GameContainer(ContainerConfig cfg, IServerLink serverLink) {
+    public ClientContainer(ContainerConfig cfg, IServerLink serverLink) {
         this.cfg = cfg;
         this.serverLink = serverLink;
     }

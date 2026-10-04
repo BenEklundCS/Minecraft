@@ -17,7 +17,7 @@ import java.util.Map;
  * {@code sky.frag} samples that buffer through {@code uCloudBuffer} and composites it into the sky.
  *
  * <p>Owns its render target because the march is too expensive at full resolution, and a {@link
- * DrawCall} can't pick a target. {@code GameContainer} sizes the buffer at a third of the window
+ * DrawCall} can't pick a target. {@code ClientContainer} sizes the buffer at a third of the window
  * per axis. Follows the shadow pass pattern: render to a buffer, then bind it as a texture in a
  * later shader. The clouds are scene input to the tonemap.
  *

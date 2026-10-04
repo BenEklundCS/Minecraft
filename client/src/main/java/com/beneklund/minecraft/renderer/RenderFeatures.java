@@ -1,7 +1,7 @@
 package com.beneklund.minecraft.renderer;
 
 /**
- * The optional passes a frame runs. Built once in {@code GameContainer} from {@code
+ * The optional passes a frame runs. Built once in {@code ClientContainer} from {@code
  * local.properties} and handed to {@link Renderer} and {@link PostProcessor}, the two places that
  * sequence passes.
  *

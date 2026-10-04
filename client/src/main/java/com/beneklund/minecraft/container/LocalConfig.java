@@ -74,7 +74,7 @@ public class LocalConfig {
     }
 
     /**
-     * {@code shaders.simple=true} strips the frame back to terrain and sky. {@code GameContainer}
+     * {@code shaders.simple=true} strips the frame back to terrain and sky. {@code ClientContainer}
      * turns it into a {@code RenderFeatures} preset, and that class lists what each flag switches
      * off.
      */

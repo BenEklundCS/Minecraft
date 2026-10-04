@@ -1,0 +1,153 @@
+# AGENTS.md
+
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+
+## Commands
+
+Java 21 with `--enable-preview` (Zulu 21 locally). On Windows use `.\gradlew.bat`; the Bash
+tool can use `./gradlew`. If Gradle picks a wrong JVM, set `JAVA_HOME` to the Zulu 21 install
+for that invocation.
+
+```bash
+./gradlew run                      # launch the game
+./gradlew build                    # compile + spotlessCheck + checkstyle + unit tests
+./gradlew test                     # unit tests only (integration excluded)
+./gradlew test --tests "com.beneklund.minecraft.player.PhysicsTest"   # single test class
+./gradlew test --tests "*PhysicsTest.gravityAccelerates"              # single test method
+./gradlew integrationTest          # slow suite under src/test/**/integration/ — NOT part of build
+./gradlew spotlessApply            # format (palantir-java-format); pre-commit hook runs this
+./gradlew checkstyleMain checkstyleTest
+```
+
+Test reports: `build/reports/tests/test/index.html`.
+
+`build` also runs `installGitHooks`, which points `core.hooksPath` at `.githooks/` — the
+pre-commit hook runs `spotlessApply` and re-stages, so CI's `spotlessCheck` never trips.
+
+CI (`.github/workflows/test-and-build.yml`) runs `./gradlew build` plus a 5-second Xvfb smoke
+run of the game; a startup crash fails the build.
+
+### Runtime knobs
+
+- **Logging:** `-Dlog.all=DEBUG`, or per category `-Dlog.chunk=TRACE`. Categories are
+  `chunk, world, render, gpu, input, player, io, audio, perf` (see `util/Log.java`,
+  `resources/logback.xml`). Logback re-scans every 5s, so levels can change mid-run.
+- **`local.properties`** (repo root, gitignored, optional): `startup.disc`, `preferred.album`,
+  `debug.enabled`, `debugserver.enabled`, `framestream.port`, `gputimer.enabled`,
+  `shaders.simple`. Read by
+  `container/LocalConfig`. `shaders.simple=true` strips the frame back to terrain and sky —
+  no cast shadows, clouds, light shafts, bloom or distance haze; see `renderer/RenderFeatures`
+  for what each flag switches off and what deliberately survives.
+  `debugserver.enabled=true` starts the debug HTTP server; **off is the right default for a
+  timing run**, because it captures the framebuffer every 100 ms with a synchronous
+  `glReadPixels` whether or not a browser is attached. `framestream.port` only sets the port.
+- **Shader hot reload:** the `RELOAD_SHADERS` input action calls `renderer.reloadAll()` in-game.
+- **Launch config:** `container/ContainerConfig.DEFAULT` — seed, render distance, FOV,
+  window, resource pack, spawn.
+
+## Architecture
+
+Hexagonal layering without the ceremony.
+
+`docs/` is gitignored — it exists in a local checkout but not on the remote, so don't assume
+it's there. When it is, it's the best starting point: `ARCHITECTURE.md` for the design,
+`decisions/` for the ADRs behind it, `STATE_OF_PLAY.md` for what currently works or is broken,
+`BACKLOG.md` and `roadmaps/` for what's next.
+
+The essentials that cross many files:
+
+**Dependency rule.** `world/`, `player/`, `block/`, `entity/` depend on nothing outside
+themselves — no GL, no GLFW, no threads. `renderer/` may use `platform/graphics/` and the
+domain. `infra/` may use everything. `container/GameContainer` (client) and
+`container/ServerContainer` (server) are the only places that call `new` on concrete types;
+`launcher/Launcher` runs a `LaunchMode`; `Host` joins them with an `InJvmLink`.
+
+**Composition root ordering is load-bearing.** `GameContainer.run()` has numbered phases;
+nothing above `window.init()` may touch GL. `ServerContainer.stop()` stops the tick thread, then
+generation, *then* flushes dirty chunks, so no in-flight generation dirties a saved chunk.
+
+**Thread model.** The main thread is the *only* thread allowed to call OpenGL. The server ticks
+on its own `server-tick` thread at 20 Hz. Two fixed pools (`availableProcessors/2`, min 2) —
+generation on the server, meshing on the client — produce plain data (`ChunkMeshData`:
+`float[]`/`int[]`) that the main thread uploads under `Game.uploadBudget()`. `RenderWorld` is
+render-thread-only. Adding a GL call to a worker is the failure mode this design exists to prevent.
+
+**Chunk pipeline** is split across the link. `ServerChunkManager` evicts chunks outside the load
+radius (saving them first) and loads missing ones in spiral order — from `ChunkStore` straight to
+`LIVE`, or through the generation pool. `GameServer` streams the `LIVE` chunks its
+`IChunkStreamer` allows as `ChunkData`, unloads the rest, and sends edits as `BlockChanged`. `ClientChunkManager` holds a replica filled only by those packets and
+lights, meshes and remeshes it. `Chunk` owns its state machine via `tryTransition` on an
+`AtomicReference<ChunkState>` — every job re-checks the transition and bails if it lost the race.
+The server puts an empty `Chunk` into `World` *before* the worker fills it, so
+`ServerChunkManager.replicable()` gates on state; the client only inserts chunks with their blocks,
+so `hasBlocks()` gates on presence.
+
+**`IWorldAuthority`** is the seam all domain reads/writes go through (`ServerWorldAuthority` on
+the server; `ClientWorldAuthority` on the client, which reads the replica and sends edits as
+`BlockEdit`). `IPhysicsBody` is the same idea for physics: `Physics` is a
+system acting on the interface, not a method on `Player`.
+
+**Rendering is passive.** Subsystems implement `IRenderable` and hand back `List<DrawCall>`;
+`Renderer` sorts opaque → transparent and issues them. GL handles live in `platform/graphics/`
+(`GlShader`, `GlTexture`, `GlVertexArray`); `renderer/` holds the domain-facing wrappers
+(`ShaderProgram`, `TextureAtlas`).
+
+**Input never leaks keycodes.** GLFW callback → `platform/input/InputEventQueue` →
+`InputMapper` → `List<IInputAction>` (sealed hierarchy in `input/`). Rebinding touches
+`InputMapper` and nothing else.
+
+**Content is data.** `BlockRegistry` is constructor-injected, never a singleton. Textures come
+from a JSON resource pack (`resources/packs/faithful/pack.json`).
+
+**Saves** live in `saves/<seed>/` — `<x>_<z>.bin` per chunk, `level.dat` for the player, both
+with a 12-byte magic/version/length header. Reads validate and fall back to "no save" rather
+than throwing; writes go temp-file-then-atomic-move.
+
+## Conventions
+
+- **Checkstyle enforces `this.` on overlapping field accesses.** Spotless has a custom
+  `removeRedundantThis` step that strips the non-overlapping ones before palantir formats.
+  Run `spotlessApply` rather than hand-formatting.
+- Fence hand-aligned data (vertex arrays and the like) with `// spotless:off` / `// spotless:on`.
+- Comments read like a developer leaving notes for the next person: why this shape, what
+  breaks otherwise, what was tried. Not doc templates, not ALL-CAPS section banners. Several
+  non-obvious decisions are recorded as long comments in place (`Game.processPhysics`,
+  `ServerContainer.spawn`, `ServerChunkManager.shutdown`) — extend that habit.
+- Prefer the category loggers (`CHUNK.debug`, `RENDER.trace`) over the bare `LOGGER`; `LOGGER`
+  is for startup/shutdown and anything that isn't one subsystem.
+- **Docs describe reality.** If a doc and the code disagree, the doc is the bug — fix it in the
+  same commit. New architectural decision → new numbered ADR in `docs/decisions/`. Finishing a
+  backlog item means updating `docs/BACKLOG.md` *and* `docs/STATE_OF_PLAY.md`.
+- Because `docs/` never reaches the remote, anything a stranger cloning the repo needs to know
+  belongs in `README.md` or in a comment next to the code that enforces it — not only in `docs/`.
+- `private/` is a separate nested git repo (personal notes) and is not part of this repo's
+  history.
+
+## Debug console (Spyglass)
+
+`src/main/resources/debug/index.html` is the browser frontend for the debug HTTP server in
+`platform/debug/`. It is a single self-contained page — no build step, no dependencies, no
+external requests — served as the server's `/` document.
+
+**Codex owns this file.** The Java server is Ben's; the page is Codex's to write and keep
+current. When an endpoint is added, removed, or changes shape on the server, updating this page
+is part of that change, not a follow-up.
+
+Rules that keep it honest:
+
+- **It is a client, never a source of truth.** Every number on the page came from an endpoint.
+  The page does no measurement of its own and stores no game state.
+- **Degrade, don't break.** An endpoint that 404s is shown as unwired, with a note describing the
+  response shape the panel expects — never as an error, and never as a blank panel. The page
+  probes on a timer so a newly wired endpoint lights up without a reload.
+- **Never cite a guide from code.** No `DG-*`, `GG-*` or `MC-*` identifier appears anywhere under
+  `src/` — not in this page, not in a Java comment, not in a shader. Those numbers live in a vault
+  that never reaches the remote, so a reference to one is a dead pointer to every reader who
+  clones this repo. State the reason itself instead: the behaviour, the number, or the constraint
+  the guide was going to explain.
+- **Parse liberally.** Text responses are read as `key=value` lines *or* JSON, so tightening a
+  response format on the Java side doesn't require a matching edit here.
+- **No dependencies.** It is served from a socket that is off by default, to a browser that may
+  have no network. Inline everything; no CDN, no web fonts, no build.
+- **Vanilla JS in the game's own idiom.** Comments explain why a thing is shaped that way — the
+  same habit as the Java.
