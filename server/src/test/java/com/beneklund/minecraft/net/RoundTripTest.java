@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 
 class RoundTripTest {
     private static final int PLAYER_ID = 1;
-    private static final int PROTOCOL_VERSION = 1;
+    private static final int PROTOCOL_VERSION = PacketCodec.PROTOCOL_VERSION;
     private static final long SEED = 42L;
 
     /*
@@ -98,6 +98,20 @@ class RoundTripTest {
         fixture.server().tick();
         return pair;
     }
+
+    @Test
+    void wrongProtocolIsRejectedAndClosed() {
+        Fixture fixture = serverWithOneChunk();
+        InJvmLink.Pair pair = InJvmLink.connect(PLAYER_ID);
+        fixture.server().accept(pair.client());
+        pair.server().send(new IPacket.ToServer.Join.Request("ben", PROTOCOL_VERSION + 1));
+        fixture.server().tick();
+
+        List<IPacket.ToClient> received = pair.server().drain();
+        assertEquals(1, received.size());
+        assertTrue(received.get(0) instanceof IPacket.Join.Rejected);
+        assertTrue(!pair.server().isOpen());
+    } // a client from the future gets one Rejected, no Accepted, no chunks, and the link closes
 
     @Test
     void joinIsAcceptedAndTheChunkIsStreamed() {

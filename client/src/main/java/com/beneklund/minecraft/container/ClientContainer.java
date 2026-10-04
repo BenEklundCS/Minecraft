@@ -11,6 +11,7 @@ import com.beneklund.minecraft.infra.*;
 import com.beneklund.minecraft.input.InputHandler;
 import com.beneklund.minecraft.net.IPacket;
 import com.beneklund.minecraft.net.IServerLink;
+import com.beneklund.minecraft.net.PacketCodec;
 import com.beneklund.minecraft.net.PlayerPrediction;
 import com.beneklund.minecraft.platform.audio.AudioPlayer;
 import com.beneklund.minecraft.platform.audio.StbAudioLoader;
@@ -150,7 +151,6 @@ public class ClientContainer {
 
     // Not checked by the server yet.
     private static final String USERNAME = "player";
-    private static final int PROTOCOL_VERSION = 1;
 
     /** @param serverLink the client end of the connection; the server must already accept it */
     public ClientContainer(ContainerConfig cfg, IServerLink serverLink) {
@@ -189,7 +189,7 @@ public class ClientContainer {
         initPlayer();
         initFrameStream();
         // The server only sends chunks to a joined player, connect to the server using serverLink.
-        serverLink.send(new IPacket.Join.Request(USERNAME, PROTOCOL_VERSION));
+        serverLink.send(new IPacket.Join.Request(USERNAME, PacketCodec.PROTOCOL_VERSION));
         phaseDone("world+player", startedAt);
 
         LOGGER.info("startup complete in {} ms, entering game loop", millisSince(startedAt));

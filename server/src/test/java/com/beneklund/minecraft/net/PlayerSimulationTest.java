@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Test;
 
 class PlayerSimulationTest {
     private static final int PLAYER_ID = 1;
-    private static final int PROTOCOL_VERSION = 1;
+    private static final int PROTOCOL_VERSION = PacketCodec.PROTOCOL_VERSION;
     private static final long SEED = 42L;
 
     // Same origin chunk as RoundTripTest, so local and world coordinates coincide for x and z.
