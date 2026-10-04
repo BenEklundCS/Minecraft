@@ -41,6 +41,10 @@ jobs:
           path: build/reports/tests/test/
 
       - name: Smoke test — verify game starts without crashing
+        env:
+          # The runner has no sound card, so alcOpenDevice returns NULL and the game throws in
+          # initAudio. OpenAL Soft's null backend accepts the device and discards the audio.
+          ALSOFT_DRIVERS: "null"
         run: |
           # Start a virtual framebuffer (no physical display needed)
           Xvfb :99 -screen 0 1280x720x24 &
