@@ -51,20 +51,37 @@ jobs:
           XVFB_PID=$!
           sleep 1
 
-          # Run game for 5 seconds then terminate — a clean timeout means it started fine.
-          # Exit 124 = timed out (good). Any other non-zero = crashed on startup (bad).
           # -PgameHeap: the build's default heap is sized for a dev machine and exceeds this
           # runner's physical RAM, which starves native allocations during startup.
-          DISPLAY=:99 timeout --signal=SIGTERM 5 ./gradlew run -PgameHeap=2g 2>&1 | tee game-smoke.log
-          EXIT=${PIPESTATUS[0]}
+          DISPLAY=:99 ./gradlew run -PgameHeap=2g > game-smoke.log 2>&1 &
+          GAME_PID=$!
 
+          # Gradle's own startup time varies a lot between runs, so a fixed timeout can kill the
+          # game before it has initialised anything and still look like a pass. Wait for the game's
+          # own "startup complete" line instead, and fail if the process dies first.
+          STARTED=0
+          for _ in $(seq 1 120); do
+            if grep -q "startup complete" game-smoke.log; then STARTED=1; break; fi
+            kill -0 "$GAME_PID" 2>/dev/null || break
+            sleep 1
+          done
+
+          # A few seconds of running the loop, so a crash on the first frames counts too.
+          if [ "$STARTED" -eq 1 ]; then
+            sleep 5
+            kill -0 "$GAME_PID" 2>/dev/null || STARTED=0
+          fi
+
+          kill "$GAME_PID" 2>/dev/null || true
+          pkill -f com.beneklund.minecraft.Main 2>/dev/null || true
           kill "$XVFB_PID" 2>/dev/null || true
 
-          if [ "$EXIT" -ne 0 ] && [ "$EXIT" -ne 124 ]; then
-            echo "::error::Game crashed on startup (exit $EXIT). Check game-smoke.log."
+          if [ "$STARTED" -ne 1 ]; then
+            echo "::error::Game did not start or crashed in the first frames. Check game-smoke.log."
+            tail -n 60 game-smoke.log
             exit 1
           fi
-          echo "Smoke test passed (exit $EXIT)"
+          echo "Smoke test passed"
 
       - name: Upload smoke test log
         uses: actions/upload-artifact@v4
