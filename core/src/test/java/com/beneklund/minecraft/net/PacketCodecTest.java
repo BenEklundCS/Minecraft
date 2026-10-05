@@ -368,20 +368,20 @@ public class PacketCodecTest {
     }
 
     // fixtures
-    public IPacket.ToServer.PlayerInput playerInput() {
+    private IPacket.ToServer.PlayerInput playerInput() {
         PlayerIntent intent = new PlayerIntent(1f, 0f, false, false, false, 0f, 90f);
         return new IPacket.ToServer.PlayerInput(7L, intent);
     }
 
-    public IPacket.ToServer.BlockEdit blockEdit() {
+    private IPacket.ToServer.BlockEdit blockEdit() {
         return new IPacket.ToServer.BlockEdit(9L, 0, 64, 0, Block.STONE, true);
     }
 
-    public IPacket.ToServer.Disconnect disconnect() {
+    private IPacket.ToServer.Disconnect disconnect() {
         return new IPacket.ToServer.Disconnect("quit");
     }
 
-    public IPacket.ToClient.ChunkData chunkData() {
+    private IPacket.ToClient.ChunkData chunkData() {
         byte[] data = new byte[Chunk.size()];
         for (int i = 0; i < Chunk.size(); i++) {
             data[i] = Block.STONE.id();
@@ -389,39 +389,39 @@ public class PacketCodecTest {
         return new IPacket.ToClient.ChunkData(new ChunkPos(1, 2), data);
     }
 
-    public IPacket.ToClient.ChunkUnload chunkUnload() {
+    private IPacket.ToClient.ChunkUnload chunkUnload() {
         return new IPacket.ToClient.ChunkUnload(new ChunkPos(3, 4));
     }
 
-    public IPacket.ToClient.BlockChanged blockChanged() {
+    private IPacket.ToClient.BlockChanged blockChanged() {
         return new IPacket.ToClient.BlockChanged(5, 64, -7, Block.STONE);
     }
 
-    public IPacket.ToClient.Chat chat() {
+    private IPacket.ToClient.Chat chat() {
         return new IPacket.ToClient.Chat("hello");
     }
 
-    public IPacket.ToClient.PlayerUpdate playerUpdate(float x, float y, float z, float vy) {
+    private IPacket.ToClient.PlayerUpdate playerUpdate(float x, float y, float z, float vy) {
         return new IPacket.ToClient.PlayerUpdate(412L, x, y, z, vy, true);
     }
 
-    public IPacket.ToClient.PlayerDisconnected playerDisconnected() {
+    private IPacket.ToClient.PlayerDisconnected playerDisconnected() {
         return new IPacket.ToClient.PlayerDisconnected(9);
     }
 
-    public IPacket.ToClient.PlayerConnected playerConnected() {
+    private IPacket.ToClient.PlayerConnected playerConnected() {
         return new IPacket.ToClient.PlayerConnected(10);
     }
 
-    public IPacket.Join.Request joinRequest() {
+    private IPacket.Join.Request joinRequest() {
         return new IPacket.Join.Request("ben", 1);
     }
 
-    public IPacket.Join.Accepted joinAccepted() {
+    private IPacket.Join.Accepted joinAccepted() {
         return new IPacket.Join.Accepted(7, 1234L, 0L, new PlayerState(0f, 65f, 0f, 0f, 0f));
     }
 
-    public IPacket.Join.Rejected joinRejected() {
+    private IPacket.Join.Rejected joinRejected() {
         return new IPacket.Join.Rejected("old client");
     }
 }
