@@ -32,6 +32,7 @@ public sealed interface IInputAction {
         RELOAD_SHADERS,
         DEBUG_SHADOW_MAP,
         SCREENSHOT,
+        TOGGLE_HUD,
         EXIT,
         NONE,
     }

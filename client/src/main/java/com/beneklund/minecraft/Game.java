@@ -96,6 +96,7 @@ public class Game {
     private int uploadsThisSecond;
     private int deletesThisSecond;
     private boolean screenshotRequested;
+    private boolean hudVisible = true;
     // F6. Draws the sun's depth map into the corner so it can be watched while moving — the
     // only way to tell "the map is wrong" apart from "the sampling is wrong", which look
     // identical in the world.
@@ -352,7 +353,7 @@ public class Game {
 
             // After the tonemap, straight to the window. HUD colours are display values already.
             EngineStats.beginPhase(CpuPhase.HUD);
-            renderer.drawHud(camera);
+            if (hudVisible) renderer.drawHud(camera);
             EngineStats.endPhase(CpuPhase.HUD);
 
             // After the HUD so the stream shows exactly what is on screen, overlay included.
@@ -462,6 +463,10 @@ public class Game {
 
         if (actions.contains(IInputAction.Simple.SCREENSHOT)) {
             screenshotRequested = true;
+        }
+
+        if (actions.contains(IInputAction.Simple.TOGGLE_HUD)) {
+            hudVisible = !hudVisible;
         }
 
         if (actions.contains(IInputAction.Simple.DEBUG_SHADOW_MAP)) {

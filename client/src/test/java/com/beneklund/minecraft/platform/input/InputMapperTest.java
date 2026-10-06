@@ -71,6 +71,7 @@ class InputMapperTest {
                 new TapKeyCase(GLFW_KEY_ESCAPE, Simple.EXIT),
                 new TapKeyCase(GLFW_KEY_X, Simple.EXIT),
                 new TapKeyCase(GLFW_KEY_I, Simple.INVENTORY),
+                new TapKeyCase(GLFW_KEY_F1, Simple.TOGGLE_HUD),
                 new TapKeyCase(GLFW_KEY_F3, Simple.DEBUG_OVERLAY),
                 new TapKeyCase(GLFW_KEY_P, Simple.PAUSE));
     }
