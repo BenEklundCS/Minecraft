@@ -96,6 +96,14 @@ in `.githooks` formats staged Java automatically — `./gradlew build` installs 
 ./gradlew spotlessApply
 ```
 
+### Project board
+
+The Minecraft GitHub Project is the work board. Once it is created and configured, its committed
+export lives in `.github/project-snapshot.json`; the pre-commit hook refreshes and stages that file
+from `.github/project-sync.json`. Run `./gradlew syncProjectBoard` to refresh it manually. The sync
+uses the authenticated `gh` CLI and preserves the last snapshot if GitHub is unavailable during a
+commit.
+
 ---
 
 ## Configuration

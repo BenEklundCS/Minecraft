@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test;
  */
 class PredictionTest {
     private static final int PLAYER_ID = 1;
-    private static final int PROTOCOL_VERSION = 1;
+    private static final int PROTOCOL_VERSION = PacketCodec.PROTOCOL_VERSION;
     private static final long SEED = 42L;
     private static final long DELAY_MS = 150;
     private static final long FRAME_MS = 17;

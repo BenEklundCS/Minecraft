@@ -4,14 +4,19 @@
 # spotlessCheck never trips on you.
 
 staged_java=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.java$')
-[ -z "$staged_java" ] && exit 0
-
-echo "pre-commit: running spotlessApply..."
-if [ -f ./gradlew ]; then
-    sh ./gradlew spotlessApply --quiet || { echo "spotlessApply failed — commit aborted"; exit 1; }
-else
-    echo "no ./gradlew found — skipping format"; exit 0
+if [ -n "$staged_java" ]; then
+    echo "pre-commit: running spotlessApply..."
+    if [ -f ./gradlew ]; then
+        sh ./gradlew spotlessApply --quiet || { echo "spotlessApply failed — commit aborted"; exit 1; }
+    else
+        echo "no ./gradlew found — skipping format"
+    fi
+    # Re-stage only Java files that were already staged, leaving other work untouched.
+    echo "$staged_java" | tr '\n' '\0' | xargs -0 git add
 fi
 
-# Re-stage only the files that were already staged (don't grab unrelated edits).
-echo "$staged_java" | tr '\n' '\0' | xargs -0 git add
+if command -v node >/dev/null 2>&1; then
+    node scripts/sync-project-board.mjs --stage --hook
+else
+    echo "pre-commit: Node.js not found — skipping GitHub Project sync"
+fi

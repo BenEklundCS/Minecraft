@@ -91,6 +91,12 @@ tasks.register('run') {
     dependsOn ':launcher:run'
 }
 
+tasks.register('syncProjectBoard', Exec) {
+    group = 'project management'
+    description = 'Exports the GitHub Project board to .github/project-snapshot.json'
+    commandLine 'node', 'scripts/sync-project-board.mjs'
+}
+
 // Point git at the versioned hooks in .githooks so a fresh clone picks up the
 // pre-commit formatter the first time anyone builds.
 tasks.register('installGitHooks', Exec) {

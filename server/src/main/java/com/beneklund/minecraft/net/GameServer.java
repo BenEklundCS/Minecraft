@@ -116,7 +116,7 @@ public class GameServer implements IGameServer {
     private void apply(PlayerSession session) {
         for (IPacket.ToServer packet : session.takeReceived()) {
             switch (packet) {
-                case IPacket.Join.Request request -> join(session);
+                case IPacket.Join.Request request -> join(session, request);
                 case IPacket.ToServer.BlockEdit edit -> applyEdit(session, edit);
                 case IPacket.ToServer.PlayerInput input -> session.enqueueInput(input);
                 case IPacket.ToServer.Disconnect disconnect -> {
@@ -129,9 +129,17 @@ public class GameServer implements IGameServer {
 
     /**
      * Accepts a join and places the player at spawn, so chunks start loading there before the
-     * client reports a position.
+     * client reports a position. A client on an unsupported protocol version gets a {@code
+     * Rejected} with the supported range, and its link closes after that tick's flush.
      */
-    private void join(PlayerSession session) {
+    private void join(PlayerSession session, IPacket.Join.Request request) {
+        if (!PacketCodec.isCompatible(request.protocolVersion())) {
+            session.queue(new IPacket.Join.Rejected(String.format(
+                    "Protocol %d unsupported, server speaks %d to %d",
+                    request.protocolVersion(), PacketCodec.MIN_COMPATIBLE_VERSION, PacketCodec.PROTOCOL_VERSION)));
+            session.closeAfterFlush();
+            return;
+        }
         session.markJoined();
         session.spawnAt(spawn);
         session.queue(new IPacket.Join.Accepted(session.playerId(), seed, tick, spawn));
