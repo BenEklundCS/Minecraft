@@ -72,11 +72,8 @@ public class ServerContainer {
     /**
      * Connects a client. Call before {@link #start()}, because {@link GameServer}'s player list is
      * owned by the tick thread and isn't thread-safe.
-     *
-     * @throws IllegalStateException if the tick thread has started
      */
     public void accept(IClientLink client) {
-        if (tickThread != null) throw new IllegalStateException("accept() after start()");
         server.accept(client);
     }
 

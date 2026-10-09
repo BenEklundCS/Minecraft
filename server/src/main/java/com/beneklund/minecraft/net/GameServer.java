@@ -11,6 +11,7 @@ import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * The authoritative game simulation: owns the world, applies what clients ask for, and streams
@@ -47,6 +48,7 @@ public class GameServer implements IGameServer {
     private final PlayerMovement movement;
     private final long seed;
     private long tick = 0;
+    private final ConcurrentLinkedQueue<IClientLink> pending = new ConcurrentLinkedQueue<>();
     private final List<PlayerSession> players = new ArrayList<>();
     // Every edit applied this tick. Filled by apply, sent to every joined player during flush (not
     // just the one who made the edit), then cleared.
@@ -73,11 +75,12 @@ public class GameServer implements IGameServer {
 
     @Override
     public void accept(IClientLink client) {
-        players.add(new PlayerSession(client.playerId(), client));
+        pending.add(client);
     }
 
     /** Runs one server tick. See the class comment for the phase order. */
     public void tick() {
+        connectPendingClients();
         players.forEach(PlayerSession::drainLink);
         players.forEach(this::apply);
         players.removeIf(session -> !session.isOpen());
@@ -90,6 +93,13 @@ public class GameServer implements IGameServer {
         });
         changesThisTick.clear();
         tick++;
+    }
+
+    private void connectPendingClients() {
+        IClientLink client;
+        while ((client = pending.poll()) != null) {
+            players.add(new PlayerSession(client.playerId(), client));
+        }
     }
 
     private void simulate(PlayerSession session) {
