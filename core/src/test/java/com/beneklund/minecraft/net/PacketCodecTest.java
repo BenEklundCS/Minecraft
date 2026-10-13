@@ -58,6 +58,15 @@ public class PacketCodecTest {
         assertPlayerUpdateEquals(expected, actual);
     } // PlayerUpdate with 0.1f, -0f, Float.MIN_VALUE, 11.7f → floatToRawIntBits equal
 
+    // The server sends a PlayerUpdate every tick from the join on, and until it has consumed an
+    // input its ack is -1. A codec that refuses that drops every socket client a tick after joining.
+    @Test
+    void anUpdateBeforeAnyInputIsAckedRoundTrips() throws IOException {
+        var nothingAckedYet = new IPacket.ToClient.PlayerUpdate(-1, 8f, 65f, 8f, 0f, true);
+        assertPlayerUpdateEquals(
+                nothingAckedYet, (IPacket.ToClient.PlayerUpdate) codec.decode(codec.encode(nothingAckedYet)));
+    }
+
     @Test
     void unknownTagIsAnIOException() {
         assertThrows(IOException.class, () -> codec.decode(new byte[] {0}));
@@ -193,10 +202,10 @@ public class PacketCodecTest {
     } // PLAYER_UPDATE with NaN in y → IOException
 
     @Test
-    void negativeAckTickIsRefused() {
+    void anAckTickBelowMinusOneIsRefused() {
         byte[] body = ByteBuffer.allocate(Byte.BYTES + Long.BYTES + 4 * Float.BYTES + 1)
                 .put(PacketCodec.PLAYER_UPDATE)
-                .putLong(-1L)
+                .putLong(-2L)
                 .putFloat(0f)
                 .putFloat(0f)
                 .putFloat(0f)
@@ -205,7 +214,7 @@ public class PacketCodecTest {
                 .array();
 
         assertThrows(IOException.class, () -> codec.decode(body));
-    } // PLAYER_UPDATE ackTick -1 → IOException
+    } // PLAYER_UPDATE ackTick -2 → IOException; -1 is "nothing acked yet" and is legal
 
     @ParameterizedTest
     @ValueSource(bytes = {PacketCodec.PLAYER_CONNECTED, PacketCodec.PLAYER_DISCONNECTED})

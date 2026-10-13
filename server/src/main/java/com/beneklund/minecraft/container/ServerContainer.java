@@ -9,9 +9,7 @@ import com.beneklund.minecraft.block.BlockRegistry;
 import com.beneklund.minecraft.infra.ChunkStore;
 import com.beneklund.minecraft.infra.PlayerStore;
 import com.beneklund.minecraft.infra.ServerChunkManager;
-import com.beneklund.minecraft.net.GameServer;
-import com.beneklund.minecraft.net.IClientLink;
-import com.beneklund.minecraft.net.RadiusChunkStreamer;
+import com.beneklund.minecraft.net.*;
 import com.beneklund.minecraft.player.*;
 import com.beneklund.minecraft.world.ServerWorldAuthority;
 import com.beneklund.minecraft.world.World;
@@ -21,6 +19,7 @@ import com.beneklund.minecraft.world.chunk.ChunkPos;
 import com.beneklund.minecraft.world.chunk.LightEngine;
 import com.beneklund.minecraft.world.gen.IGenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +41,7 @@ public class ServerContainer {
     private final WorldGenerator worldGen;
     private final ServerChunkManager chunks;
     private final GameServer server;
+    private SocketAcceptor acceptor;
 
     private Thread tickThread;
     // A flag rather than interrupt(): an interrupt cancels whatever file write the tick is in.
@@ -70,8 +70,8 @@ public class ServerContainer {
     }
 
     /**
-     * Connects a client. Call before {@link #start()}, because {@link GameServer}'s player list is
-     * owned by the tick thread and isn't thread-safe.
+     * Connects a client. Safe from any thread, before or after {@link #start()}: the link waits in
+     * a queue and the tick thread adopts it at the top of its next tick.
      */
     public void accept(IClientLink client) {
         server.accept(client);
@@ -84,6 +84,13 @@ public class ServerContainer {
         tickThread.setDaemon(true);
         tickThread.start();
         LOGGER.info("server ticking at {} Hz", TICKS_PER_SECOND);
+    }
+
+    /** Opens {@code port} to remote players. Safe before or after start(). */
+    public void listen(int port) throws IOException {
+        acceptor = new SocketAcceptor(port, new PacketCodec(registry), server);
+        acceptor.start();
+        LOGGER.info("listening on port {}", acceptor.port());
     }
 
     /**
@@ -112,14 +119,22 @@ public class ServerContainer {
     }
 
     /**
-     * Stops the server and saves everything, in this order: join the tick thread, run one last
-     * tick for anything a client sent on its way out, save connected players, drain generation,
-     * then flush dirty chunks. Generation drains before the flush because a running generation job
+     * Stops the server and saves everything, in this order: close the listening socket, join the
+     * tick thread, run one last tick for anything a client sent on its way out, save connected
+     * players, close their links, drain generation, then flush dirty chunks. The listening socket
+     * goes first so nobody can connect after the last tick and wait in a queue nothing will read. Generation drains before the flush because a running generation job
      * can dirty a chunk the flush already saved.
      */
     public void stop() {
         long startedAt = System.nanoTime();
         long timeout = cfg.shutdownTimeoutSeconds();
+        if (acceptor != null) {
+            try {
+                acceptor.close();
+            } catch (IOException e) {
+                LOGGER.warn("couldn't close the listening socket", e);
+            }
+        }
         running = false;
         try {
             if (tickThread != null) tickThread.join(TimeUnit.SECONDS.toMillis(timeout));
@@ -128,6 +143,7 @@ public class ServerContainer {
             } else {
                 server.tick();
                 server.saveConnectedPlayers();
+                server.closeAllLinks();
             }
             chunks.shutdown(timeout);
         } catch (InterruptedException e) {

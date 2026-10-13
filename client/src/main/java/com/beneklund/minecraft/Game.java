@@ -113,6 +113,9 @@ public class Game {
     private final GpuTimer gpuTimer;
     private long frame;
 
+    // Set once the link has closed and everything it delivered has been handled.
+    private boolean serverGone;
+
     /**
      * @param frameStream the debug server, or {@code null} when it is off
      * @param gpuTimer per-pass GPU timers, or {@code null} when {@code gputimer.enabled} is unset
@@ -285,9 +288,9 @@ public class Game {
         LOGGER.info("teleport to {} yaw/pitch {}/{}", p, pose[3], pose[4]);
     }
 
-    /** Runs frames until the window is asked to close. */
+    /** Runs frames until the window is asked to close or the server link drops. */
     public void run() {
-        while (!window.shouldClose()) {
+        while (!window.shouldClose() && !serverGone) {
             // Closes the previous frame's counters before anything can add to the next one, so
             // everything reported below describes one whole frame rather than a partial one.
             EngineStats.beginFrame();
@@ -373,6 +376,7 @@ public class Game {
             window.endFrame();
             EngineStats.endPhase(CpuPhase.SWAP);
         }
+        if (serverGone) LOGGER.warn("lost the server, exiting");
     }
 
     /** Hands this frame's time, frame number and sun state to the renderers before drawing. */
@@ -540,6 +544,9 @@ public class Game {
      * {@link #onJoined}. Other packet types are ignored.
      */
     private void receivePackets() {
+        // Flag before drain: the link queues its last packet and then closes, so a drain that
+        // follows a closed flag has seen everything, including the reason for a refused join.
+        boolean wasOpen = serverLink.isOpen();
         for (IPacket.ToClient packet : serverLink.drain()) {
             switch (packet) {
                 case IPacket.ToClient.ChunkData data -> chunkManager.onChunkData(data);
@@ -551,6 +558,7 @@ public class Game {
                 default -> {}
             }
         }
+        if (!wasOpen) serverGone = true;
     }
 
     /**

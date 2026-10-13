@@ -5,7 +5,6 @@ import static com.beneklund.minecraft.util.Log.IO;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -24,15 +23,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SocketAcceptor {
     private final ServerSocket socket;
     private final int port;
+    private final PacketCodec codec;
     private final IGameServer server;
 
     private final AtomicInteger nextId;
     private Thread thread;
 
     /** Binds the listening socket for {@code port}; use {@code 0} to request an available port. */
-    public SocketAcceptor(int port, IGameServer server) throws IOException {
+    public SocketAcceptor(int port, PacketCodec codec, IGameServer server) throws IOException {
         socket = new ServerSocket(port);
         this.port = socket.getLocalPort();
+        this.codec = codec;
         this.server = server;
         nextId = new AtomicInteger(2);
     }
@@ -57,14 +58,26 @@ public class SocketAcceptor {
 
     /** Continuously accepts new clients on the server, producing accepted {@code SocketClientLink} and assigning them an atomic player id. */
     private void acceptor() {
-        try {
-            while (true) {
-                Socket s = socket.accept();
-                server.accept(new SocketClientLink(s, nextId.getAndIncrement()));
+        while (true) {
+            Socket s;
+            try {
+                s = socket.accept();
+            } catch (IOException e) {
+                // close() unblocks accept() with an exception too; only the other kind is news.
+                if (!socket.isClosed()) IO.error("Listener is broken!", e);
+                return;
             }
-        } catch (SocketException ignored) {
-        } catch (IOException e) {
-            IO.error("acceptor(): ", e);
+            try {
+                server.accept(new SocketClientLink(s, codec, nextId.getAndIncrement()));
+            } catch (IOException e) {
+                IO.debug("This connection failed during setup: ", e);
+                // The link never took ownership, so nothing else will close this socket.
+                try {
+                    s.close();
+                } catch (IOException ignored) {
+                    // already gone
+                }
+            }
         }
     }
 }

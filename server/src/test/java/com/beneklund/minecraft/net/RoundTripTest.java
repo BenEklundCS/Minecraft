@@ -1,7 +1,6 @@
 package com.beneklund.minecraft.net;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.block.BlockRegistry;
@@ -16,6 +15,7 @@ import com.beneklund.minecraft.world.chunk.ChunkState;
 import com.beneklund.minecraft.world.chunk.IChunkStore;
 import com.beneklund.minecraft.world.chunk.LightEngine;
 import com.beneklund.minecraft.world.gen.IWorldGenerator;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,12 +32,12 @@ class RoundTripTest {
      * LOCAL coordinates and IWorldView.getBlock takes WORLD ones, and at any other chunk these
      * constants would have to differ.
      */
-    private static final ChunkPos ONLY_CHUNK = new ChunkPos(0, 0);
-    private static final int EDIT_X = 0;
-    private static final int EDIT_Y = 64;
-    private static final int EDIT_Z = 0;
+    static final ChunkPos ONLY_CHUNK = new ChunkPos(0, 0);
+    static final int EDIT_X = 0;
+    static final int EDIT_Y = 64;
+    static final int EDIT_Z = 0;
 
-    private static final PlayerState SPAWN = new PlayerState(8f, 65f, 8f, 0f, 0f);
+    static final PlayerState SPAWN = new PlayerState(8f, 65f, 8f, 0f, 0f);
 
     private static final IWorldGenerator NO_GENERATION = (pos, seed, chunk) -> {};
     private static final IChunkStore NO_DISK = new IChunkStore() {
@@ -58,12 +58,30 @@ class RoundTripTest {
             return Optional.empty();
         }
     };
+    /** Remembers every state it was asked to save, so a test can count them. */
+    private static final class RecordingPlayerStore implements IPlayerStore {
+        final List<PlayerState> saved = new ArrayList<>();
+
+        @Override
+        public void save(PlayerState state) {
+            saved.add(state);
+        }
+
+        @Override
+        public Optional<PlayerState> load() {
+            return Optional.empty();
+        }
+    }
 
     // The world is kept alongside the server because BlockDef carries no back-reference to its
     // Block — see the note under this block — so the exact assertion has to read the Chunk.
-    private record Fixture(GameServer server, World world) {}
+    record Fixture(GameServer server, World world) {}
 
-    private static Fixture serverWithOneChunk() {
+    static Fixture serverWithOneChunk() {
+        return serverWithOneChunk(NO_PLAYER_SAVES);
+    }
+
+    static Fixture serverWithOneChunk(IPlayerStore store) {
         World world = new World(new ConcurrentHashMap<>());
         Chunk chunk = new Chunk();
         chunk.setBlock(EDIT_X, EDIT_Y, EDIT_Z, Block.STONE);
@@ -80,7 +98,7 @@ class RoundTripTest {
                 authority,
                 chunks,
                 new RadiusChunkStreamer(0),
-                NO_PLAYER_SAVES,
+                store,
                 SPAWN,
                 new PlayerMovement(new Physics(), MovementTuning.DEFAULT),
                 SEED);
@@ -112,6 +130,23 @@ class RoundTripTest {
         assertTrue(received.get(0) instanceof IPacket.Join.Rejected);
         assertTrue(!pair.server().isOpen());
     } // a client from the future gets one Rejected, no Accepted, no chunks, and the link closes
+
+    @Test
+    void acceptFromAnotherThreadJoinsOnTheNextTick() throws InterruptedException {
+        Fixture fixture = serverWithOneChunk();
+        InJvmLink.Pair pair = InJvmLink.connect(PLAYER_ID);
+
+        // The acceptor thread's whole job: hand the link over and leave. join() makes the handoff
+        // happen-before the tick without any sleeping.
+        Thread acceptor = new Thread(() -> fixture.server().accept(pair.client()));
+        acceptor.start();
+        acceptor.join();
+
+        pair.server().send(new IPacket.ToServer.Join.Request("ben", PROTOCOL_VERSION));
+        fixture.server().tick();
+
+        assertTrue(pair.server().drain().stream().anyMatch(IPacket.Join.Accepted.class::isInstance));
+    }
 
     @Test
     void joinIsAcceptedAndTheChunkIsStreamed() {
@@ -180,5 +215,53 @@ class RoundTripTest {
         fixture.server().tick();
 
         assertTrue(pair.server().drain().contains(new IPacket.ToClient.ChunkUnload(ONLY_CHUNK)));
+    }
+
+    @Test
+    void aLinkThatClosesWithoutADisconnectIsSaved() {
+        RecordingPlayerStore store = new RecordingPlayerStore();
+        Fixture fixture = serverWithOneChunk(store);
+        InJvmLink.Pair pair = joined(fixture);
+        pair.server().close();
+        fixture.server().tick();
+
+        assertEquals(1, store.saved.size());
+    }
+
+    @Test
+    void aDisconnectSavesExactlyOnce() {
+        RecordingPlayerStore store = new RecordingPlayerStore();
+        Fixture fixture = serverWithOneChunk(store);
+        InJvmLink.Pair pair = joined(fixture);
+        pair.server().send(new IPacket.ToServer.Disconnect("quit"));
+        fixture.server().tick();
+
+        assertEquals(1, store.saved.size());
+    }
+
+    @Test
+    void aRejectedJoinSavesNothing() {
+        RecordingPlayerStore store = new RecordingPlayerStore();
+        Fixture fixture = serverWithOneChunk(store);
+        InJvmLink.Pair pair = InJvmLink.connect(PLAYER_ID);
+        fixture.server().accept(pair.client());
+        pair.server().send(new IPacket.Join.Request("ben", PROTOCOL_VERSION + 1));
+        for (int i = 0; i < 2; i++) {
+            fixture.server.tick();
+        }
+
+        assertEquals(0, store.saved.size());
+    }
+
+    @Test
+    void aSecondJoinFromAJoinedPlayerIsIgnored() {
+        Fixture fixture = serverWithOneChunk();
+        InJvmLink.Pair pair = joined(fixture);
+        // joined() ticks without draining, so the first, legitimate Accepted is still queued.
+        pair.server().drain();
+        pair.server().send(new IPacket.Join.Request("ben", PROTOCOL_VERSION));
+        fixture.server().tick();
+
+        assertTrue(pair.server().drain().stream().noneMatch(IPacket.Join.Accepted.class::isInstance));
     }
 }

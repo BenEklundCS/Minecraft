@@ -484,6 +484,8 @@ public final class PacketCodec {
 
     /** Body order, big-endian: ackTick (long), x/y/z/vy (floats), onGround (boolean). */
     static final class PlayerUpdateCodec extends Codec {
+        private static final long NOTHING_ACKED = -1;
+
         @Override
         byte tag() {
             return PLAYER_UPDATE;
@@ -508,7 +510,9 @@ public final class PacketCodec {
         @Override
         IPacket.ToClient.PlayerUpdate read(DataInputStream in) throws IOException {
             long ackTick = in.readLong();
-            requireNonNegative(ackTick, "Ack tick");
+            // -1 is a real value here, not garbage: it is what a session acks until the server
+            // has consumed its first input, and updates start flowing the tick it joins.
+            if (ackTick < NOTHING_ACKED) throw malformed("Ack tick below %d: %d", NOTHING_ACKED, ackTick);
             float x = readFiniteFloat(in);
             float y = readFiniteFloat(in);
             float z = readFiniteFloat(in);

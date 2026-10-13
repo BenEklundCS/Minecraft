@@ -88,7 +88,7 @@ public class ClientContainer {
     // clouds cost too much (8) or the edge where one crosses the sun disc looks too soft (2).
     private static final int CLOUD_BUFFER_DIVISOR = 3;
 
-    private final ContainerConfig cfg;
+    private final ClientConfig cfg;
 
     // config
     private LocalConfig localConfig;
@@ -153,7 +153,7 @@ public class ClientContainer {
     private static final String USERNAME = "player";
 
     /** @param serverLink the client end of the connection; the server must already accept it */
-    public ClientContainer(ContainerConfig cfg, IServerLink serverLink) {
+    public ClientContainer(ClientConfig cfg, IServerLink serverLink) {
         this.cfg = cfg;
         this.serverLink = serverLink;
     }

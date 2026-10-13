@@ -134,7 +134,10 @@ final class SocketConnection<In extends IPacket, Out extends IPacket> {
                 inbound.add(inType.cast(p));
             }
         } catch (IOException e) {
-            /* log at debug unless open was still true */
+            // A close we asked for ends the read the same way a failure does; only the failure is
+            // worth more than a debug line, because it is the peer or the stream going wrong.
+            if (open) IO.warn("net-read ended: {}", e.toString());
+            else IO.debug("net-read ended: {}", e.toString());
         } finally {
             open = false;
             outbound.offer(CLOSE);
