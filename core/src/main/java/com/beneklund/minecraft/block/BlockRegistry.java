@@ -1,6 +1,7 @@
 package com.beneklund.minecraft.block;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Maps each {@link Block} to its {@link BlockDef}. Constructor-injected everywhere it is read;
@@ -11,9 +12,19 @@ import java.util.Map;
  */
 public class BlockRegistry {
     private final Map<Block, BlockDef> blockDefs;
+    private final Block[] byId = new Block[256];
 
     public BlockRegistry(Map<Block, BlockDef> blockDefs) {
         this.blockDefs = blockDefs;
+        blockDefs.keySet().forEach(block -> byId[block.id() & 0xFF] = block);
+    }
+
+    /**
+     * The registered block stored as {@code id}, or empty. Unlike {@link Block#fromId}, an unknown id
+     * is not folded into AIR, so the network layer can refuse it instead of placing air.
+     */
+    public Optional<Block> byId(byte id) {
+        return Optional.ofNullable(byId[id & 0xFF]);
     }
 
     /**

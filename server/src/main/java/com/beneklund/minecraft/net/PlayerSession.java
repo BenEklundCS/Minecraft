@@ -27,6 +27,9 @@ public class PlayerSession {
     private final ArrayDeque<IPacket.ToServer.PlayerInput> inputs = new ArrayDeque<>();
 
     private boolean joined;
+    // Set by a rejected join: flush sends the reason, then closes. Closing straight away would drop
+    // the reason still sitting in the outbox.
+    private boolean closeAfterFlush;
     // The server's simulation of this player. Null until joined.
     private PlayerBody body;
 
@@ -140,6 +143,10 @@ public class PlayerSession {
         link.close();
     }
 
+    public void closeAfterFlush() {
+        closeAfterFlush = true;
+    }
+
     /**
      * Sends everything queued this tick, in queue order, then a {@code PlayerUpdate} with where the
      * body ended up. A joined player gets one every tick, input or not, so the client always has a
@@ -153,5 +160,6 @@ public class PlayerSession {
         }
         for (IPacket.ToClient packet : outbox) link.send(packet);
         outbox.clear();
+        if (closeAfterFlush) link.close();
     }
 }

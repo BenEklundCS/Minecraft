@@ -9,8 +9,10 @@ import com.beneklund.minecraft.world.World;
 import com.beneklund.minecraft.world.chunk.Chunk;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * The authoritative game simulation: owns the world, applies what clients ask for, and streams
@@ -23,8 +25,9 @@ import java.util.Map;
  * <p>{@link #tick()} runs on the {@code server-tick} thread at 20 Hz, in fixed phases:
  *
  * <ol>
+ *   <li>adopt links handed over by {@link #accept} since the last tick
  *   <li>drain every link into its session's inbox
- *   <li>apply each session's packets, then drop sessions whose link closed
+ *   <li>apply each session's packets, then save and drop sessions whose link closed
  *   <li>tick the {@link ServerChunkManager} around the load centre
  *   <li>per session: stream chunk unloads, chunk data and this tick's edits, then flush
  * </ol>
@@ -47,6 +50,7 @@ public class GameServer implements IGameServer {
     private final PlayerMovement movement;
     private final long seed;
     private long tick = 0;
+    private final ConcurrentLinkedQueue<IClientLink> pending = new ConcurrentLinkedQueue<>();
     private final List<PlayerSession> players = new ArrayList<>();
     // Every edit applied this tick. Filled by apply, sent to every joined player during flush (not
     // just the one who made the edit), then cleared.
@@ -73,14 +77,15 @@ public class GameServer implements IGameServer {
 
     @Override
     public void accept(IClientLink client) {
-        players.add(new PlayerSession(client.playerId(), client));
+        pending.add(client);
     }
 
     /** Runs one server tick. See the class comment for the phase order. */
     public void tick() {
+        connectPendingClients();
         players.forEach(PlayerSession::drainLink);
         players.forEach(this::apply);
-        players.removeIf(session -> !session.isOpen());
+        dropClosedSessions();
         players.forEach(this::simulate);
         ChunkPos center = loadCenter();
         if (center != null) chunks.tick(center);
@@ -90,6 +95,29 @@ public class GameServer implements IGameServer {
         });
         changesThisTick.clear();
         tick++;
+    }
+
+    private void connectPendingClients() {
+        IClientLink client;
+        while ((client = pending.poll()) != null) {
+            players.add(new PlayerSession(client.playerId(), client));
+        }
+    }
+
+    private void dropClosedSessions() {
+        Iterator<PlayerSession> iterator = players.iterator();
+        while (iterator.hasNext()) {
+            PlayerSession next = iterator.next();
+            if (!next.isOpen()) {
+                save(next);
+                iterator.remove();
+            }
+        }
+    }
+
+    /** Closes every link so each client sees a clean close. Only once the tick thread has stopped. */
+    public void closeAllLinks() {
+        players.forEach(PlayerSession::close);
     }
 
     private void simulate(PlayerSession session) {
@@ -116,11 +144,10 @@ public class GameServer implements IGameServer {
     private void apply(PlayerSession session) {
         for (IPacket.ToServer packet : session.takeReceived()) {
             switch (packet) {
-                case IPacket.Join.Request request -> join(session);
+                case IPacket.Join.Request request -> join(session, request);
                 case IPacket.ToServer.BlockEdit edit -> applyEdit(session, edit);
                 case IPacket.ToServer.PlayerInput input -> session.enqueueInput(input);
                 case IPacket.ToServer.Disconnect disconnect -> {
-                    save(session);
                     session.close();
                 }
             }
@@ -129,9 +156,21 @@ public class GameServer implements IGameServer {
 
     /**
      * Accepts a join and places the player at spawn, so chunks start loading there before the
-     * client reports a position.
+     * client reports a position. A client on an unsupported protocol version gets a {@code
+     * Rejected} with the supported range, and its link closes after that tick's flush.
+     *
+     * <p>A request from a session that has already joined is ignored. Answering it would put the
+     * player back at spawn, and kicking them would turn a client's double send into a disconnect.
      */
-    private void join(PlayerSession session) {
+    private void join(PlayerSession session, IPacket.Join.Request request) {
+        if (session.isJoined()) return;
+        if (!PacketCodec.isCompatible(request.protocolVersion())) {
+            session.queue(new IPacket.Join.Rejected(String.format(
+                    "Protocol %d unsupported, server speaks %d to %d",
+                    request.protocolVersion(), PacketCodec.MIN_COMPATIBLE_VERSION, PacketCodec.PROTOCOL_VERSION)));
+            session.closeAfterFlush();
+            return;
+        }
         session.markJoined();
         session.spawnAt(spawn);
         session.queue(new IPacket.Join.Accepted(session.playerId(), seed, tick, spawn));

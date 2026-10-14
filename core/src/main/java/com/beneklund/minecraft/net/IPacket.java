@@ -13,9 +13,9 @@ import com.beneklund.minecraft.world.chunk.ChunkPos;
  * exhaustive, so a new upward packet fails to compile until the server handles it; the client's
  * switch has a default and ignores packets it doesn't know.
  *
- * <p>Packets are plain values passed by reference over an {@link InJvmLink}; there is no wire
- * format yet. Arrays inside them, such as {@link ToClient.ChunkData#blocks()}, belong to the
- * receiver once sent.
+ * <p>Packets are plain values. In-process they pass by reference over an {@link InJvmLink};
+ * {@link PacketCodec} defines their byte format for a real connection, which nothing uses yet.
+ * Arrays inside them, such as {@link ToClient.ChunkData#blocks()}, belong to the receiver once sent.
  */
 public sealed interface IPacket {
     /** Client to server. */

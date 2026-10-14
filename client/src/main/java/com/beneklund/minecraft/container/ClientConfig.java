@@ -13,7 +13,7 @@ import com.beneklund.minecraft.util.Color;
  * @param resourcePack classpath path to the pack's {@code pack.json}
  * @param shutdownTimeoutSeconds how long shutdown waits for the meshing pool to drain
  */
-public record ContainerConfig(
+public record ClientConfig(
         String windowTitle,
         int windowWidth,
         int windowHeight,
@@ -27,7 +27,7 @@ public record ContainerConfig(
         PlayerConfig player,
         long shutdownTimeoutSeconds) {
 
-    public static final ContainerConfig DEFAULT = new ContainerConfig(
+    public static final ClientConfig DEFAULT = new ClientConfig(
             "Minecraft",
             1200,
             800,
