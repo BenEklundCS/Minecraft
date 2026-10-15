@@ -11,6 +11,7 @@ import com.beneklund.minecraft.player.PlayerIntent;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.chunk.Chunk;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.sky.DayNightCycle;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -427,7 +428,12 @@ public class PacketCodecTest {
     }
 
     private IPacket.Join.Accepted joinAccepted() {
-        return new IPacket.Join.Accepted(7, 1234L, 0L, new PlayerState(0f, 65f, 0f, 0f, 0f));
+        return new IPacket.Join.Accepted(
+                7,
+                1234L,
+                0L,
+                new DayNightCycle.CycleState(0f, DayNightCycle.DayLength.DEFAULT),
+                new PlayerState(0f, 65f, 0f, 0f, 0f));
     }
 
     private IPacket.Join.Rejected joinRejected() {

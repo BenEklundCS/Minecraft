@@ -7,6 +7,7 @@ import static org.lwjgl.glfw.GLFW.*;
 
 import com.beneklund.minecraft.input.IInputAction;
 import com.beneklund.minecraft.input.IInputAction.Simple;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -161,5 +162,82 @@ class InputMapperTest {
         queue.offer(new IRawInputEvent.ScrollEvent(0, 1.0));
 
         assertEquals(List.of(new IInputAction.ScrollAction(1.0f)), mapper.drain(FRAME));
+    }
+
+    private static void tapPause(InputEventQueue queue) {
+        queue.offer(new IRawInputEvent.KeyEvent(GLFW_KEY_P, 0, GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.KeyEvent(GLFW_KEY_P, 0, GLFW_RELEASE, 0));
+    }
+
+    @Test
+    void pause_togglesCursorCapture() {
+        InputEventQueue queue = new InputEventQueue();
+        List<Boolean> captures = new ArrayList<>();
+        InputMapper mapper = new InputMapper(queue, InputMapper.DEFAULT_BINDINGS, captures::add);
+
+        tapPause(queue);
+        mapper.drain(FRAME);
+        tapPause(queue);
+        mapper.drain(FRAME);
+
+        assertEquals(List.of(false, true), captures);
+    }
+
+    @Test
+    void mouseFreed_dropsLookClicksAndScroll() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+        queue.offer(new IRawInputEvent.MouseMoveEvent(100, 100)); // seed
+        tapPause(queue);
+        mapper.drain(FRAME);
+
+        queue.offer(new IRawInputEvent.MouseMoveEvent(150, 120));
+        queue.offer(new IRawInputEvent.MouseButtonEvent(GLFW_MOUSE_BUTTON_1, GLFW_PRESS, 0));
+        queue.offer(new IRawInputEvent.ScrollEvent(0, 1.0));
+
+        assertTrue(mapper.drain(FRAME).isEmpty());
+    }
+
+    @Test
+    void mouseFreed_keysStillMap() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+        tapPause(queue);
+        mapper.drain(FRAME);
+
+        queue.offer(new IRawInputEvent.KeyEvent(GLFW_KEY_W, 0, GLFW_PRESS, 0));
+
+        assertEquals(List.of(new IInputAction.MoveAction(0f, 1f)), mapper.drain(FRAME));
+    }
+
+    @Test
+    void mouseFreed_stopsHeldMouseButton() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+        queue.offer(new IRawInputEvent.MouseButtonEvent(GLFW_MOUSE_BUTTON_1, GLFW_PRESS, 0));
+        mapper.drain(FRAME);
+        tapPause(queue);
+        mapper.drain(FRAME);
+
+        // the release is dropped with every other mouse event, so the hold has to end here
+        assertFalse(mapper.drain(1f).contains(Simple.BREAK_BLOCK));
+    }
+
+    @Test
+    void recapture_firstMoveOnlySeeds() {
+        InputEventQueue queue = new InputEventQueue();
+        InputMapper mapper = mapper(queue);
+        queue.offer(new IRawInputEvent.MouseMoveEvent(100, 100));
+        tapPause(queue);
+        mapper.drain(FRAME);
+        tapPause(queue);
+        mapper.drain(FRAME);
+
+        // GLFW moves the cursor when it re-disables it, so this position is unrelated to the last
+        queue.offer(new IRawInputEvent.MouseMoveEvent(640, 360));
+        assertTrue(mapper.drain(FRAME).isEmpty(), "no look jump on recapture");
+
+        queue.offer(new IRawInputEvent.MouseMoveEvent(645, 362));
+        assertEquals(List.of(new IInputAction.LookAction(5f, 2f)), mapper.drain(FRAME));
     }
 }

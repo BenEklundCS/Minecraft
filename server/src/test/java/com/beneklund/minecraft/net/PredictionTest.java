@@ -116,7 +116,7 @@ class PredictionTest {
         ServerWorldAuthority authority = new ServerWorldAuthority(world, REGISTRY, new LightEngine(REGISTRY));
         ServerChunkManager chunks = new ServerChunkManager(new WorldConfig(SEED, 0), world, NO_GENERATION, NO_DISK);
         PlayerMovement movement = new PlayerMovement(new Physics(), MovementTuning.DEFAULT);
-        return new GameServer(
+        return TestServers.create(
                 world, authority, chunks, new RadiusChunkStreamer(0), NO_PLAYER_SAVES, SPAWN, movement, SEED);
     }
 

@@ -234,7 +234,10 @@ public class ClientContainer {
 
     private void initInput() {
         inputEventQueue = new InputEventQueue();
-        inputMapper = new InputMapper(inputEventQueue);
+        // A lambda rather than window::setCursorCaptured: the window isn't built until
+        // initPlatform, and a method reference would capture the null field right here.
+        inputMapper = new InputMapper(
+                inputEventQueue, InputMapper.DEFAULT_BINDINGS, captured -> window.setCursorCaptured(captured));
     }
 
     private void initPlatform() {
@@ -394,7 +397,7 @@ public class ClientContainer {
         chunkManager = new ClientChunkManager(world, mesher, lightEngine, registry, authority);
         // Same tuning as ServerContainer; prediction only matches the server if both step alike.
         prediction = new PlayerPrediction(new PlayerMovement(new Physics(), MovementTuning.DEFAULT));
-        cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.VERY_SHORT_DAY_SECONDS);
+        cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.DayLength.VSHORT);
         WORLD.debug("client world ready, chunks come from the server");
     }
 

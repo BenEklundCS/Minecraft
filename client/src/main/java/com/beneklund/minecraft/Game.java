@@ -315,6 +315,8 @@ public class Game {
             processChunks();
             EngineStats.endPhase(CpuPhase.CHUNKS);
 
+            // Client still runs its own clock simulation, the authoritative server updates the time when it goes out of
+            // sync.
             cycle.advance(delta.getDelta());
             Hotbar hotbar = player.getHotbar();
             hudRenderer.setHotbar(hotbar.snapshot(), hotbar.selected());
@@ -476,7 +478,9 @@ public class Game {
         if (actions.contains(IInputAction.Simple.DEBUG_SHADOW_MAP)) {
             shadowOverlayCascade =
                     shadowOverlayCascade + 1 >= ShadowCamera.cascadeCount() ? -1 : shadowOverlayCascade + 1;
-            RENDER.info("shadow map overlay {}", shadowOverlayCascade < 0 ? "off" : "cascade " + shadowOverlayCascade);
+            RENDER.info(
+                    "shadow map overlay {}",
+                    shadowOverlayCascade < 0 ? "off" : String.format("cascade %s", shadowOverlayCascade));
         }
 
         if (actions.contains(IInputAction.Simple.RELOAD_SHADERS)) {
@@ -524,6 +528,7 @@ public class Game {
         PlayerState spawn = accepted.spawn();
         player.setPosition(new Vector3f(spawn.x(), spawn.y(), spawn.z()));
         player.setOrientation(spawn.pitch(), spawn.yaw());
+        cycle.apply(accepted.cycleState());
         joined = true;
         prediction.reset();
         LOGGER.info("joined as player {} at server tick {}", accepted.playerId(), accepted.serverTick());
@@ -554,6 +559,7 @@ public class Game {
         boolean wasOpen = serverLink.isOpen();
         for (IPacket.ToClient packet : serverLink.drain()) {
             switch (packet) {
+                case IPacket.ToClient.TimeUpdate time -> cycle.setTimeOfDay(time.timeOfDay());
                 case IPacket.ToClient.ChunkData data -> chunkManager.onChunkData(data);
                 case IPacket.ToClient.ChunkUnload unload -> chunkManager.onChunkUnload(unload);
                 case IPacket.ToClient.BlockChanged changed -> chunkManager.onBlockChanged(changed);

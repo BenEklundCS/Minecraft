@@ -10,6 +10,33 @@ import org.joml.Vector3f;
  * the zenith in the y-z plane, rising at +z and setting at -z.
  */
 public class DayNightCycle {
+    public record CycleState(float time, DayLength duration) {}
+    ;
+
+    public enum DayLength {
+        SHORT(600f),
+        VSHORT(300f),
+        DEFAULT(1200f),
+        LONG(1800f);
+
+        final float seconds;
+
+        DayLength(float seconds) {
+            this.seconds = seconds;
+        }
+
+        public float getSeconds() {
+            return seconds;
+        }
+
+        public static DayLength ofSeconds(float seconds) {
+            for (DayLength d : values()) {
+                if (d.seconds == seconds) return d;
+            }
+            throw new IllegalArgumentException(String.format("No day length of %f seconds", seconds));
+        }
+    }
+
     private static final float FULL_DAY = 1.0f;
     private static final double CURVE_MIDPOINT = 0.5f;
     private static final double CURVE_AMPLITUDE = 0.5f;
@@ -21,26 +48,29 @@ public class DayNightCycle {
     public static final float NIGHT_BRIGHTNESS = 0.15f;
     public static final float DAY_BRIGHTNESS = 1.0f;
 
-    public static final float SHORT_DAY_SECONDS = 600f;
-    public static final float VERY_SHORT_DAY_SECONDS = SHORT_DAY_SECONDS / 2;
-    public static final float DEFAULT_DAY_SECONDS = SHORT_DAY_SECONDS * 2;
-    public static final float LONG_DAY_SECONDS = SHORT_DAY_SECONDS * 3;
-
     private float timeOfDay;
-    private final float dayLengthSeconds;
+    private DayLength dayLength;
 
     /**
-     * @param timeOfDay starting fraction of a day, such as {@link #MORNING}
-     * @param dayLengthSeconds real seconds per full day
+     * @param timeOfDay - the time of day
+     * @param dayLength - the length of the day
      */
-    public DayNightCycle(float timeOfDay, float dayLengthSeconds) {
+    public DayNightCycle(float timeOfDay, DayLength dayLength) {
         this.timeOfDay = timeOfDay;
-        this.dayLengthSeconds = dayLengthSeconds;
+        this.dayLength = dayLength;
+    }
+
+    /**
+     * @param state - construct a DayNightCycle from a CycleState
+     */
+    public DayNightCycle(CycleState state) {
+        timeOfDay = state.time();
+        dayLength = state.duration();
     }
 
     /** Advances by {@code dt} real seconds, wrapping at midnight. */
     public void advance(float dt) {
-        timeOfDay = (timeOfDay + dt / dayLengthSeconds) % FULL_DAY;
+        timeOfDay = (timeOfDay + dt / dayLength.seconds) % FULL_DAY;
     }
 
     /**
@@ -66,5 +96,22 @@ public class DayNightCycle {
 
     public float timeOfDay() {
         return timeOfDay;
+    }
+
+    public void setDayLength(DayLength dayLength) {
+        this.dayLength = dayLength;
+    }
+
+    public DayLength getDayLengthSeconds() {
+        return dayLength;
+    }
+
+    public void apply(CycleState state) {
+        timeOfDay = state.time();
+        dayLength = state.duration();
+    }
+
+    public CycleState getCycleState() {
+        return new CycleState(timeOfDay, dayLength);
     }
 }

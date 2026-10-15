@@ -84,7 +84,7 @@ class PlayerSimulationTest {
         ServerWorldAuthority authority = new ServerWorldAuthority(world, registry, new LightEngine(registry));
         ServerChunkManager chunks = new ServerChunkManager(new WorldConfig(SEED, 0), world, NO_GENERATION, NO_DISK);
         PlayerMovement movement = new PlayerMovement(new Physics(), MovementTuning.DEFAULT);
-        return new GameServer(world, authority, chunks, new RadiusChunkStreamer(0), store, SPAWN, movement, SEED);
+        return TestServers.create(world, authority, chunks, new RadiusChunkStreamer(0), store, SPAWN, movement, SEED);
     }
 
     private static GameServer server() {

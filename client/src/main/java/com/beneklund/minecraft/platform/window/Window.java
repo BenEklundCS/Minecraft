@@ -123,6 +123,14 @@ public class Window {
         resizeListeners.add(listener);
     }
 
+    /**
+     * Captured hides the cursor and locks it to the window, feeding unbounded virtual positions to
+     * the cursor callback for mouse look. Released gives the desktop cursor back. Main thread only.
+     */
+    public void setCursorCaptured(boolean captured) {
+        glfwSetInputMode(window, GLFW_CURSOR, captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    }
+
     /** Seconds since GLFW initialised, from a monotonic high-resolution timer. */
     public double getTime() {
         return glfwGetTime();

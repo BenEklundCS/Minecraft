@@ -4,6 +4,7 @@ import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.player.PlayerIntent;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.sky.DayNightCycle;
 
 /**
  * Every message that crosses between client and server, as a sealed hierarchy of records.
@@ -48,6 +49,9 @@ public sealed interface IPacket {
         record PlayerDisconnected(int playerId) implements ToClient {}
 
         record PlayerConnected(int playerId) implements ToClient {}
+
+        record TimeUpdate(float timeOfDay) implements ToClient {}
+        ;
     }
 
     /**
@@ -58,7 +62,9 @@ public sealed interface IPacket {
     final class Join {
         public record Request(String username, int protocolVersion) implements ToServer {}
 
-        public record Accepted(int playerId, long seed, long serverTick, PlayerState spawn) implements ToClient {}
+        public record Accepted(
+                int playerId, long seed, long serverTick, DayNightCycle.CycleState cycleState, PlayerState spawn)
+                implements ToClient {}
 
         public record Rejected(String reason) implements ToClient {}
 

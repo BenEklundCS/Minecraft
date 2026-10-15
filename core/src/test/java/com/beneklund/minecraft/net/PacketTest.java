@@ -6,6 +6,7 @@ import com.beneklund.minecraft.block.Block;
 import com.beneklund.minecraft.player.PlayerIntent;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.sky.DayNightCycle;
 import org.junit.jupiter.api.Test;
 
 class PacketTest {
@@ -20,6 +21,7 @@ class PacketTest {
             case IPacket.ToClient.PlayerUpdate p -> "state @" + p.ackTick();
             case IPacket.ToClient.PlayerConnected p -> "connected " + p.playerId();
             case IPacket.ToClient.PlayerDisconnected p -> "disconnected " + p.playerId();
+            case IPacket.ToClient.TimeUpdate p -> "time " + p.timeOfDay();
         };
     }
 
@@ -36,7 +38,14 @@ class PacketTest {
     // switch arm with nothing routed through it is an arm nobody has ever seen run.
     @Test
     void everyToClientPacketIsHandledWithoutADefaultBranch() {
-        assertEquals("join 7", describe(new IPacket.Join.Accepted(7, 1234L, 0L, new PlayerState(0f, 65f, 0f, 0f, 0f))));
+        assertEquals(
+                "join 7",
+                describe(new IPacket.Join.Accepted(
+                        7,
+                        1234L,
+                        0L,
+                        new DayNightCycle.CycleState(0f, DayNightCycle.DayLength.DEFAULT),
+                        new PlayerState(0f, 65f, 0f, 0f, 0f))));
         assertEquals("rejected old client", describe(new IPacket.Join.Rejected("old client")));
         assertEquals(
                 "chunk ChunkPos[x=1, z=2]", describe(new IPacket.ToClient.ChunkData(new ChunkPos(1, 2), new byte[0])));

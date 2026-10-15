@@ -10,6 +10,7 @@ import com.beneklund.minecraft.infra.ChunkStore;
 import com.beneklund.minecraft.infra.PlayerStore;
 import com.beneklund.minecraft.infra.ServerChunkManager;
 import com.beneklund.minecraft.net.*;
+import com.beneklund.minecraft.net.replicator.*;
 import com.beneklund.minecraft.player.*;
 import com.beneklund.minecraft.world.ServerWorldAuthority;
 import com.beneklund.minecraft.world.World;
@@ -19,6 +20,7 @@ import com.beneklund.minecraft.world.chunk.ChunkPos;
 import com.beneklund.minecraft.world.chunk.LightEngine;
 import com.beneklund.minecraft.world.gen.IGenerationSpec;
 import com.beneklund.minecraft.world.gen.WorldGenerator;
+import com.beneklund.minecraft.world.sky.DayNightCycle;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,15 +59,25 @@ public class ServerContainer {
         chunks = new ServerChunkManager(
                 new WorldConfig(cfg.seed(), cfg.loadRadius()), world, worldGen, new ChunkStore(cfg.seed()));
         IPlayerStore playerStore = new PlayerStore(cfg.seed());
+        DayNightCycle cycle = new DayNightCycle(DayNightCycle.MORNING, DayNightCycle.DayLength.VSHORT);
+        BlockChangeReplicator edits = new BlockChangeReplicator();
+        // Order is packet order: chunk data before the edits that land in it.
+        List<IReplicator> replicators = List.of(
+                new ChunkStreamReplicator(world, chunks, new RadiusChunkStreamer(cfg.loadRadius())),
+                edits,
+                new PlayerStateReplicator(),
+                new TimeReplicator(cycle, TICKS_PER_SECOND));
         server = new GameServer(
-                world,
                 authority,
                 chunks,
-                new RadiusChunkStreamer(cfg.loadRadius()),
                 playerStore,
                 spawn(playerStore),
                 new PlayerMovement(new Physics(), MovementTuning.DEFAULT),
-                cfg.seed());
+                cfg.seed(),
+                cycle,
+                1f / TICKS_PER_SECOND,
+                edits::record,
+                replicators);
         WORLD.debug("server world ready: {} generation spec(s), seed {}", generationSpecs.size(), cfg.seed());
     }
 

@@ -4,7 +4,6 @@ import com.beneklund.minecraft.player.PlayerBody;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
 import java.util.*;
-import org.joml.Vector3fc;
 
 /**
  * The server's view of one connected client: its link, inbox and outbox, join state, last
@@ -147,17 +146,8 @@ public class PlayerSession {
         closeAfterFlush = true;
     }
 
-    /**
-     * Sends everything queued this tick, in queue order, then a {@code PlayerUpdate} with where the
-     * body ended up. A joined player gets one every tick, input or not, so the client always has a
-     * state to reconcile against.
-     */
+    /** Sends everything queued this tick, in queue order. */
     public void flush() {
-        if (joined && body != null) {
-            Vector3fc p = body.getPosition();
-            queue(new IPacket.ToClient.PlayerUpdate(
-                    lastInputTick, p.x(), p.y(), p.z(), body.getVelocity().y, body.isOnGround()));
-        }
         for (IPacket.ToClient packet : outbox) link.send(packet);
         outbox.clear();
         if (closeAfterFlush) link.close();

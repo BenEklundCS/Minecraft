@@ -29,12 +29,12 @@ public class DayNightCycleTest {
     @Test
     void dayNightCycle_Advance() {
         DayNightCycle def = cycle();
-        def.advance(DayNightCycle.DEFAULT_DAY_SECONDS / 2);
+        def.advance(DayNightCycle.DayLength.DEFAULT.getSeconds() / 2);
         assertEquals(DayNightCycle.NOON, def.timeOfDay());
         assertEquals(DayNightCycle.DAY_BRIGHTNESS, def.skyBrightness());
-        def.advance(DayNightCycle.DEFAULT_DAY_SECONDS);
+        def.advance(DayNightCycle.DayLength.DEFAULT.getSeconds());
         assertEquals(DayNightCycle.NOON, def.timeOfDay());
-        def.advance(DayNightCycle.DEFAULT_DAY_SECONDS / 2);
+        def.advance(DayNightCycle.DayLength.DEFAULT.getSeconds() / 2);
         assertEquals(DayNightCycle.MIDNIGHT, def.timeOfDay());
         assertEquals(DayNightCycle.NIGHT_BRIGHTNESS, def.skyBrightness());
     }
@@ -54,10 +54,10 @@ public class DayNightCycleTest {
     }
 
     private DayNightCycle cycleAt(float time) {
-        return new DayNightCycle(time, DayNightCycle.DEFAULT_DAY_SECONDS);
+        return new DayNightCycle(time, DayNightCycle.DayLength.DEFAULT);
     }
 
     private DayNightCycle cycle() {
-        return new DayNightCycle(DayNightCycle.MIDNIGHT, DayNightCycle.DEFAULT_DAY_SECONDS);
+        return new DayNightCycle(DayNightCycle.MIDNIGHT, DayNightCycle.DayLength.DEFAULT);
     }
 }

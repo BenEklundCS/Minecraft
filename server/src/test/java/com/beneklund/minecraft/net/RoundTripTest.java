@@ -93,7 +93,7 @@ class RoundTripTest {
         ServerWorldAuthority authority = new ServerWorldAuthority(world, registry, new LightEngine(registry));
         // Radius 0: only the player's own chunk is loaded or streamed.
         ServerChunkManager chunks = new ServerChunkManager(new WorldConfig(SEED, 0), world, NO_GENERATION, NO_DISK);
-        GameServer server = new GameServer(
+        GameServer server = TestServers.create(
                 world,
                 authority,
                 chunks,

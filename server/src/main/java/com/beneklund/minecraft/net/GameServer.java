@@ -1,18 +1,19 @@
 package com.beneklund.minecraft.net;
 
 import com.beneklund.minecraft.infra.ServerChunkManager;
+import com.beneklund.minecraft.net.replicator.IReplicator;
 import com.beneklund.minecraft.player.IPlayerStore;
 import com.beneklund.minecraft.player.PlayerMovement;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.IWorldAuthority;
-import com.beneklund.minecraft.world.World;
 import com.beneklund.minecraft.world.chunk.Chunk;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.sky.DayNightCycle;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Consumer;
 
 /**
  * The authoritative game simulation: owns the world, applies what clients ask for, and streams
@@ -29,7 +30,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *   <li>drain every link into its session's inbox
  *   <li>apply each session's packets, then save and drop sessions whose link closed
  *   <li>tick the {@link ServerChunkManager} around the load centre
- *   <li>per session: stream chunk unloads, chunk data and this tick's edits, then flush
+ *   <li>run every {@link IReplicator} in registration order, then flush each session
  * </ol>
  *
  * <p>Draining every player before applying anything means packet handling never depends on
@@ -41,38 +42,41 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *     Source Multiplayer Networking</a>
  */
 public class GameServer implements IGameServer {
-    private final World world;
     private final IWorldAuthority authority;
     private final ServerChunkManager chunks;
-    private final IChunkStreamer streamer;
     private final IPlayerStore playerStore;
     private final PlayerState spawn;
     private final PlayerMovement movement;
     private final long seed;
+    private final DayNightCycle cycle;
+    private final float tickSeconds;
     private long tick = 0;
     private final ConcurrentLinkedQueue<IClientLink> pending = new ConcurrentLinkedQueue<>();
     private final List<PlayerSession> players = new ArrayList<>();
-    // Every edit applied this tick. Filled by apply, sent to every joined player during flush (not
-    // just the one who made the edit), then cleared.
-    private final List<IPacket.ToClient.BlockChanged> changesThisTick = new ArrayList<>();
+    private final Consumer<IPacket.ToClient.BlockChanged> editSink;
+    private final List<IReplicator> replicators;
 
     public GameServer(
-            World world,
             IWorldAuthority authority,
             ServerChunkManager chunks,
-            IChunkStreamer streamer,
             IPlayerStore playerStore,
             PlayerState spawn,
             PlayerMovement movement,
-            long seed) {
-        this.world = world;
+            long seed,
+            DayNightCycle cycle,
+            float tickSeconds,
+            Consumer<IPacket.ToClient.BlockChanged> editSink,
+            List<IReplicator> replicators) {
         this.authority = authority;
         this.chunks = chunks;
-        this.streamer = streamer;
         this.playerStore = playerStore;
         this.spawn = spawn;
         this.movement = movement;
         this.seed = seed;
+        this.cycle = cycle;
+        this.tickSeconds = tickSeconds;
+        this.editSink = editSink;
+        this.replicators = List.copyOf(replicators);
     }
 
     @Override
@@ -89,11 +93,11 @@ public class GameServer implements IGameServer {
         players.forEach(this::simulate);
         ChunkPos center = loadCenter();
         if (center != null) chunks.tick(center);
-        players.forEach(session -> {
-            stream(session);
-            session.flush();
-        });
-        changesThisTick.clear();
+        List<PlayerSession> joined =
+                players.stream().filter(PlayerSession::isJoined).toList();
+        replicators.forEach(replicator -> replicator.replicate(tick, joined));
+        players.forEach(PlayerSession::flush);
+        cycle.advance(tickSeconds);
         tick++;
     }
 
@@ -173,7 +177,7 @@ public class GameServer implements IGameServer {
         }
         session.markJoined();
         session.spawnAt(spawn);
-        session.queue(new IPacket.Join.Accepted(session.playerId(), seed, tick, spawn));
+        session.queue(new IPacket.Join.Accepted(session.playerId(), seed, tick, cycle.getCycleState(), spawn));
     }
 
     private void save(PlayerSession session) {
@@ -201,37 +205,6 @@ public class GameServer implements IGameServer {
         ChunkPos pos = ChunkPos.containing(edit.x(), edit.z());
         if (!session.hasChunk(pos) || !chunks.replicable(pos)) return;
         authority.setBlock(edit.x(), edit.y(), edit.z(), edit.block());
-        changesThisTick.add(new IPacket.ToClient.BlockChanged(edit.x(), edit.y(), edit.z(), edit.block()));
-    }
-
-    /**
-     * Queues this tick's world traffic for one player: unloads, then chunk data, then edits, so an
-     * edit never arrives for a chunk the client lacks.
-     *
-     * <p>A chunk is sent once, the first tick it is both {@code LIVE} and allowed by the {@link
-     * IChunkStreamer}. The {@code replicable} check comes before {@code markChunkSent} because a
-     * generating chunk is still air, and marking it sent would stop the real one from ever going
-     * out.
-     */
-    private void stream(PlayerSession session) {
-        if (!session.isJoined()) return;
-        PlayerState player = session.state();
-        for (ChunkPos pos : session.sentChunks()) {
-            if (streamer.allowed(player, pos) && world.hasChunk(pos)) continue;
-            session.markChunkUnloaded(pos);
-            session.queue(new IPacket.ToClient.ChunkUnload(pos));
-        }
-        for (Map.Entry<ChunkPos, Chunk> entry : world.getChunkEntries()) {
-            ChunkPos pos = entry.getKey();
-            if (!chunks.replicable(pos) || !streamer.allowed(player, pos)) continue;
-            if (session.markChunkSent(pos)) {
-                // serialize() is the copy: a fresh byte[], never the server's Chunk.
-                session.queue(
-                        new IPacket.ToClient.ChunkData(pos, entry.getValue().serialize()));
-            }
-        }
-        for (IPacket.ToClient.BlockChanged change : changesThisTick) {
-            if (session.hasChunk(ChunkPos.containing(change.x(), change.z()))) session.queue(change);
-        }
+        editSink.accept(new IPacket.ToClient.BlockChanged(edit.x(), edit.y(), edit.z(), edit.block()));
     }
 }

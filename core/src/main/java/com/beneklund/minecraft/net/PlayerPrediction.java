@@ -10,7 +10,7 @@ public final class PlayerPrediction {
     private final PlayerMovement movement;
     private long lastAck = -1;
     private long nextTick;
-    private ArrayDeque<IPacket.ToServer.PlayerInput> unacked = new ArrayDeque<>();
+    private final ArrayDeque<IPacket.ToServer.PlayerInput> unacked = new ArrayDeque<>();
 
     public PlayerPrediction(PlayerMovement movement) {
         this.movement = movement;

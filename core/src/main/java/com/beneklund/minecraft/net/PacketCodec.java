@@ -6,6 +6,7 @@ import com.beneklund.minecraft.player.PlayerIntent;
 import com.beneklund.minecraft.player.PlayerState;
 import com.beneklund.minecraft.world.chunk.Chunk;
 import com.beneklund.minecraft.world.chunk.ChunkPos;
+import com.beneklund.minecraft.world.sky.DayNightCycle;
 import java.io.*;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -40,7 +41,8 @@ public final class PacketCodec {
             CHAT = 23,
             PLAYER_UPDATE = 24,
             PLAYER_DISCONNECTED = 25,
-            PLAYER_CONNECTED = 26;
+            PLAYER_CONNECTED = 26,
+            TIME_UPDATE = 27;
 
     private final CodecRegistry codecs;
     /** Takes the registry that decides which block ids are valid on this side of the link. */
@@ -58,7 +60,8 @@ public final class PacketCodec {
                 new ChatCodec(),
                 new PlayerUpdateCodec(),
                 new PlayerDisconnectedCodec(),
-                new PlayerConnectedCodec());
+                new PlayerConnectedCodec(),
+                new TimeUpdateCodec());
     }
 
     /**
@@ -182,6 +185,9 @@ public final class PacketCodec {
             out.writeInt(accepted.playerId());
             out.writeLong(accepted.seed());
             out.writeLong(accepted.serverTick());
+            DayNightCycle.CycleState cycleState = accepted.cycleState();
+            out.writeFloat(cycleState.time());
+            out.writeFloat(cycleState.duration().getSeconds());
             PlayerState state = accepted.spawn();
             out.writeFloat(state.x());
             out.writeFloat(state.y());
@@ -196,6 +202,10 @@ public final class PacketCodec {
             requireNonNegative(playerId, "Player id");
             long seed = in.readLong();
             long serverTick = in.readLong();
+            float timeOfDay = readFiniteFloat(in);
+            float seconds = readFiniteFloat(in);
+            DayNightCycle.CycleState cycleState =
+                    new DayNightCycle.CycleState(timeOfDay, DayNightCycle.DayLength.ofSeconds(seconds));
             requireNonNegative(serverTick, "Server tick");
             float x = readFiniteFloat(in);
             float y = readFiniteFloat(in);
@@ -203,7 +213,7 @@ public final class PacketCodec {
             float pitch = readFiniteFloat(in);
             float yaw = readFiniteFloat(in);
             PlayerState spawn = new PlayerState(x, y, z, pitch, yaw);
-            return new IPacket.Join.Accepted(playerId, seed, serverTick, spawn);
+            return new IPacket.Join.Accepted(playerId, seed, serverTick, cycleState, spawn);
         }
     }
 
@@ -571,6 +581,30 @@ public final class PacketCodec {
             int playerId = in.readInt();
             requireNonNegative(playerId, "Player id");
             return new IPacket.ToClient.PlayerConnected(playerId);
+        }
+    }
+
+    static final class TimeUpdateCodec extends Codec {
+        @Override
+        byte tag() {
+            return TIME_UPDATE;
+        }
+
+        @Override
+        Class<? extends IPacket> type() {
+            return IPacket.ToClient.TimeUpdate.class;
+        }
+
+        @Override
+        void write(DataOutputStream out, IPacket packet) throws IOException {
+            IPacket.ToClient.TimeUpdate time = (IPacket.ToClient.TimeUpdate) packet;
+            out.writeFloat(time.timeOfDay());
+        }
+
+        @Override
+        IPacket.ToClient.TimeUpdate read(DataInputStream in) throws IOException {
+            float timeOfDay = readFiniteFloat(in);
+            return new IPacket.ToClient.TimeUpdate(timeOfDay);
         }
     }
 

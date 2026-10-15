@@ -16,6 +16,10 @@ import java.util.*;
  * setting. Cursor positions become {@link IInputAction.LookAction} deltas, and the first position
  * after startup only seeds the previous position.
  *
+ * <p>The mapper also owns whether the mouse is captured. {@link IInputAction.Simple#PAUSE} flips
+ * it and tells the {@link ICursorCapture}; while the mouse is free every mouse event is dropped
+ * here, so nothing downstream has to know the cursor is on the desktop. Keys keep mapping.
+ *
  * @see <a href="https://www.glfw.org/docs/latest/input_guide.html#input_key">GLFW: Key input</a>
  */
 public class InputMapper {
@@ -58,6 +62,8 @@ public class InputMapper {
 
     private final InputEventQueue queue;
     private final Map<Integer, Binding> bindings;
+    private final ICursorCapture cursorCapture;
+    private boolean mouseCaptured = true;
     // Codes currently held that have a Hold trigger, mapped to seconds accumulated since their
     // last emit. Presence in this map == currently held; absence == up.
     private final Map<Integer, Float> heldTimers = new HashMap<>();
@@ -70,8 +76,13 @@ public class InputMapper {
     }
 
     public InputMapper(InputEventQueue queue, Map<Integer, Binding> bindings) {
+        this(queue, bindings, captured -> {});
+    }
+
+    public InputMapper(InputEventQueue queue, Map<Integer, Binding> bindings, ICursorCapture cursorCapture) {
         this.queue = queue;
         this.bindings = bindings;
+        this.cursorCapture = cursorCapture;
     }
 
     /**
@@ -85,9 +96,15 @@ public class InputMapper {
         for (IRawInputEvent event : queue.drain()) {
             switch (event) {
                 case IRawInputEvent.KeyEvent e -> handleButton(e.key(), e.action(), actions);
-                case IRawInputEvent.MouseButtonEvent e -> handleButton(e.button(), e.action(), actions);
-                case IRawInputEvent.MouseMoveEvent e -> handleMouseMove(e, actions);
-                case IRawInputEvent.ScrollEvent e -> actions.add(new IInputAction.ScrollAction((float) e.yoffset()));
+                case IRawInputEvent.MouseButtonEvent e -> {
+                    if (mouseCaptured) handleButton(e.button(), e.action(), actions);
+                }
+                case IRawInputEvent.MouseMoveEvent e -> {
+                    if (mouseCaptured) handleMouseMove(e, actions);
+                }
+                case IRawInputEvent.ScrollEvent e -> {
+                    if (mouseCaptured) actions.add(new IInputAction.ScrollAction((float) e.yoffset()));
+                }
             }
         }
         processHeld(dt, actions);
@@ -99,7 +116,9 @@ public class InputMapper {
         if (binding == null) return;
         switch (binding.trigger()) {
             case Trigger.Tap tap -> {
-                if (glfwAction == GLFW_RELEASE) actions.add(binding.action());
+                if (glfwAction != GLFW_RELEASE) return;
+                actions.add(binding.action());
+                if (binding.action() == IInputAction.Simple.PAUSE) toggleMouseCapture();
             }
             case Trigger.Hold hold -> {
                 if (glfwAction == GLFW_PRESS) {
@@ -112,6 +131,22 @@ public class InputMapper {
                 // GLFW_REPEAT is ignored — our own timer drives repetition.
             }
         }
+    }
+
+    private void toggleMouseCapture() {
+        mouseCaptured = !mouseCaptured;
+        if (mouseCaptured) {
+            // GLFW repositions the cursor when it disables it again, so the next position is
+            // unrelated to the last one we saw. Re-seed instead of emitting that jump as a look.
+            lastMouseX = Double.NaN;
+            lastMouseY = Double.NaN;
+        } else {
+            // A button held across the toggle would never see its release, since mouse events
+            // are dropped from here on, and would keep repeating. Mouse buttons are the low end
+            // of the shared code space.
+            heldTimers.keySet().removeIf(code -> code <= GLFW_MOUSE_BUTTON_LAST);
+        }
+        cursorCapture.setCursorCaptured(mouseCaptured);
     }
 
     private void processHeld(float dt, List<IInputAction> actions) {
