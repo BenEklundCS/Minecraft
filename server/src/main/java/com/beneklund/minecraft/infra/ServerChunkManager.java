@@ -57,18 +57,17 @@ public class ServerChunkManager {
         CHUNK.info("{} generation threads, load radius {}", threads, config.loadRadius());
     }
 
-    /** Evicts chunks outside the load radius around {@code playerPos}, then starts missing ones. */
-    public void tick(ChunkPos playerPos) {
-        List<ChunkPos> inRadius = getChunksInRadius(playerPos, worldConfig.loadRadius());
+    /** Evicts chunks outside the load radius around each center in {@code centers}, then starts missing ones. */
+    public void tick(List<ChunkPos> centers) {
+        List<ChunkPos> inRadius = centers.stream()
+                .flatMap(center -> getChunksInRadius(center, worldConfig.loadRadius()).stream())
+                .toList();
         Set<ChunkPos> keep = new HashSet<>(inRadius);
-
         int unloads = tickUnloads(keep);
         int loads = tickLoads(inRadius);
-
         if (CHUNK.isDebugEnabled() && (loads | unloads) != 0) {
             CHUNK.debug(
-                    "tick @{}: +{} load, -{} unload, {} live",
-                    playerPos,
+                    "tick +{} load, -{} unload, {} live",
                     loads,
                     unloads,
                     world.getChunkPositions().size());

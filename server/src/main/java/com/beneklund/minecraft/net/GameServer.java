@@ -91,8 +91,11 @@ public class GameServer implements IGameServer {
         players.forEach(this::apply);
         dropClosedSessions();
         players.forEach(this::simulate);
-        ChunkPos center = loadCenter();
-        if (center != null) chunks.tick(center);
+        List<ChunkPos> centers = players.stream()
+                .filter(PlayerSession::isJoined)
+                .map(PlayerSession::chunkPos)
+                .toList();
+        chunks.tick(centers);
         List<PlayerSession> joined =
                 players.stream().filter(PlayerSession::isJoined).toList();
         replicators.forEach(replicator -> replicator.replicate(tick, joined));
@@ -185,11 +188,11 @@ public class GameServer implements IGameServer {
     }
 
     /** The chunk the load radius centres on: the first joined player's, or null before anyone joins. */
-    private ChunkPos loadCenter() {
-        for (PlayerSession session : players) {
-            if (session.isJoined()) return session.chunkPos();
-        }
-        return null;
+    private List<ChunkPos> loadCenters() {
+        return players.stream()
+                .filter(PlayerSession::isJoined)
+                .map(PlayerSession::chunkPos)
+                .toList();
     }
 
     /**

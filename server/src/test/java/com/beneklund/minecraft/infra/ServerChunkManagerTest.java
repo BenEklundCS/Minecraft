@@ -36,7 +36,7 @@ class ServerChunkManagerTest {
 
         // Tick with 10 distinct player positions — each adds new chunks within radius 4 of that position.
         for (int i = 0; i < 10; i++) {
-            manager.tick(new ChunkPos(i, 0));
+            manager.tick(List.of(new ChunkPos(i, 0)));
         }
 
         // Give workers up to 10 seconds to drain the generation pool.
